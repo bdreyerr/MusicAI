@@ -1,0 +1,23 @@
+---
+description: The context and goals of this software application
+globs: *.swift
+alwaysApply: false
+---
+
+# What are we building
+
+- We are buidling a Digital Audio Workstation, where we can manipulate audio files and create music
+- This program will be very similar to Ableton Live and Logic Pro
+- There is a timeline where audio and midi tracks can be added and manipulated to build a song or other audio creation
+
+# How should we build this project
+
+- We are using SwiftUI and AppKit to build the front end UI / UX for this project
+- The backend and audio processing system will be built with Swift and utilize apple's AVFoundation and Core Audio libraries.
+
+# Testing Changes
+
+- Please never try to 'run' the project yourself in agent mode. This project is built with xcode and cannot be built from the command line.
+- The user will always have to build and run the program manually, please just ask the user to test the changes manually and report back.
+
+
