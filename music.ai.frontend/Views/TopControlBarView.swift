@@ -27,17 +27,27 @@ struct TopControlBarView: View {
             // Left section - Tempo control with tap button
             HStack(spacing: 8) {
                 // Tap tempo button
+                // Button(action: {
+                //     // Just UI feedback, no actual tempo calculation
+                // }) {
+                //     Text("Tap")
+                //         .font(.subheadline)
+                //         .foregroundColor(themeManager.primaryTextColor)
+                // }
+                // .buttonStyle(BorderlessButtonStyle())
+                // .frame(width: 40, height: 24)
+                // .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
+                // .cornerRadius(4)
+
                 Button(action: {
-                    // Just UI feedback, no actual tempo calculation
+                    // TODO: Implement tap tempo
                 }) {
                     Text("Tap")
                         .font(.subheadline)
                         .foregroundColor(themeManager.primaryTextColor)
                 }
-                .buttonStyle(BorderlessButtonStyle())
-                .frame(width: 40, height: 24)
-                .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
-                .cornerRadius(4)
+                .padding(.leading, 4)
+                .help("Tap to set BPM")
                 
                 Text("Tempo:")
                     .font(.subheadline)
@@ -80,7 +90,7 @@ struct TopControlBarView: View {
                 Button(action: {
                     isMetronomeEnabled.toggle()
                 }) {
-                    Image(systemName: isMetronomeEnabled ? "circle.fill" : "circle")
+                    Image(systemName: isMetronomeEnabled ? "metronome.fill" : "metronome")
                         .font(.subheadline)
                         .foregroundColor(isMetronomeEnabled ? .blue : themeManager.primaryTextColor)
                 }

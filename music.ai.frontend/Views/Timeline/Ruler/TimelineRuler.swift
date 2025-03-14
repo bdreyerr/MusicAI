@@ -106,6 +106,21 @@ struct TimelineRuler: View {
             }
         }
         .frame(height: height)
+        // Add a tap gesture to clear the selection and move the playhead
+        .contentShape(Rectangle())
+        .onTapGesture { location in
+            // Calculate the beat position from the tap location
+            let rawBeatPosition = location.x / CGFloat(state.effectivePixelsPerBeat)
+            
+            // Snap to the nearest grid marker
+            let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
+            
+            // Move the playhead
+            projectViewModel.seekToBeat(snappedBeatPosition)
+            
+            // Clear any selection
+            state.clearSelection()
+        }
         // .onHover { hovering in
         //     // Change cursor to indicate scrubbing is available
         //     if hovering {
@@ -114,6 +129,33 @@ struct TimelineRuler: View {
         //         NSCursor.arrow.set()
         //     }
         // }
+    }
+    
+    // Snap a beat position to the nearest grid marker
+    private func snapToNearestGridMarker(_ rawBeatPosition: Double) -> Double {
+        // Determine the smallest visible grid division based on zoom level
+        let gridDivision: Double
+        
+        if state.showSixteenthNotes {
+            // Snap to sixteenth notes (0.25 beat)
+            gridDivision = 0.25
+        } else if state.showEighthNotes {
+            // Snap to eighth notes (0.5 beat)
+            gridDivision = 0.5
+        } else if state.showQuarterNotes {
+            // Snap to quarter notes (1 beat)
+            gridDivision = 1.0
+        } else {
+            // When zoomed out all the way, snap to bars
+            let beatsPerBar = Double(projectViewModel.timeSignatureBeats)
+            let barIndex = round(rawBeatPosition / beatsPerBar)
+            return max(0, barIndex * beatsPerBar) // Ensure we don't go negative
+        }
+        
+        // Calculate the nearest grid marker for beats and smaller divisions
+        let nearestGridMarker = round(rawBeatPosition / gridDivision) * gridDivision
+        
+        return max(0, nearestGridMarker) // Ensure we don't go negative
     }
 }
 

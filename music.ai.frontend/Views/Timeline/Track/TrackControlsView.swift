@@ -151,12 +151,9 @@ struct TrackControlsView: View {
                             isSolo.toggle()
                             updateTrack()
                         }) {
-                            Text("S")
+                            Image(systemName: isSolo ? "s.square.fill" : "s.square")
                                 .font(.caption)
-                                .padding(3)
-                                .background(isSolo ? Color.yellow : Color.clear)
-                                .foregroundColor(isSolo ? .black : themeManager.primaryTextColor)
-                                .cornerRadius(3)
+                                .foregroundColor(isSolo ? .yellow : themeManager.primaryTextColor)
                         }
                         .buttonStyle(BorderlessButtonStyle())
                         .help("Solo Track")

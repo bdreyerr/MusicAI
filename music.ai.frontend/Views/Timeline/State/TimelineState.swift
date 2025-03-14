@@ -19,6 +19,12 @@ class TimelineState: ObservableObject {
     @Published var gridOpacity: Double = 0.7 // Grid opacity
     @Published var zoomChanged: Bool = false // Flag to indicate zoom level has changed
     
+    // Selection state
+    @Published var selectionActive: Bool = false
+    @Published var selectionStartBeat: Double = 0.0
+    @Published var selectionEndBeat: Double = 0.0
+    @Published var selectionTrackId: UUID? = nil
+    
     // Computed properties based on zoom level
     var effectivePixelsPerBeat: Double {
         return pixelsPerBeat * zoomLevel
@@ -83,5 +89,40 @@ class TimelineState: ObservableObject {
         let contentWidth = CGFloat(beatsToShow) * effectivePixelsPerBeat
         
         return max(minWidth, contentWidth)
+    }
+    
+    // Start a new selection
+    func startSelection(at beat: Double, trackId: UUID) {
+        selectionStartBeat = beat
+        selectionEndBeat = beat
+        selectionTrackId = trackId
+        selectionActive = true
+    }
+    
+    // Update the end point of the selection
+    func updateSelection(to beat: Double) {
+        selectionEndBeat = beat
+    }
+    
+    // Clear the current selection
+    func clearSelection() {
+        selectionActive = false
+        selectionStartBeat = 0.0
+        selectionEndBeat = 0.0
+        selectionTrackId = nil
+    }
+    
+    // Get the normalized selection range (start always less than end)
+    var normalizedSelectionRange: (start: Double, end: Double) {
+        if selectionStartBeat <= selectionEndBeat {
+            return (selectionStartBeat, selectionEndBeat)
+        } else {
+            return (selectionEndBeat, selectionStartBeat)
+        }
+    }
+    
+    // Check if a track has an active selection
+    func hasSelection(trackId: UUID) -> Bool {
+        return selectionActive && selectionTrackId == trackId
     }
 } 

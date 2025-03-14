@@ -60,6 +60,8 @@ struct TimelineView: View {
     // Initialize with project view model
     init(projectViewModel: ProjectViewModel) {
         self.projectViewModel = projectViewModel
+        // Connect the timeline state to the project view model
+        projectViewModel.timelineState = self._timelineState.wrappedValue
     }
     
     var body: some View {
@@ -133,6 +135,14 @@ struct TimelineView: View {
                                                     NSCursor.arrow.set()
                                                 }
                                             }
+                                            
+                                            // Add the ruler selection indicator
+                                            TimelineRulerSelectionIndicator(
+                                                state: timelineState,
+                                                projectViewModel: projectViewModel,
+                                                height: rulerHeight
+                                            )
+                                            .environmentObject(themeManager)
                                         }
                                         // Offset the ruler based on tracks scrolling
                                         .offset(x: -scrollSyncCoordinator.tracksOffset.x)
@@ -206,6 +216,10 @@ struct TimelineView: View {
                                                     .fill(Color.clear)
                                                     .frame(height: 40)
                                                     .padding(.top, 4)
+                                                    // Clear selection when clicking on empty space
+                                                    .onTapGesture {
+                                                        timelineState.clearSelection()
+                                                    }
                                                 
                                                 Spacer()
                                             }
@@ -260,14 +274,19 @@ struct TimelineView: View {
                     // This is redundant but ensures the position is updated
                     projectViewModel.seekToBeat(currentBeat)
                 }
+                // Clear selection when clicking on the background
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    timelineState.clearSelection()
+                }
                 
-                // Position indicator for scrubbing
-                ScrubPositionIndicator(
-                    projectViewModel: projectViewModel,
-                    state: timelineState
-                )
-                    .padding(.top, 40)
-                    .padding(.trailing, 20)
+                // Position indicator for scrubbing - we don't need it since we have the beeat position in controls bar
+//                ScrubPositionIndicator(
+//                    projectViewModel: projectViewModel,
+//                    state: timelineState
+//                )
+//                .padding(.top, 40)
+//                .padding(.trailing, 20)
             }
         }
     }

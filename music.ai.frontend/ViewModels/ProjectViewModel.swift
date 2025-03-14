@@ -10,6 +10,9 @@ class ProjectViewModel: ObservableObject {
     @Published var tracks: [Track] = Track.samples
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
     
+    // Reference to the timeline state
+    var timelineState: TimelineState? = nil
+    
     // Initialize with default values
     init() {
         // Select the first track by default if available
@@ -43,6 +46,15 @@ class ProjectViewModel: ObservableObject {
     
     // Play/pause toggle
     func togglePlayback() {
+        // If we're starting playback and there's an active selection,
+        // ensure the playhead is at the start of the selection
+        if !isPlaying {
+            if let timelineState = findTimelineState(), timelineState.selectionActive {
+                let (start, _) = timelineState.normalizedSelectionRange
+                seekToBeat(start)
+            }
+        }
+        
         isPlaying.toggle()
         
         // For demo purposes, increment the currentBeat when playing
@@ -214,5 +226,10 @@ class ProjectViewModel: ObservableObject {
     private func stopPlaybackTimer() {
         playbackTimer?.invalidate()
         playbackTimer = nil
+    }
+    
+    // Helper method to find the TimelineState if it exists
+    private func findTimelineState() -> TimelineState? {
+        return timelineState
     }
 } 

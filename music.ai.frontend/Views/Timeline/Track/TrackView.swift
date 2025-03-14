@@ -90,8 +90,16 @@ struct TrackView: View {
                 .foregroundColor(themeManager.secondaryTextColor)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 
-            // Add the scrubber overlay for click/drag interactions
-            TimelineScrubber(
+            // Add the selection visualization
+            TimelineSelectionView(
+                state: state,
+                track: track,
+                projectViewModel: projectViewModel
+            )
+            .environmentObject(themeManager)
+                
+            // Add the selector overlay for click/drag interactions
+            TimelineSelector(
                 projectViewModel: projectViewModel,
                 state: state,
                 track: track
@@ -116,12 +124,7 @@ struct TrackView: View {
             }
         )
         .opacity((!track.isEnabled || isMuted) && !isSolo ? 0.5 : 1.0) // Dim the track if disabled or muted (unless soloed)
-        // Make the track selectable with a tap
-        .onTapGesture {
-            projectViewModel.selectTrack(id: track.id)
-            // Keep the playhead at the current position
-            projectViewModel.seekToBeat(projectViewModel.currentBeat)
-        }
+        // The tap gesture is now handled by TimelineSelector
     }
     
     // Update the track in the project view model
