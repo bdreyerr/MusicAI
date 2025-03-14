@@ -55,11 +55,6 @@ struct TrackControlsView: View {
                 Rectangle()
                     .fill(themeManager.secondaryBackgroundColor)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Add a subtle highlight when the track is selected
-                    .overlay(
-                        Rectangle()
-                            .fill(Color.blue.opacity(projectViewModel.isTrackSelected(track) ? 0.2 : 0))
-                    )
                 
                 // Track controls row - aligned at the top
                 HStack {
@@ -228,10 +223,28 @@ struct TrackControlsView: View {
         }
         .frame(height: currentHeight)
         .background(themeManager.secondaryBackgroundColor)
+        // Add a selection highlight for the entire control area
         .overlay(
-            Rectangle()
-                .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
-                .allowsHitTesting(false)
+            ZStack {
+                // Regular border for all tracks
+                Rectangle()
+                    .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
+                    .allowsHitTesting(false)
+                
+                // Selection highlight for the entire control area
+                if projectViewModel.isTrackSelected(track) {
+                    Rectangle()
+                        .fill(track.effectiveColor.opacity(0.15))
+                        .brightness(0.1)
+                        .allowsHitTesting(false)
+                    
+                    // Selection border
+                    Rectangle()
+                        .stroke(track.effectiveColor.opacity(0.9), lineWidth: 1.5)
+                        .brightness(0.3)
+                        .allowsHitTesting(false)
+                }
+            }
         )
         .opacity(isEnabled ? 1.0 : 0.7) // Dim the controls if track is disabled
         // Make the track controls selectable with a tap

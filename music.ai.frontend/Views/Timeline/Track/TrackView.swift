@@ -99,9 +99,21 @@ struct TrackView: View {
         }
         .frame(width: width, height: track.height) // Use track's height property
         .overlay(
-            Rectangle()
-                .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
-                .allowsHitTesting(false)
+            // Enhanced selection indicator
+            ZStack {
+                // Regular border for all tracks
+                Rectangle()
+                    .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
+                    .allowsHitTesting(false)
+                
+                // Special border for selected track - using a brighter version of the track's color
+                if projectViewModel.isTrackSelected(track) {
+                    Rectangle()
+                        .stroke(track.effectiveColor.opacity(0.9), lineWidth: 1.5)
+                        .brightness(0.3) // Make the color brighter for better visibility
+                        .allowsHitTesting(false)
+                }
+            }
         )
         .opacity((!track.isEnabled || isMuted) && !isSolo ? 0.5 : 1.0) // Dim the track if disabled or muted (unless soloed)
         // Make the track selectable with a tap

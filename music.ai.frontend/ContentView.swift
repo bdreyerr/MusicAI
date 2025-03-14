@@ -30,6 +30,10 @@ struct ContentView: View {
 //                CoordinatedScrollView(projectViewModel: projectViewModel)
 //                    .environmentObject(themeManager)
             }
+            
+            // Bottom section for effects and instruments
+            BottomSectionView(projectViewModel: projectViewModel)
+                .environmentObject(themeManager)
         }
         .frame(minWidth: 1000, minHeight: 700)
         .background(themeManager.backgroundColor)

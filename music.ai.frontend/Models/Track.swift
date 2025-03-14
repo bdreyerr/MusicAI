@@ -53,6 +53,8 @@ struct Track: Identifiable {
     var pan: Double = 0.5 // 0.0 (left) to 1.0 (right), 0.5 is center
     var height: CGFloat = 70 // Default track height
     var customColor: Color? = nil // Custom color for the track, overrides the default type color
+    var effects: [Effect] = [] // List of effects applied to this track
+    var instrument: Effect? = nil // Optional instrument for MIDI tracks
     
     // Get the effective color for the track (custom color or default type color)
     var effectiveColor: Color {
@@ -71,6 +73,26 @@ struct Track: Identifiable {
         }
     }
     
+    // Add an effect to the track
+    mutating func addEffect(_ effect: Effect) {
+        // Only add the effect if it's compatible with this track type
+        if effect.type.isCompatibleWith(trackType: type) {
+            effects.append(effect)
+        }
+    }
+    
+    // Remove an effect from the track
+    mutating func removeEffect(id: UUID) {
+        effects.removeAll { $0.id == id }
+    }
+    
+    // Set the instrument for this track (only applicable for MIDI tracks)
+    mutating func setInstrument(_ instrument: Effect?) {
+        if type == .midi && instrument?.type == .instrument {
+            self.instrument = instrument
+        }
+    }
+    
     // Clips would be stored here in a real implementation
     // var clips: [Clip] = []
 }
@@ -78,10 +100,48 @@ struct Track: Identifiable {
 // Extension to create sample tracks for preview
 extension Track {
     static var samples: [Track] = [
-        Track(name: "Drums", type: .audio),
-        Track(name: "Bass", type: .audio),
-        Track(name: "Piano", type: .midi),
-        Track(name: "Synth Lead", type: .midi),
-        Track(name: "Vocals", type: .audio)
+        createDrumTrack(),
+        createBassTrack(),
+        createPianoTrack(),
+        createSynthLeadTrack(),
+        createVocalsTrack()
     ]
+    
+    // Helper methods to create sample tracks with effects
+    private static func createDrumTrack() -> Track {
+        var track = Track(name: "Drums", type: .audio)
+        track.addEffect(Effect(type: .equalizer))
+        track.addEffect(Effect(type: .compressor))
+        return track
+    }
+    
+    private static func createBassTrack() -> Track {
+        var track = Track(name: "Bass", type: .audio)
+        track.addEffect(Effect(type: .equalizer))
+        track.addEffect(Effect(type: .compressor))
+        return track
+    }
+    
+    private static func createPianoTrack() -> Track {
+        var track = Track(name: "Piano", type: .midi)
+        track.instrument = Effect(type: .instrument, name: "Grand Piano")
+        track.addEffect(Effect(type: .reverb))
+        return track
+    }
+    
+    private static func createSynthLeadTrack() -> Track {
+        var track = Track(name: "Synth Lead", type: .midi)
+        track.instrument = Effect(type: .instrument, name: "Analog Synth")
+        track.addEffect(Effect(type: .arpeggiator))
+        track.addEffect(Effect(type: .delay))
+        return track
+    }
+    
+    private static func createVocalsTrack() -> Track {
+        var track = Track(name: "Vocals", type: .audio)
+        track.addEffect(Effect(type: .equalizer))
+        track.addEffect(Effect(type: .compressor))
+        track.addEffect(Effect(type: .reverb))
+        return track
+    }
 } 

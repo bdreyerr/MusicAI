@@ -23,6 +23,11 @@ class ProjectViewModel: ObservableObject {
         (timeSignatureBeats, timeSignatureUnit)
     }
     
+    // Computed property to get the currently selected track
+    var selectedTrack: Track? {
+        tracks.first { $0.id == selectedTrackId }
+    }
+    
     // Convert beat to bar and beat display (1-indexed)
     func barAndBeat(fromBeat beat: Double) -> (Int, Double) {
         let bar = Int(beat) / timeSignatureBeats + 1
@@ -116,6 +121,74 @@ class ProjectViewModel: ObservableObject {
             // If we have any soloed tracks, ensure non-soloed tracks are effectively muted
             // We don't actually change their mute state, just their audibility
             // This is handled in the UI by dimming the track
+        }
+    }
+    
+    // MARK: - Effects Management
+    
+    // Add an effect to the selected track
+    func addEffectToSelectedTrack(_ effect: Effect) {
+        guard let trackId = selectedTrackId,
+              let index = tracks.firstIndex(where: { $0.id == trackId }) else { return }
+        
+        var updatedTrack = tracks[index]
+        updatedTrack.addEffect(effect)
+        
+        // Update the track in the array
+        tracks[index] = updatedTrack
+    }
+    
+    // Remove an effect from the selected track
+    func removeEffectFromSelectedTrack(effectId: UUID) {
+        guard let trackId = selectedTrackId,
+              let index = tracks.firstIndex(where: { $0.id == trackId }) else { return }
+        
+        var updatedTrack = tracks[index]
+        updatedTrack.removeEffect(id: effectId)
+        
+        // Update the track in the array
+        tracks[index] = updatedTrack
+    }
+    
+    // Update an effect on the selected track
+    func updateEffectOnSelectedTrack(_ updatedEffect: Effect) {
+        guard let trackId = selectedTrackId,
+              let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else { return }
+        
+        var updatedTrack = tracks[trackIndex]
+        
+        // Find and update the effect
+        if let effectIndex = updatedTrack.effects.firstIndex(where: { $0.id == updatedEffect.id }) {
+            updatedTrack.effects[effectIndex] = updatedEffect
+            
+            // Update the track in the array
+            tracks[trackIndex] = updatedTrack
+        }
+    }
+    
+    // Set the instrument for the selected track (only applicable for MIDI tracks)
+    func setInstrumentForSelectedTrack(_ instrument: Effect?) {
+        guard let trackId = selectedTrackId,
+              let index = tracks.firstIndex(where: { $0.id == trackId }) else { return }
+        
+        var updatedTrack = tracks[index]
+        updatedTrack.setInstrument(instrument)
+        
+        // Update the track in the array
+        tracks[index] = updatedTrack
+    }
+    
+    // Get compatible effect types for the selected track
+    func compatibleEffectTypesForSelectedTrack() -> [EffectType] {
+        guard let track = selectedTrack else { return [] }
+        
+        switch track.type {
+        case .audio:
+            return [.equalizer, .compressor, .reverb, .delay, .filter]
+        case .midi:
+            return [.arpeggiator, .chordTrigger, .instrument]
+        case .instrument:
+            return [.filter, .synthesizer, .reverb, .delay]
         }
     }
     
