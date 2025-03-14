@@ -24,13 +24,25 @@ struct TimelineSelector: View {
                         // Ensure we have a valid position (not negative)
                         guard rawBeatPosition >= 0 else { return }
                         
+                        // Check if we're clicking on a MIDI clip
+                        // If so, the clip itself will handle the selection
+                        if track.type == .midi && isPositionOnMidiClip(rawBeatPosition) {
+                            print("Drag started on MIDI clip at \(rawBeatPosition), ignoring in TimelineSelector")
+                            return
+                        }
+                        
                         // Snap to the nearest grid marker based on zoom level
                         let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
                         
                         // If this is the start of a drag, begin a new selection
                         if !isDragging {
+                            print("Starting new selection at \(snappedBeatPosition) on track \(track.id)")
+                            
                             // Select the track
                             projectViewModel.selectTrack(id: track.id)
+                            
+                            // Clear any existing selection first (to deselect any MIDI clip)
+                            state.clearSelection()
                             
                             // Start a new selection
                             state.startSelection(at: snappedBeatPosition, trackId: track.id)
@@ -67,18 +79,73 @@ struct TimelineSelector: View {
                 // Ensure we have a valid position (not negative)
                 guard rawBeatPosition >= 0 else { return }
                 
+                // Check if we're clicking on a MIDI clip
+                // If so, the clip itself will handle the selection
+                if track.type == .midi && isPositionOnMidiClip(rawBeatPosition) {
+                    print("Tap detected on MIDI clip at \(rawBeatPosition), ignoring in TimelineSelector")
+                    return
+                }
+                
                 // Snap to the nearest grid marker
                 let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
                 
                 // Select the track
                 projectViewModel.selectTrack(id: track.id)
                 
-                // Clear any existing selection
+                // Clear any existing selection (to deselect any MIDI clip)
                 state.clearSelection()
+                print("Clearing selection in TimelineSelector tap handler")
                 
                 // Move the playhead to the clicked position
                 projectViewModel.seekToBeat(snappedBeatPosition)
+                
+                print("Clicked on track at position \(snappedBeatPosition), cleared selection")
             }
+            .allowsHitTesting(true) // Ensure the selector can receive clicks
+    }
+    
+    /// Checks if a beat position is on a MIDI clip
+    private func isPositionOnMidiClip(_ beatPosition: Double) -> Bool {
+        // Only check for MIDI tracks
+        guard track.type == .midi else { return false }
+        
+        print("Checking if position \(beatPosition) is on any MIDI clip")
+        
+        // Debug all clips on this track
+        if !track.midiClips.isEmpty {
+            print("Available clips on track \(track.name):")
+            for clip in track.midiClips {
+                print("  - \(clip.name): \(clip.startBeat) to \(clip.endBeat)")
+            }
+        } else {
+            print("No MIDI clips on track \(track.name)")
+            return false
+        }
+        
+        // Check if the position is within any clip
+        // Use a small tolerance to ensure we're exactly on the clip
+        let isOnClip = track.midiClips.contains { clip in
+            let isWithinClip = beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
+            if isWithinClip {
+                print("Click detected on clip: \(clip.name) at position \(beatPosition) (clip range: \(clip.startBeat)-\(clip.endBeat))")
+                
+                // Try to select the clip directly
+                if let timelineState = projectViewModel.timelineState {
+                    projectViewModel.selectTrack(id: track.id)
+                    timelineState.startSelection(at: clip.startBeat, trackId: track.id)
+                    timelineState.updateSelection(to: clip.endBeat)
+                    projectViewModel.seekToBeat(clip.startBeat)
+                    print("Directly selected clip: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
+                }
+            }
+            return isWithinClip
+        }
+        
+        if !isOnClip {
+            print("Click at \(beatPosition) is NOT on any MIDI clip")
+        }
+        
+        return isOnClip
     }
     
     /// Snaps a raw beat position to the nearest visible grid marker based on the current zoom level

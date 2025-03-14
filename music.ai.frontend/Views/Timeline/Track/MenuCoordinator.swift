@@ -13,4 +13,82 @@ class MenuCoordinator: NSObject, ObservableObject {
     @objc func addMidiTrack() {
         projectViewModel?.addTrack(name: "MIDI \(projectViewModel?.tracks.count ?? 0 + 1)", type: .midi, height: defaultTrackHeight)
     }
+    
+    @objc func createMidiClip() {
+        // Create a MIDI clip from the current selection
+        _ = projectViewModel?.createMidiClipFromSelection()
+    }
+    
+    @objc func renameSelectedClip() {
+        guard let projectViewModel = projectViewModel,
+              let timelineState = projectViewModel.timelineState,
+              timelineState.selectionActive,
+              let trackId = timelineState.selectionTrackId,
+              let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
+              track.type == .midi else {
+            return
+        }
+        
+        // Get the selection range
+        let (selStart, selEnd) = timelineState.normalizedSelectionRange
+        
+        // Find the selected clip
+        guard let selectedClip = track.midiClips.first(where: { 
+            abs($0.startBeat - selStart) < 0.001 && abs($0.endBeat - selEnd) < 0.001 
+        }) else {
+            return
+        }
+        
+        // Show rename dialog
+        let alert = NSAlert()
+        alert.messageText = "Rename Clip"
+        alert.informativeText = "Enter a new name for this clip:"
+        
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        textField.stringValue = selectedClip.name
+        alert.accessoryView = textField
+        
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        
+        if alert.runModal() == .alertFirstButtonReturn {
+            let newName = textField.stringValue
+            if !newName.isEmpty {
+                _ = projectViewModel.renameMidiClip(trackId: trackId, clipId: selectedClip.id, newName: newName)
+            }
+        }
+    }
+    
+    @objc func deleteSelectedClip() {
+        guard let projectViewModel = projectViewModel,
+              let timelineState = projectViewModel.timelineState,
+              timelineState.selectionActive,
+              let trackId = timelineState.selectionTrackId,
+              let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
+              track.type == .midi else {
+            return
+        }
+        
+        // Get the selection range
+        let (selStart, selEnd) = timelineState.normalizedSelectionRange
+        
+        // Find the selected clip
+        guard let selectedClip = track.midiClips.first(where: { 
+            abs($0.startBeat - selStart) < 0.001 && abs($0.endBeat - selEnd) < 0.001 
+        }) else {
+            return
+        }
+        
+        // Delete the clip
+        if projectViewModel.removeMidiClip(trackId: trackId, clipId: selectedClip.id) {
+            // Clear the selection since the clip is gone
+            timelineState.clearSelection()
+        }
+    }
+    
+    @objc func editClipNotes() {
+        // This would open the piano roll editor for the selected clip
+        // For now, we'll just print a message
+        print("Edit notes functionality will be implemented later")
+    }
 } 

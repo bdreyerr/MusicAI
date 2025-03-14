@@ -55,6 +55,7 @@ struct Track: Identifiable {
     var customColor: Color? = nil // Custom color for the track, overrides the default type color
     var effects: [Effect] = [] // List of effects applied to this track
     var instrument: Effect? = nil // Optional instrument for MIDI tracks
+    var midiClips: [MidiClip] = [] // MIDI clips on this track
     
     // Get the effective color for the track (custom color or default type color)
     var effectiveColor: Color {
@@ -93,8 +94,38 @@ struct Track: Identifiable {
         }
     }
     
-    // Clips would be stored here in a real implementation
-    // var clips: [Clip] = []
+    // Add a MIDI clip to the track (only applicable for MIDI tracks)
+    mutating func addMidiClip(_ clip: MidiClip) -> Bool {
+        // Only add the clip if this is a MIDI track
+        if type == .midi {
+            midiClips.append(clip)
+            return true
+        }
+        return false
+    }
+    
+    // Remove a MIDI clip from the track
+    mutating func removeMidiClip(id: UUID) {
+        midiClips.removeAll { $0.id == id }
+    }
+    
+    // Check if a MIDI clip can be added at the specified position
+    func canAddMidiClip(startBeat: Double, duration: Double) -> Bool {
+        // Only MIDI tracks can have MIDI clips
+        guard type == .midi else { return false }
+        
+        let endBeat = startBeat + duration
+        
+        // Check for overlaps with existing clips
+        for clip in midiClips {
+            // If the new clip overlaps with an existing clip, return false
+            if (startBeat < clip.endBeat && endBeat > clip.startBeat) {
+                return false
+            }
+        }
+        
+        return true
+    }
 }
 
 // Extension to create sample tracks for preview

@@ -38,6 +38,7 @@ struct TrackView: View {
                         .stroke(Color.white, lineWidth: projectViewModel.isTrackSelected(track) ? 2 : 0)
                         .opacity(projectViewModel.isTrackSelected(track) ? 0.5 : 0)
                 )
+                .zIndex(0) // Background at the bottom
             
             // Beat/bar divisions
             Canvas { context, size in
@@ -83,13 +84,8 @@ struct TrackView: View {
                     }
                 }
             }
+            .zIndex(1) // Grid lines above background
             
-            // Placeholder for clips (in a real app, we would render clips here)
-            Text("Drop audio clips here")
-                .font(.caption)
-                .foregroundColor(themeManager.secondaryTextColor)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                
             // Add the selection visualization
             TimelineSelectionView(
                 state: state,
@@ -97,13 +93,50 @@ struct TrackView: View {
                 projectViewModel: projectViewModel
             )
             .environmentObject(themeManager)
+            .zIndex(2) // Selection above grid but below clips
+            .allowsHitTesting(false) // Don't block clicks
+            
+            // Display placeholder text or MIDI clips based on track type
+            if track.type == .midi {
+                // Show placeholder text if no clips
+                if track.midiClips.isEmpty {
+                    Text("Right-click to create MIDI clip")
+                        .font(.caption)
+                        .foregroundColor(themeManager.secondaryTextColor)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .zIndex(3) // Above selection but below clips
+                        .allowsHitTesting(false) // Don't block clicks
+                }
                 
+                // Display MIDI clips if this is a MIDI track
+                ForEach(track.midiClips) { clip in
+                    MidiClipView(
+                        clip: clip,
+                        track: track,
+                        state: state,
+                        projectViewModel: projectViewModel
+                    )
+                    .environmentObject(themeManager)
+                    .zIndex(10) // Ensure clips are above other elements for better interaction
+                }
+            } else {
+                // Placeholder for audio tracks
+                Text("Drop audio clips here")
+                    .font(.caption)
+                    .foregroundColor(themeManager.secondaryTextColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .zIndex(3) // Above selection
+                    .allowsHitTesting(false) // Don't block clicks
+            }
+            
             // Add the selector overlay for click/drag interactions
             TimelineSelector(
                 projectViewModel: projectViewModel,
                 state: state,
                 track: track
             )
+            .zIndex(20) // Highest z-index to capture all clicks
+            .allowsHitTesting(true) // Ensure the selector can receive clicks
         }
         .frame(width: width, height: track.height) // Use track's height property
         .overlay(
@@ -124,7 +157,36 @@ struct TrackView: View {
             }
         )
         .opacity((!track.isEnabled || isMuted) && !isSolo ? 0.5 : 1.0) // Dim the track if disabled or muted (unless soloed)
-        // The tap gesture is now handled by TimelineSelector
+        // Add context menu for track operations
+        .contextMenu {
+            // Create MIDI clip option (only for MIDI tracks and when there's a selection)
+            if track.type == .midi && state.hasSelection(trackId: track.id) {
+                Button("Create MIDI Clip") {
+                    projectViewModel.createMidiClipFromSelection()
+                }
+                
+                Divider()
+            }
+            
+            // Track operations
+            Button("Rename Track") {
+                // Rename functionality would be handled in TrackControlsView
+            }
+            
+            Button("Delete Track") {
+                if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+                    projectViewModel.removeTrack(at: index)
+                }
+            }
+            
+            if track.type == .midi {
+                Divider()
+                
+                Button("Add Instrument") {
+                    // Add instrument functionality would go here
+                }
+            }
+        }
     }
     
     // Update the track in the project view model

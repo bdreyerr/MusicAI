@@ -204,6 +204,118 @@ class ProjectViewModel: ObservableObject {
         }
     }
     
+    // MARK: - MIDI Clip Management
+    
+    // Create a MIDI clip from the current selection
+    func createMidiClipFromSelection() -> Bool {
+        // Ensure there is an active selection
+        guard let timelineState = findTimelineState(),
+              timelineState.selectionActive,
+              let trackId = timelineState.selectionTrackId,
+              let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
+            return false
+        }
+        
+        // Get the selected track
+        var track = tracks[trackIndex]
+        
+        // Ensure this is a MIDI track
+        guard track.type == .midi else {
+            return false
+        }
+        
+        // Get the selection range
+        let (startBeat, endBeat) = timelineState.normalizedSelectionRange
+        let duration = endBeat - startBeat
+        
+        // Ensure the duration is valid
+        guard duration > 0 else {
+            return false
+        }
+        
+        // Check if we can add a clip at this position (no overlaps)
+        guard track.canAddMidiClip(startBeat: startBeat, duration: duration) else {
+            return false
+        }
+        
+        // Create a new MIDI clip
+        let clipName = "Clip \(track.midiClips.count + 1)"
+        let newClip = MidiClip.createEmpty(name: clipName, startBeat: startBeat, duration: duration)
+        
+        // Add the clip to the track
+        track.addMidiClip(newClip)
+        
+        // Update the track in the view model
+        tracks[trackIndex] = track
+        
+        // Clear the selection
+        timelineState.clearSelection()
+        
+        return true
+    }
+    
+    // Remove a MIDI clip from a track
+    func removeMidiClip(trackId: UUID, clipId: UUID) -> Bool {
+        guard let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
+            return false
+        }
+        
+        var track = tracks[trackIndex]
+        
+        // Ensure this is a MIDI track
+        guard track.type == .midi else {
+            return false
+        }
+        
+        // Remove the clip
+        track.removeMidiClip(id: clipId)
+        
+        // Update the track in the view model
+        tracks[trackIndex] = track
+        
+        return true
+    }
+    
+    // Rename a MIDI clip
+    func renameMidiClip(trackId: UUID, clipId: UUID, newName: String) -> Bool {
+        guard !newName.isEmpty,
+              let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
+            return false
+        }
+        
+        var track = tracks[trackIndex]
+        
+        // Ensure this is a MIDI track
+        guard track.type == .midi else {
+            return false
+        }
+        
+        // Find the clip in the track
+        guard let clipIndex = track.midiClips.firstIndex(where: { $0.id == clipId }) else {
+            return false
+        }
+        
+        // Update the clip name
+        var updatedClip = track.midiClips[clipIndex]
+        updatedClip.name = newName
+        track.midiClips[clipIndex] = updatedClip
+        
+        // Update the track in the view model
+        tracks[trackIndex] = track
+        
+        return true
+    }
+    
+    // Get all MIDI clips for a specific track
+    func midiClipsForTrack(trackId: UUID) -> [MidiClip] {
+        guard let track = tracks.first(where: { $0.id == trackId }),
+              track.type == .midi else {
+            return []
+        }
+        
+        return track.midiClips
+    }
+    
     // MARK: - Private
     
     private var playbackTimer: Timer?
@@ -230,6 +342,8 @@ class ProjectViewModel: ObservableObject {
     
     // Helper method to find the TimelineState if it exists
     private func findTimelineState() -> TimelineState? {
+        // Simply return the timelineState property
+        // This is now properly set in TimelineView's onAppear
         return timelineState
     }
 } 

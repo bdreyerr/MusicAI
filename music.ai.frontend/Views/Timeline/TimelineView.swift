@@ -60,8 +60,7 @@ struct TimelineView: View {
     // Initialize with project view model
     init(projectViewModel: ProjectViewModel) {
         self.projectViewModel = projectViewModel
-        // Connect the timeline state to the project view model
-        projectViewModel.timelineState = self._timelineState.wrappedValue
+        // We'll connect the timeline state in onAppear instead of here
     }
     
     var body: some View {
@@ -236,6 +235,21 @@ struct TimelineView: View {
                                                         )
                                                 }
                                             )
+                                            // Add gesture recognizer for right-click
+                                            .background(
+                                                EmptyView()
+                                                    .contentShape(Rectangle())
+                                                    .onTapGesture(count: 1, perform: { _ in })
+                                                    .gesture(
+                                                        DragGesture(minimumDistance: 0)
+                                                            .onEnded { value in
+                                                                // Check if this is a right-click (secondary click)
+                                                                if let event = NSApp.currentEvent, event.type == .rightMouseUp {
+                                                                    showTimelineContextMenu(at: value.location)
+                                                                }
+                                                            }
+                                                    )
+                                            )
                                         }
                                         .coordinateSpace(name: scrollSyncCoordinator.id)
                                         .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
@@ -266,6 +280,8 @@ struct TimelineView: View {
                     menuCoordinator.projectViewModel = projectViewModel
                     // Set the default track height
                     menuCoordinator.defaultTrackHeight = defaultTrackHeight
+                    // Connect the timeline state to the project view model
+                    projectViewModel.timelineState = timelineState
                 }
                 // Respond to zoom level changes
                 .onChange(of: timelineState.zoomLevel) { newZoomLevel in
@@ -278,6 +294,7 @@ struct TimelineView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     timelineState.clearSelection()
+                    print("Clicked on TimelineView background, cleared selection")
                 }
                 
                 // Position indicator for scrubbing - we don't need it since we have the beeat position in controls bar
@@ -314,6 +331,74 @@ struct TimelineView: View {
             .target = menuCoordinator
         
         menu.addItem(withTitle: "MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "")
+            .target = menuCoordinator
+        
+        if let event = NSApplication.shared.currentEvent,
+           let contentView = NSApp.mainWindow?.contentView {
+            NSMenu.popUpContextMenu(menu, with: event, for: contentView)
+        }
+    }
+    
+    // Show a context menu for the timeline
+    func showTimelineContextMenu(at location: CGPoint) {
+        let menu = NSMenu(title: "Timeline")
+        
+        // Check if there's an active selection on a MIDI track
+        if timelineState.selectionActive,
+           let trackId = timelineState.selectionTrackId,
+           let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
+            
+            // Get the track (non-optional since we have a valid index)
+            let track = projectViewModel.tracks[trackIndex]
+            
+            // Only proceed if this is a MIDI track
+            if track.type == .midi {
+                // Get the selection range
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Debug info
+                print("Selection: \(selStart) to \(selEnd)")
+                if !track.midiClips.isEmpty {
+                    print("Available clips:")
+                    for clip in track.midiClips {
+                        print("  - \(clip.name): \(clip.startBeat) to \(clip.endBeat)")
+                    }
+                }
+                
+                // Check if the selection matches a MIDI clip exactly
+                let selectedClip = track.midiClips.first(where: { clip in
+                    abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
+                })
+                
+                if let selectedClip = selectedClip {
+                    // This is a selected MIDI clip - show clip-specific options
+                    print("Found selected clip: \(selectedClip.name)")
+                    
+                    menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "")
+                        .target = menuCoordinator
+                    
+                    menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "")
+                        .target = menuCoordinator
+                    
+                    menu.addItem(withTitle: "Edit Notes", action: #selector(MenuCoordinator.editClipNotes), keyEquivalent: "")
+                        .target = menuCoordinator
+                } else {
+                    // This is a regular selection - show option to create a new clip
+                    print("No clip found at selection")
+                    
+                    menu.addItem(withTitle: "Create MIDI Clip", action: #selector(MenuCoordinator.createMidiClip), keyEquivalent: "")
+                        .target = menuCoordinator
+                }
+                
+                menu.addItem(NSMenuItem.separator())
+            }
+        }
+        
+        // Add track options
+        menu.addItem(withTitle: "Add Audio Track", action: #selector(MenuCoordinator.addAudioTrack), keyEquivalent: "")
+            .target = menuCoordinator
+        
+        menu.addItem(withTitle: "Add MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "")
             .target = menuCoordinator
         
         if let event = NSApplication.shared.currentEvent,
