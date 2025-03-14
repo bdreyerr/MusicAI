@@ -4,9 +4,20 @@ import Combine
 /// TimelineState manages the visual representation and zoom behavior of the timeline.
 /// This is separate from ProjectViewModel which manages the actual music project data.
 class TimelineState: ObservableObject {
-    @Published var zoomLevel: Double = 0.146 // Default zoom level to match the old implementation
+    @Published var zoomLevel: Double = 0.146 { // Default zoom level to match the old implementation
+        didSet {
+            // Notify that zoom level has changed
+            zoomChanged = true
+            
+            // Reset the flag after a short delay to allow for multiple zoom changes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.zoomChanged = false
+            }
+        }
+    }
     @Published var pixelsPerBeat: Double = 30.0 // Base pixels per beat
     @Published var gridOpacity: Double = 0.7 // Grid opacity
+    @Published var zoomChanged: Bool = false // Flag to indicate zoom level has changed
     
     // Computed properties based on zoom level
     var effectivePixelsPerBeat: Double {

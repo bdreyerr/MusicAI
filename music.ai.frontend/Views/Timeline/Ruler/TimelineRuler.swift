@@ -60,7 +60,7 @@ struct TimelineRuler: View {
                     // Draw bar number (1-indexed) only if it should be shown at current zoom level
                     if state.shouldShowBarNumber(for: barIndex) {
                         let barText = Text("\(barIndex + 1)")
-                            .font(.system(size: 11, weight: isMajorBar ? .bold : .medium))
+                            .font(.system(size: 11, weight: isMajorBar ? .medium : .light))
                             .foregroundColor(isMajorBar ? emphasisTextColor : textColor)
                         context.draw(barText, at: CGPoint(x: xPosition + 5, y: 5))
                     }
@@ -104,15 +104,16 @@ struct TimelineRuler: View {
                     }
                 }
             }
-            
-            // Playhead indicator for ruler
-            PlayheadIndicator(
-                currentBeat: projectViewModel.currentBeat,
-                state: state
-            )
-            .environmentObject(themeManager)
         }
         .frame(height: height)
+        // .onHover { hovering in
+        //     // Change cursor to indicate scrubbing is available
+        //     if hovering {
+        //         NSCursor.pointingHand.set()
+        //     } else {
+        //         NSCursor.arrow.set()
+        //     }
+        // }
     }
 }
 

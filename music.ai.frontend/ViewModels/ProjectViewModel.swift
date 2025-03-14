@@ -8,6 +8,15 @@ class ProjectViewModel: ObservableObject {
     @Published var isPlaying: Bool = false
     @Published var currentBeat: Double = 0.0 // Current playback position in beats
     @Published var tracks: [Track] = Track.samples
+    @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
+    
+    // Initialize with default values
+    init() {
+        // Select the first track by default if available
+        if !tracks.isEmpty {
+            selectedTrackId = tracks[0].id
+        }
+    }
     
     // Computed property to get time signature as a tuple
     var timeSignature: (Int, Int) {
@@ -45,17 +54,54 @@ class ProjectViewModel: ObservableObject {
         currentBeat = 0.0
     }
     
+    // Seek to a specific beat position
+    func seekToBeat(_ beat: Double) {
+        // Ensure beat is not negative
+        currentBeat = max(0, beat)
+        
+        // In a real app, you would also update the audio engine's playback position here
+        // For example: audioEngine.seekToPosition(currentBeat)
+    }
+    
+    // Select a track
+    func selectTrack(id: UUID?) {
+        selectedTrackId = id
+    }
+    
+    // Check if a track is selected
+    func isTrackSelected(_ track: Track) -> Bool {
+        return track.id == selectedTrackId
+    }
+    
     // Add a new track
     func addTrack(name: String, type: TrackType, height: CGFloat = 70) {
         var newTrack = Track(name: name, type: type)
         newTrack.height = height
         tracks.append(newTrack)
+        
+        // If this is the first track, select it automatically
+        if tracks.count == 1 {
+            selectedTrackId = newTrack.id
+        }
     }
     
     // Remove a track
     func removeTrack(at index: Int) {
         guard index >= 0 && index < tracks.count else { return }
+        
+        let trackToRemove = tracks[index]
         tracks.remove(at: index)
+        
+        // If we removed the selected track, select another one if available
+        if trackToRemove.id == selectedTrackId {
+            if !tracks.isEmpty {
+                // Select the track at the same index, or the last track if we removed the last one
+                let newIndex = min(index, tracks.count - 1)
+                selectedTrackId = tracks[newIndex].id
+            } else {
+                selectedTrackId = nil
+            }
+        }
     }
     
     // Update a track

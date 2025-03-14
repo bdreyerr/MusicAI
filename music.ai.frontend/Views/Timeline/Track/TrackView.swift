@@ -32,6 +32,12 @@ struct TrackView: View {
             // Background with track type color
             Rectangle()
                 .fill(track.effectiveBackgroundColor(for: themeManager.currentTheme))
+                // Add a subtle highlight when the track is selected
+                .overlay(
+                    Rectangle()
+                        .stroke(Color.white, lineWidth: projectViewModel.isTrackSelected(track) ? 2 : 0)
+                        .opacity(projectViewModel.isTrackSelected(track) ? 0.5 : 0)
+                )
             
             // Beat/bar divisions
             Canvas { context, size in
@@ -83,6 +89,13 @@ struct TrackView: View {
                 .font(.caption)
                 .foregroundColor(themeManager.secondaryTextColor)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+            // Add the scrubber overlay for click/drag interactions
+            TimelineScrubber(
+                projectViewModel: projectViewModel,
+                state: state,
+                track: track
+            )
         }
         .frame(width: width, height: track.height) // Use track's height property
         .overlay(
@@ -91,6 +104,12 @@ struct TrackView: View {
                 .allowsHitTesting(false)
         )
         .opacity((!track.isEnabled || isMuted) && !isSolo ? 0.5 : 1.0) // Dim the track if disabled or muted (unless soloed)
+        // Make the track selectable with a tap
+        .onTapGesture {
+            projectViewModel.selectTrack(id: track.id)
+            // Keep the playhead at the current position
+            projectViewModel.seekToBeat(projectViewModel.currentBeat)
+        }
     }
     
     // Update the track in the project view model

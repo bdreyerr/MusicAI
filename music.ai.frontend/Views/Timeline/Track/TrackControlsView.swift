@@ -55,6 +55,11 @@ struct TrackControlsView: View {
                 Rectangle()
                     .fill(themeManager.secondaryBackgroundColor)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Add a subtle highlight when the track is selected
+                    .overlay(
+                        Rectangle()
+                            .fill(Color.blue.opacity(projectViewModel.isTrackSelected(track) ? 0.2 : 0))
+                    )
                 
                 // Track controls row - aligned at the top
                 HStack {
@@ -229,6 +234,12 @@ struct TrackControlsView: View {
                 .allowsHitTesting(false)
         )
         .opacity(isEnabled ? 1.0 : 0.7) // Dim the controls if track is disabled
+        // Make the track controls selectable with a tap
+        .onTapGesture {
+            projectViewModel.selectTrack(id: track.id)
+            // Keep the playhead at the current position
+            projectViewModel.seekToBeat(projectViewModel.currentBeat)
+        }
         .overlay(
             // Resize handle at the bottom
             Rectangle()
