@@ -23,7 +23,42 @@ class TimelineState: ObservableObject {
     }
     
     var showQuarterNotes: Bool {
-        return true // Always show quarter notes (beats)
+        // Only show quarter notes (beats) when zoom level is above 0.2
+        // This means when zoomed out all the way, only bar lines will be shown
+        return zoomLevel > 0.2
+    }
+    
+    // Determine which bar numbers to show based on zoom level
+    var barNumberInterval: Int {
+        if zoomLevel < 0.2 {
+            // When zoomed out all the way, show every 8th bar number (1, 9, 17, 25, etc.)
+            return 8
+        } else if zoomLevel < 0.4 {
+            // When mid-way zoomed out, show every 4th bar number (1, 5, 9, 13, etc.)
+            return 4
+        } else if zoomLevel < 0.7 {
+            // When slightly zoomed out, show every 2nd bar number (1, 3, 5, 7, etc.)
+            return 2
+        } else {
+            // When zoomed in, show every bar number
+            return 1
+        }
+    }
+    
+    // Check if a specific bar number should be displayed
+    func shouldShowBarNumber(for barIndex: Int) -> Bool {
+        // Always show the first bar (index 0, which is bar 1)
+        if barIndex == 0 {
+            return true
+        }
+        
+        // When zoomed in far enough, always show all bar numbers
+        if zoomLevel >= 0.7 {
+            return true
+        }
+        
+        // For other bars, check if they match the interval pattern
+        return (barIndex + 1) % barNumberInterval == 1
     }
     
     // Calculate the width of the timeline content based on zoom level and project settings

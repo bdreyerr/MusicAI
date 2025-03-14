@@ -27,6 +27,8 @@ struct ContentView: View {
                 // Timeline view - using the new ClaudeTimeline
                 TimelineView(projectViewModel: projectViewModel)
                     .environmentObject(themeManager)
+//                CoordinatedScrollView(projectViewModel: projectViewModel)
+//                    .environmentObject(themeManager)
             }
         }
         .frame(minWidth: 1000, minHeight: 700)

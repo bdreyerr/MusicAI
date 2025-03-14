@@ -90,11 +90,11 @@ struct TopControlBarView: View {
             
             Spacer()
             
-            // Project info
-            Text("Project: My New Track")
-                .font(.headline)
-                .foregroundColor(themeManager.primaryTextColor)
-                .padding(.trailing)
+            // // Project info
+            // Text("Project: My New Track")
+            //     .font(.headline)
+            //     .foregroundColor(themeManager.primaryTextColor)
+            //     .padding(.trailing)
         }
         .padding(.vertical, 8)
         .frame(height: 50)
