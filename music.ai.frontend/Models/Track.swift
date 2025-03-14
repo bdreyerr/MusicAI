@@ -48,8 +48,28 @@ struct Track: Identifiable {
     var isMuted: Bool = false
     var isSolo: Bool = false
     var isArmed: Bool = false
+    var isEnabled: Bool = true // Whether the track is enabled for playback
     var volume: Double = 0.8 // 0.0 to 1.0
     var pan: Double = 0.5 // 0.0 (left) to 1.0 (right), 0.5 is center
+    var height: CGFloat = 70 // Default track height
+    var customColor: Color? = nil // Custom color for the track, overrides the default type color
+    
+    // Get the effective color for the track (custom color or default type color)
+    var effectiveColor: Color {
+        return customColor ?? type.color
+    }
+    
+    // Get the effective background color based on the theme
+    func effectiveBackgroundColor(for theme: ThemeOption) -> Color {
+        let baseColor = effectiveColor
+        
+        switch theme {
+        case .light:
+            return baseColor.opacity(0.1)
+        case .dark:
+            return baseColor.opacity(0.2)
+        }
+    }
     
     // Clips would be stored here in a real implementation
     // var clips: [Clip] = []

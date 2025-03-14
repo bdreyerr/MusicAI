@@ -46,8 +46,9 @@ class ProjectViewModel: ObservableObject {
     }
     
     // Add a new track
-    func addTrack(name: String, type: TrackType) {
-        let newTrack = Track(name: name, type: type)
+    func addTrack(name: String, type: TrackType, height: CGFloat = 70) {
+        var newTrack = Track(name: name, type: type)
+        newTrack.height = height
         tracks.append(newTrack)
     }
     

@@ -31,7 +31,7 @@ struct TrackView: View {
         ZStack(alignment: .topLeading) {
             // Background with track type color
             Rectangle()
-                .fill(track.type.backgroundColor(for: themeManager.currentTheme))
+                .fill(track.effectiveBackgroundColor(for: themeManager.currentTheme))
             
             // Beat/bar divisions
             Canvas { context, size in
@@ -84,12 +84,13 @@ struct TrackView: View {
                 .foregroundColor(themeManager.secondaryTextColor)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(width: width, height: track.height) // Use track's height property
         .overlay(
             Rectangle()
                 .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
                 .allowsHitTesting(false)
         )
-        .opacity(isMuted && !isSolo ? 0.5 : 1.0) // Dim the track if muted (unless soloed)
+        .opacity((!track.isEnabled || isMuted) && !isSolo ? 0.5 : 1.0) // Dim the track if disabled or muted (unless soloed)
     }
     
     // Update the track in the project view model
@@ -116,5 +117,4 @@ struct TrackView: View {
         width: 800
     )
     .environmentObject(ThemeManager())
-    .frame(height: 70) // Match the height used in TimelineView
 } 

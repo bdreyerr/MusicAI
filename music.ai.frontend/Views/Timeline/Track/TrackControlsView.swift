@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// View for the controls section of a track in the timeline
 struct TrackControlsView: View {
@@ -10,6 +11,25 @@ struct TrackControlsView: View {
     @State private var isMuted: Bool
     @State private var isSolo: Bool
     @State private var isArmed: Bool
+    @State private var isEnabled: Bool
+    @State private var trackName: String
+    @State private var volume: Double
+    @State private var customColor: Color?
+    
+    // State for editing track name
+    @State private var isEditingName: Bool = false
+    
+    // State for showing color picker
+    @State private var showingColorPicker: Bool = false
+    
+    // State for showing delete confirmation
+    @State private var showingDeleteConfirmation: Bool = false
+    
+    // State for resize handle
+    @State private var isHoveringResizeHandle: Bool = false
+    @State private var isDraggingResize: Bool = false
+    @State private var startDragY: CGFloat = 0
+    @State private var currentHeight: CGFloat
     
     // Initialize with track's current state
     init(track: Track, projectViewModel: ProjectViewModel) {
@@ -20,81 +40,240 @@ struct TrackControlsView: View {
         _isMuted = State(initialValue: track.isMuted)
         _isSolo = State(initialValue: track.isSolo)
         _isArmed = State(initialValue: track.isArmed)
+        _isEnabled = State(initialValue: track.isEnabled)
+        _trackName = State(initialValue: track.name)
+        _volume = State(initialValue: track.volume)
+        _customColor = State(initialValue: track.customColor)
+        _currentHeight = State(initialValue: track.height)
     }
     
     var body: some View {
-        ZStack(alignment: .top) {
-            // Background
-            Rectangle()
-                .fill(themeManager.secondaryBackgroundColor)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Track controls row - aligned at the top
-            HStack {
-                // Track icon and name
-                HStack(spacing: 6) {
-                    Image(systemName: track.type.icon)
-                        .foregroundColor(track.type.color)
-                    
-                    Text(track.name)
-                        .font(.subheadline)
-                        .foregroundColor(themeManager.primaryTextColor)
-                        .lineLimit(1)
-                }
-                .padding(.leading, 8)
+        VStack(spacing: 0) {
+            // Main track controls row
+            ZStack(alignment: .top) {
+                // Background
+                Rectangle()
+                    .fill(themeManager.secondaryBackgroundColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 
-                Spacer()
-                
-                // Track controls
-                HStack(spacing: 8) {
-                    // Mute button
-                    Button(action: {
-                        isMuted.toggle()
-                        updateTrack()
-                    }) {
-                        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2")
-                            .foregroundColor(isMuted ? .red : themeManager.primaryTextColor)
-                            .font(.caption)
+                // Track controls row - aligned at the top
+                HStack {
+                    // Track icon and name
+                    HStack(spacing: 6) {
+                        // Track icon with color
+                        Image(systemName: track.type.icon)
+                            .foregroundColor(customColor ?? track.type.color)
+                            .onTapGesture {
+                                showingColorPicker.toggle()
+                            }
+                            .popover(isPresented: $showingColorPicker) {
+                                VStack(spacing: 10) {
+                                    Text("Track Color")
+                                        .font(.headline)
+                                        .padding(.top, 8)
+                                    
+                                    ColorPicker("Select Color", selection: Binding(
+                                        get: { customColor ?? track.type.color },
+                                        set: { newColor in
+                                            customColor = newColor
+                                            updateTrackColor(newColor)
+                                        }
+                                    ))
+                                    .padding(.horizontal)
+                                    
+                                    Button("Reset to Default") {
+                                        customColor = nil
+                                        updateTrackColor(nil)
+                                        showingColorPicker = false
+                                    }
+                                    .padding(.bottom, 8)
+                                }
+                                .frame(width: 250)
+                                .padding(8)
+                            }
+                            .help("Change track color")
+                        
+                        // Track name (editable)
+                        if isEditingName {
+                            TextField("Track name", text: $trackName, onCommit: {
+                                isEditingName = false
+                                updateTrackName()
+                            })
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .frame(width: 120)
+                            .onExitCommand {
+                                isEditingName = false
+                                updateTrackName()
+                            }
+                        } else {
+                            Text(trackName)
+                                .font(.subheadline)
+                                .foregroundColor(themeManager.primaryTextColor)
+                                .lineLimit(1)
+                                .onTapGesture(count: 2) {
+                                    isEditingName = true
+                                }
+                                .help("Double-click to rename")
+                        }
                     }
-                    .buttonStyle(BorderlessButtonStyle())
-                    .help("Mute Track")
+                    .padding(.leading, 8)
                     
-                    // Solo button
-                    Button(action: {
-                        isSolo.toggle()
-                        updateTrack()
-                    }) {
-                        Text("S")
-                            .font(.caption)
-                            .padding(3)
-                            .background(isSolo ? Color.yellow : Color.clear)
-                            .foregroundColor(isSolo ? .black : themeManager.primaryTextColor)
-                            .cornerRadius(3)
-                    }
-                    .buttonStyle(BorderlessButtonStyle())
-                    .help("Solo Track")
+                    Spacer()
                     
-                    // Record arm button
-                    Button(action: {
-                        isArmed.toggle()
-                        updateTrack()
-                    }) {
-                        Image(systemName: "record.circle")
-                            .font(.caption)
-                            .foregroundColor(isArmed ? .red : themeManager.secondaryTextColor)
+                    // Track controls
+                    HStack(spacing: 8) {
+                        // Enable/Disable toggle
+                        Button(action: {
+                            isEnabled.toggle()
+                            updateTrack()
+                        }) {
+                            Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(isEnabled ? .green : themeManager.secondaryTextColor)
+                                .font(.caption)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .help(isEnabled ? "Disable Track" : "Enable Track")
+                        
+                        // Mute button
+                        Button(action: {
+                            isMuted.toggle()
+                            updateTrack()
+                        }) {
+                            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2")
+                                .foregroundColor(isMuted ? .red : themeManager.primaryTextColor)
+                                .font(.caption)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .help("Mute Track")
+                        
+                        // Solo button
+                        Button(action: {
+                            isSolo.toggle()
+                            updateTrack()
+                        }) {
+                            Text("S")
+                                .font(.caption)
+                                .padding(3)
+                                .background(isSolo ? Color.yellow : Color.clear)
+                                .foregroundColor(isSolo ? .black : themeManager.primaryTextColor)
+                                .cornerRadius(3)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .help("Solo Track")
+                        
+                        // Record arm button
+                        Button(action: {
+                            isArmed.toggle()
+                            updateTrack()
+                        }) {
+                            Image(systemName: "record.circle")
+                                .font(.caption)
+                                .foregroundColor(isArmed ? .red : themeManager.secondaryTextColor)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .help("Arm Track for Recording")
+                        
+                        // Delete track button
+                        Button(action: {
+                            showingDeleteConfirmation = true
+                        }) {
+                            Image(systemName: "trash")
+                                .font(.caption)
+                                .foregroundColor(themeManager.secondaryTextColor)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .help("Delete Track")
+                        .alert(isPresented: $showingDeleteConfirmation) {
+                            Alert(
+                                title: Text("Delete Track"),
+                                message: Text("Are you sure you want to delete '\(trackName)'? This cannot be undone."),
+                                primaryButton: .destructive(Text("Delete")) {
+                                    deleteTrack()
+                                },
+                                secondaryButton: .cancel()
+                            )
+                        }
                     }
-                    .buttonStyle(BorderlessButtonStyle())
-                    .help("Arm Track for Recording")
+                    .padding(.trailing, 8)
                 }
-                .padding(.trailing, 8)
+                .frame(height: 40)
+                .frame(maxWidth: .infinity)
             }
-            .frame(height: 40)
-            .frame(maxWidth: .infinity)
+            
+            // Volume slider section
+            HStack(spacing: 8) {
+                Image(systemName: "speaker.wave.1")
+                    .foregroundColor(themeManager.secondaryTextColor)
+                    .font(.caption)
+                
+                Slider(value: $volume, in: 0...1) { editing in
+                    if !editing {
+                        updateTrackVolume()
+                    }
+                }
+                .frame(height: 20)
+                
+                Text("\(Int(volume * 100))%")
+                    .font(.caption)
+                    .foregroundColor(themeManager.secondaryTextColor)
+                    .frame(width: 40, alignment: .trailing)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
         }
+        .frame(height: currentHeight)
+        .background(themeManager.secondaryBackgroundColor)
         .overlay(
             Rectangle()
                 .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
                 .allowsHitTesting(false)
+        )
+        .opacity(isEnabled ? 1.0 : 0.7) // Dim the controls if track is disabled
+        .overlay(
+            // Resize handle at the bottom
+            Rectangle()
+                .fill(Color.clear)
+                .frame(height: 8)
+                .frame(maxWidth: .infinity)
+                .background(
+                    isHoveringResizeHandle ? 
+                    themeManager.secondaryBackgroundColor.opacity(0.3) : 
+                        Color.clear
+                )
+                .onHover { hovering in
+                    isHoveringResizeHandle = hovering
+                    if hovering {
+                        NSCursor.resizeUpDown.set()
+                    } else if !isDraggingResize {
+                        NSCursor.arrow.set()
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            if !isDraggingResize {
+                                startDragY = value.location.y
+                                isDraggingResize = true
+                                NSCursor.resizeUpDown.set()
+                            }
+                            
+                            let dragDelta = value.location.y - startDragY
+                            let newHeight = max(70, currentHeight + dragDelta)
+                            currentHeight = newHeight
+                            startDragY = value.location.y
+                            
+                            // Update the track height in the model
+                            updateTrackHeight(newHeight)
+                        }
+                        .onEnded { _ in
+                            isDraggingResize = false
+                            if !isHoveringResizeHandle {
+                                NSCursor.arrow.set()
+                            }
+                        }
+                )
+                .help("Resize track height")
+            , alignment: .bottom
         )
     }
     
@@ -107,9 +286,64 @@ struct TrackControlsView: View {
             updatedTrack.isMuted = isMuted
             updatedTrack.isSolo = isSolo
             updatedTrack.isArmed = isArmed
+            updatedTrack.isEnabled = isEnabled
+            updatedTrack.name = trackName
+            updatedTrack.volume = volume
+            updatedTrack.customColor = customColor
             
             // Update the track in the view model
             projectViewModel.updateTrack(at: index, with: updatedTrack)
+        }
+    }
+    
+    // Update just the track name
+    private func updateTrackName() {
+        if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+            var updatedTrack = track
+            updatedTrack.name = trackName
+            
+            // Update the track in the view model
+            projectViewModel.updateTrack(at: index, with: updatedTrack)
+        }
+    }
+    
+    // Update just the track color
+    private func updateTrackColor(_ color: Color?) {
+        if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+            var updatedTrack = track
+            updatedTrack.customColor = color
+            
+            // Update the track in the view model
+            projectViewModel.updateTrack(at: index, with: updatedTrack)
+        }
+    }
+    
+    // Update just the track volume
+    private func updateTrackVolume() {
+        if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+            var updatedTrack = track
+            updatedTrack.volume = volume
+            
+            // Update the track in the view model
+            projectViewModel.updateTrack(at: index, with: updatedTrack)
+        }
+    }
+    
+    // Update just the track height
+    private func updateTrackHeight(_ newHeight: CGFloat) {
+        if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+            var updatedTrack = track
+            updatedTrack.height = newHeight
+            
+            // Update the track in the view model
+            projectViewModel.updateTrack(at: index, with: updatedTrack)
+        }
+    }
+    
+    // Delete the track
+    private func deleteTrack() {
+        if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+            projectViewModel.removeTrack(at: index)
         }
     }
 }
@@ -120,5 +354,5 @@ struct TrackControlsView: View {
         projectViewModel: ProjectViewModel()
     )
     .environmentObject(ThemeManager())
-    .frame(width: 200, height: 70) // Match the height used in TimelineView
+    .frame(width: 200)
 } 
