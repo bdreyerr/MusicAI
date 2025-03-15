@@ -67,4 +67,11 @@ struct FolderItem: Identifiable {
     var id = UUID()
     var name: String
     var icon: String // SF Symbol name
+    var metadata: [String: String]? // Optional metadata for storing file paths, etc.
+    
+    init(name: String, icon: String, metadata: [String: String]? = nil) {
+        self.name = name
+        self.icon = icon
+        self.metadata = metadata
+    }
 } 

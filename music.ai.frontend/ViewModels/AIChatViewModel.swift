@@ -1,21 +1,7 @@
 import SwiftUI
 import Combine
 
-/// Message model for chat
-struct ChatMessage: Identifiable {
-    let id = UUID()
-    let content: String
-    let isFromUser: Bool
-    let timestamp: Date
-    let attachedTrackIds: [UUID]
-    
-    init(content: String, isFromUser: Bool, timestamp: Date = Date(), attachedTrackIds: [UUID] = []) {
-        self.content = content
-        self.isFromUser = isFromUser
-        self.timestamp = timestamp
-        self.attachedTrackIds = attachedTrackIds
-    }
-}
+/// Message model for chat - moved to models folder
 
 /// ViewModel for managing the AI chat sidebar
 class AIChatViewModel: ObservableObject {
