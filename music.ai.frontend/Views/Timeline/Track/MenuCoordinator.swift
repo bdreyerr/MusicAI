@@ -6,6 +6,11 @@ class MenuCoordinator: NSObject, ObservableObject {
     weak var projectViewModel: ProjectViewModel?
     var defaultTrackHeight: CGFloat = 70 // Default track height
     
+    // Computed property to access the MIDI view model
+    private var midiViewModel: MidiViewModel? {
+        return projectViewModel?.midiViewModel
+    }
+    
     @objc func addAudioTrack() {
         projectViewModel?.addTrack(name: "Audio \(projectViewModel?.tracks.count ?? 0 + 1)", type: .audio, height: defaultTrackHeight)
     }
@@ -15,8 +20,8 @@ class MenuCoordinator: NSObject, ObservableObject {
     }
     
     @objc func createMidiClip() {
-        // Create a MIDI clip from the current selection
-        _ = projectViewModel?.createMidiClipFromSelection()
+        // Create a MIDI clip from the current selection using the MIDI view model
+        _ = midiViewModel?.createMidiClipFromSelection()
     }
     
     @objc func renameSelectedClip() {
@@ -54,7 +59,7 @@ class MenuCoordinator: NSObject, ObservableObject {
         if alert.runModal() == .alertFirstButtonReturn {
             let newName = textField.stringValue
             if !newName.isEmpty {
-                _ = projectViewModel.renameMidiClip(trackId: trackId, clipId: selectedClip.id, newName: newName)
+                _ = midiViewModel?.renameMidiClip(trackId: trackId, clipId: selectedClip.id, newName: newName)
             }
         }
     }
@@ -79,8 +84,8 @@ class MenuCoordinator: NSObject, ObservableObject {
             return
         }
         
-        // Delete the clip
-        if projectViewModel.removeMidiClip(trackId: trackId, clipId: selectedClip.id) {
+        // Delete the clip using the MIDI view model
+        if midiViewModel?.removeMidiClip(trackId: trackId, clipId: selectedClip.id) == true {
             // Clear the selection since the clip is gone
             timelineState.clearSelection()
         }

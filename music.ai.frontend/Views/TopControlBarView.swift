@@ -9,18 +9,19 @@ struct TopControlBarView: View {
     @State private var isMetronomeEnabled: Bool = false
     @State private var isLoopEnabled: Bool = false
     @State private var cpuUsage: Double = 12.5 // Mock CPU usage value
+    @State private var showThemeSettings = false
     
-    // Custom background color for the control bar
-    private var controlBarBackgroundColor: Color {
-        switch themeManager.currentTheme {
-        case .light:
-            // Darker background in light mode to distinguish from ruler
-            return Color(white: 0.78)
-        case .dark:
-            // Slightly lighter than the main background in dark mode
-            return Color(white: 0.25)
-        }
-    }
+    // // Custom background color for the control bar
+    // private var controlBarBackgroundColor: Color {
+    //     switch themeManager.currentTheme {
+    //     case .light:
+    //         // Lighter background in light mode to distinguish from ruler
+    //         return Color(white: 0.85)
+    //     case .dark:
+    //         // Darker than the main background in dark mode
+    //         return Color(white: 0.18)
+    //     }
+    // }
     
     var body: some View {
         HStack(spacing: 0) {
@@ -94,6 +95,7 @@ struct TopControlBarView: View {
                         .font(.subheadline)
                         .foregroundColor(isMetronomeEnabled ? .blue : themeManager.primaryTextColor)
                 }
+                .buttonStyle(BorderlessButtonStyle())
                 .padding(.leading, 4)
                 .help("Metronome")
             }
@@ -216,13 +218,22 @@ struct TopControlBarView: View {
                         .foregroundColor(cpuUsage > 80 ? .red : themeManager.primaryTextColor)
                         .frame(width: 50, alignment: .leading)
                 }
+                
+                Button(action: {
+                    themeManager.toggleTheme()
+                }) {
+                    Image(systemName: themeManager.currentTheme == .dark ? "sun.max" : "moon")
+                       .foregroundColor(themeManager.primaryTextColor)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                // .help("Toggle between light and dark theme")
             }
             .padding(.horizontal, 16)
         }
         .padding(.vertical, 8)
-        .frame(height: 40)
-        .background(controlBarBackgroundColor)
-        // .border(themeManager.borderColor, width: 1)
+        .frame(height: 35)
+        .background(themeManager.secondaryBackgroundColor)
+        .border(themeManager.borderColor, width: 0.3)
         // Add a global tap gesture to the entire view
         .onTapGesture {
             // This tap gesture will be triggered for taps on the control bar itself

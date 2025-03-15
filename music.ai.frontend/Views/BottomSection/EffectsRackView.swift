@@ -6,6 +6,11 @@ struct EffectsRackView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @State private var showingAddEffectMenu = false
     
+    // Computed property to access the Effects view model
+    private var effectsViewModel: EffectsViewModel {
+        return projectViewModel.effectsViewModel
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Main content area - changes based on selected track
@@ -135,9 +140,9 @@ struct EffectsRackView: View {
                     
                     // Button to add instrument
                     Button(action: {
-                        // Add a default piano instrument
+                        // Add a default piano instrument using the EffectsViewModel
                         let pianoInstrument = Effect(type: .instrument, name: "Grand Piano")
-                        projectViewModel.setInstrumentForSelectedTrack(pianoInstrument)
+                        effectsViewModel.setInstrumentForSelectedTrack(pianoInstrument)
                     }) {
                         Text("Add")
                             .foregroundColor(themeManager.primaryTextColor)
@@ -175,7 +180,7 @@ struct EffectsRackView: View {
                     set: { newValue in
                         var updatedEffect = effect
                         updatedEffect.isEnabled = newValue
-                        projectViewModel.updateEffectOnSelectedTrack(updatedEffect)
+                        effectsViewModel.updateEffectOnSelectedTrack(updatedEffect)
                     }
                 ))
                 .labelsHidden()
@@ -184,7 +189,7 @@ struct EffectsRackView: View {
                 
                 // Remove effect button
                 Button(action: {
-                    projectViewModel.removeEffectFromSelectedTrack(effectId: effect.id)
+                    effectsViewModel.removeEffectFromSelectedTrack(effectId: effect.id)
                 }) {
                     Image(systemName: "xmark")
                         .foregroundColor(themeManager.secondaryTextColor)
@@ -211,7 +216,7 @@ struct EffectsRackView: View {
                                         set: { newValue in
                                             var updatedEffect = effect
                                             updatedEffect.parameters[paramName] = newValue
-                                            projectViewModel.updateEffectOnSelectedTrack(updatedEffect)
+                                            effectsViewModel.updateEffectOnSelectedTrack(updatedEffect)
                                         }
                                     ), in: parameterRange(for: paramName))
                                     .frame(width: 80)
@@ -238,7 +243,7 @@ struct EffectsRackView: View {
     
     // Content for the add effect menu
     private func addEffectMenuContent(for track: Track) -> some View {
-        let compatibleEffects = projectViewModel.compatibleEffectTypesForSelectedTrack()
+        let compatibleEffects = effectsViewModel.compatibleEffectTypesForSelectedTrack()
         
         return VStack(alignment: .leading, spacing: 8) {
             Text("Add Effect")
@@ -252,9 +257,9 @@ struct EffectsRackView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(compatibleEffects, id: \.self) { effectType in
                         Button(action: {
-                            // Add the selected effect
+                            // Add the selected effect using the EffectsViewModel
                             let newEffect = Effect(type: effectType)
-                            projectViewModel.addEffectToSelectedTrack(newEffect)
+                            effectsViewModel.addEffectToSelectedTrack(newEffect)
                             showingAddEffectMenu = false
                         }) {
                             HStack {

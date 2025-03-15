@@ -12,11 +12,14 @@ import AppKit
 struct music_ai_frontendApp: App {
     // Create a shared ThemeManager instance for the entire app
     @StateObject private var themeManager = ThemeManager()
+    // Create a shared SidebarViewModel instance
+    @StateObject private var sidebarViewModel = SidebarViewModel()
     
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(themeManager)
+                .environmentObject(sidebarViewModel)
                 .onAppear {
                     // Apply theme to window
                     setupAppearance()
@@ -36,6 +39,7 @@ struct music_ai_frontendApp: App {
         
         // Update window appearance
         for window in NSApp.windows {
+            // Customize window background
             window.backgroundColor = themeManager.currentTheme == .dark ? 
                 NSColor(Color(white: 0.2)) : NSColor(Color(white: 0.9))
         }

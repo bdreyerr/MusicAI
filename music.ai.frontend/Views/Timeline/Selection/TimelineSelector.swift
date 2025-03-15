@@ -7,6 +7,11 @@ struct TimelineSelector: View {
     @ObservedObject var state: TimelineState
     let track: Track
     
+    // Computed property to access the MIDI view model
+    private var midiViewModel: MidiViewModel {
+        return projectViewModel.midiViewModel
+    }
+    
     // State for tracking the drag operation
     @State private var isDragging: Bool = false
     
@@ -111,44 +116,12 @@ struct TimelineSelector: View {
     
     /// Checks if a MIDI clip is currently selected on this track
     private func isMidiClipSelected() -> Bool {
-        guard state.selectionActive && state.selectionTrackId == track.id else {
-            return false
-        }
-        
-        // Get the selection range
-        let (selStart, selEnd) = state.normalizedSelectionRange
-        
-        // Check if the selection matches any clip exactly
-        return track.midiClips.contains { clip in
-            abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
-        }
+        return midiViewModel.isMidiClipSelected(trackId: track.id)
     }
     
     /// Checks if a beat position is on a MIDI clip
     private func isPositionOnMidiClip(_ beatPosition: Double) -> Bool {
-        // Only check for MIDI tracks
-        guard track.type == .midi else { return false }
-        
-        // Check if the position is within any clip
-        // Use a small tolerance to ensure we're exactly on the clip
-        let isOnClip = track.midiClips.contains { clip in
-            let isWithinClip = beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
-            if isWithinClip {
-                print("Click detected on clip: \(clip.name) at position \(beatPosition) (clip range: \(clip.startBeat)-\(clip.endBeat))")
-                
-                // Try to select the clip directly
-                if let timelineState = projectViewModel.timelineState {
-                    projectViewModel.selectTrack(id: track.id)
-                    timelineState.startSelection(at: clip.startBeat, trackId: track.id)
-                    timelineState.updateSelection(to: clip.endBeat)
-                    projectViewModel.seekToBeat(clip.startBeat)
-                    print("Directly selected clip: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
-                }
-            }
-            return isWithinClip
-        }
-        
-        return isOnClip
+        return midiViewModel.isPositionOnMidiClip(trackId: track.id, beatPosition: beatPosition)
     }
     
     /// Snaps a raw beat position to the nearest visible grid marker based on the current zoom level

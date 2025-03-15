@@ -8,6 +8,11 @@ struct TrackView: View {
     @EnvironmentObject var themeManager: ThemeManager
     let width: CGFloat
     
+    // Computed property to access the MIDI view model
+    private var midiViewModel: MidiViewModel {
+        return projectViewModel.midiViewModel
+    }
+    
     // State to track local changes before updating the model
     @State private var isMuted: Bool
     @State private var isSolo: Bool
@@ -162,7 +167,7 @@ struct TrackView: View {
             // Create MIDI clip option (only for MIDI tracks and when there's a selection)
             if track.type == .midi && state.hasSelection(trackId: track.id) {
                 Button("Create MIDI Clip") {
-                    projectViewModel.createMidiClipFromSelection()
+                    midiViewModel.createMidiClipFromSelection()
                 }
                 
                 Divider()

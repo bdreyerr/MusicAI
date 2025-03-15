@@ -4,7 +4,7 @@ import Combine
 /// TimelineState manages the visual representation and zoom behavior of the timeline.
 /// This is separate from ProjectViewModel which manages the actual music project data.
 class TimelineState: ObservableObject {
-    @Published var zoomLevel: Double = 0.146 { // Default zoom level to match the old implementation
+    @Published var zoomLevel: Double = 0.4 { // Increased default zoom level for better initial view
         didSet {
             // Notify that zoom level has changed
             zoomChanged = true
@@ -32,28 +32,26 @@ class TimelineState: ObservableObject {
     
     // Determine what divisions to show based on zoom level
     var showSixteenthNotes: Bool {
-        return zoomLevel > 0.7
+        return zoomLevel > 0.5
     }
     
     var showEighthNotes: Bool {
-        return zoomLevel > 0.4
+        return zoomLevel > 0.3
     }
     
     var showQuarterNotes: Bool {
-        // Only show quarter notes (beats) when zoom level is above 0.2
-        // This means when zoomed out all the way, only bar lines will be shown
-        return zoomLevel > 0.2
+        return zoomLevel > 0.15
     }
     
     // Determine which bar numbers to show based on zoom level
     var barNumberInterval: Int {
-        if zoomLevel < 0.2 {
-            // When zoomed out all the way, show every 8th bar number (1, 9, 17, 25, etc.)
-            return 8
-        } else if zoomLevel < 0.4 {
+        if zoomLevel < 0.15 {
+            // When zoomed out all the way, show every 4th bar number (1, 5, 9, 13, etc.)
+            return 4
+        } else if zoomLevel < 0.3 {
             // When mid-way zoomed out, show every 4th bar number (1, 5, 9, 13, etc.)
             return 4
-        } else if zoomLevel < 0.7 {
+        } else if zoomLevel < 0.5 {
             // When slightly zoomed out, show every 2nd bar number (1, 3, 5, 7, etc.)
             return 2
         } else {
@@ -70,7 +68,7 @@ class TimelineState: ObservableObject {
         }
         
         // When zoomed in far enough, always show all bar numbers
-        if zoomLevel >= 0.7 {
+        if zoomLevel >= 0.5 {
             return true
         }
         

@@ -9,7 +9,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var projectViewModel = ProjectViewModel()
-    @StateObject private var themeManager = ThemeManager()
+    @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var sidebarViewModel: SidebarViewModel
     @State private var showThemeSettings = false
     
     var body: some View {
@@ -23,6 +24,7 @@ struct ContentView: View {
                 // Left sidebar - using the one from Views/LeftSidebar folder
                 LeftSidebarView()
                     .environmentObject(themeManager)
+                    .environmentObject(sidebarViewModel)
                 
                 // Timeline view - using the new ClaudeTimeline
                 TimelineView(projectViewModel: projectViewModel)
@@ -37,27 +39,13 @@ struct ContentView: View {
         }
         .frame(minWidth: 1000, minHeight: 700)
         .background(themeManager.backgroundColor)
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button(action: {
-                    showThemeSettings.toggle()
-                }) {
-                    Label("Theme", systemImage: "paintpalette")
-                        .foregroundColor(themeManager.primaryTextColor)
-                }
-                .help("Change application theme")
-                .popover(isPresented: $showThemeSettings) {
-                    ThemeSettingsView()
-                        .environmentObject(themeManager)
-                }
-            }
-        }
         .toolbarBackground(themeManager.secondaryBackgroundColor, for: .automatic)
         .toolbarBackground(.visible, for: .automatic)
-        .environmentObject(themeManager)
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(ThemeManager())
+        .environmentObject(SidebarViewModel())
 }

@@ -9,6 +9,11 @@ struct MidiClipView: View {
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
     
+    // Computed property to access the MIDI view model
+    private var midiViewModel: MidiViewModel {
+        return projectViewModel.midiViewModel
+    }
+    
     // State for hover and selection
     @State private var isHovering: Bool = false
     @State private var isDragging: Bool = false
@@ -160,8 +165,8 @@ struct MidiClipView: View {
                         
                         // Only move if the position actually changed
                         if abs(finalPosition - clip.startBeat) > 0.001 {
-                            // Move the clip to the new position
-                            let success = projectViewModel.moveMidiClip(
+                            // Move the clip to the new position using the MIDI view model
+                            let success = midiViewModel.moveMidiClip(
                                 trackId: track.id,
                                 clipId: clip.id,
                                 newStartBeat: finalPosition
@@ -223,7 +228,7 @@ struct MidiClipView: View {
                 }
                 
                 Button("Delete Clip") {
-                    projectViewModel.removeMidiClip(trackId: track.id, clipId: clip.id)
+                    midiViewModel.removeMidiClip(trackId: track.id, clipId: clip.id)
                 }
                 
                 Divider()
@@ -272,8 +277,8 @@ struct MidiClipView: View {
     private func renameClip(to newName: String) {
         guard !newName.isEmpty else { return }
         
-        // Use the ProjectViewModel method to rename the clip
-        _ = projectViewModel.renameMidiClip(trackId: track.id, clipId: clip.id, newName: newName)
+        // Use the MidiViewModel to rename the clip
+        _ = midiViewModel.renameMidiClip(trackId: track.id, clipId: clip.id, newName: newName)
     }
     
     /// Snaps a raw beat position to the nearest visible grid marker based on the current zoom level

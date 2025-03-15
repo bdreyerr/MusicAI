@@ -70,7 +70,7 @@ struct TimelineView: View {
                     // Use a ScrollViewReader to coordinate scrolling
                     ScrollViewReader { scrollProxy in
                         // Single ScrollView for vertical scrolling
-                        ScrollView(.vertical, showsIndicators: true) {
+                        ScrollView(.vertical, showsIndicators: false) {
                             // Use a LazyVStack to ensure views are only created when needed
                             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                                 // Header section with ruler
@@ -282,6 +282,8 @@ struct TimelineView: View {
                     menuCoordinator.defaultTrackHeight = defaultTrackHeight
                     // Connect the timeline state to the project view model
                     projectViewModel.timelineState = timelineState
+                    // Connect the timeline state to the MIDI view model
+                    projectViewModel.midiViewModel.setTimelineState(timelineState)
                 }
                 // Respond to zoom level changes
                 .onChange(of: timelineState.zoomLevel) { newZoomLevel in
@@ -365,14 +367,12 @@ struct TimelineView: View {
 //                    }
 //                }
                 
-                // Check if the selection matches a MIDI clip exactly
-                let selectedClip = track.midiClips.first(where: { clip in
-                    abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
-                })
+                // Check if the selection matches a MIDI clip exactly using the MidiViewModel
+                let isClipSelected = projectViewModel.midiViewModel.isMidiClipSelected(trackId: trackId)
                 
-                if let selectedClip = selectedClip {
+                if isClipSelected {
                     // This is a selected MIDI clip - show clip-specific options
-                    print("Found selected clip: \(selectedClip.name)")
+                    print("Found selected clip")
                     
                     menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "")
                         .target = menuCoordinator

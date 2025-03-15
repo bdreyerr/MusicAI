@@ -13,6 +13,18 @@ class ProjectViewModel: ObservableObject {
     // Reference to the timeline state
     var timelineState: TimelineState? = nil
     
+    // MIDI view model for handling MIDI-related operations
+    lazy var midiViewModel: MidiViewModel = {
+        let viewModel = MidiViewModel(projectViewModel: self, timelineState: timelineState)
+        return viewModel
+    }()
+    
+    // Effects view model for handling effects-related operations
+    lazy var effectsViewModel: EffectsViewModel = {
+        let viewModel = EffectsViewModel(projectViewModel: self)
+        return viewModel
+    }()
+    
     // Initialize with default values
     init() {
         // Select the first track by default if available
@@ -134,254 +146,9 @@ class ProjectViewModel: ObservableObject {
             // We don't actually change their mute state, just their audibility
             // This is handled in the UI by dimming the track
         }
-    }
-    
-    // MARK: - Effects Management
-    
-    // Add an effect to the selected track
-    func addEffectToSelectedTrack(_ effect: Effect) {
-        guard let trackId = selectedTrackId,
-              let index = tracks.firstIndex(where: { $0.id == trackId }) else { return }
         
-        var updatedTrack = tracks[index]
-        updatedTrack.addEffect(effect)
-        
-        // Update the track in the array
-        tracks[index] = updatedTrack
-    }
-    
-    // Remove an effect from the selected track
-    func removeEffectFromSelectedTrack(effectId: UUID) {
-        guard let trackId = selectedTrackId,
-              let index = tracks.firstIndex(where: { $0.id == trackId }) else { return }
-        
-        var updatedTrack = tracks[index]
-        updatedTrack.removeEffect(id: effectId)
-        
-        // Update the track in the array
-        tracks[index] = updatedTrack
-    }
-    
-    // Update an effect on the selected track
-    func updateEffectOnSelectedTrack(_ updatedEffect: Effect) {
-        guard let trackId = selectedTrackId,
-              let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else { return }
-        
-        var updatedTrack = tracks[trackIndex]
-        
-        // Find and update the effect
-        if let effectIndex = updatedTrack.effects.firstIndex(where: { $0.id == updatedEffect.id }) {
-            updatedTrack.effects[effectIndex] = updatedEffect
-            
-            // Update the track in the array
-            tracks[trackIndex] = updatedTrack
-        }
-    }
-    
-    // Set the instrument for the selected track (only applicable for MIDI tracks)
-    func setInstrumentForSelectedTrack(_ instrument: Effect?) {
-        guard let trackId = selectedTrackId,
-              let index = tracks.firstIndex(where: { $0.id == trackId }) else { return }
-        
-        var updatedTrack = tracks[index]
-        updatedTrack.setInstrument(instrument)
-        
-        // Update the track in the array
-        tracks[index] = updatedTrack
-    }
-    
-    // Get compatible effect types for the selected track
-    func compatibleEffectTypesForSelectedTrack() -> [EffectType] {
-        guard let track = selectedTrack else { return [] }
-        
-        switch track.type {
-        case .audio:
-            return [.equalizer, .compressor, .reverb, .delay, .filter]
-        case .midi:
-            return [.arpeggiator, .chordTrigger, .instrument]
-        case .instrument:
-            return [.filter, .synthesizer, .reverb, .delay]
-        }
-    }
-    
-    // MARK: - MIDI Clip Management
-    
-    // Create a MIDI clip from the current selection
-    func createMidiClipFromSelection() -> Bool {
-        // Ensure there is an active selection
-        guard let timelineState = findTimelineState(),
-              timelineState.selectionActive,
-              let trackId = timelineState.selectionTrackId,
-              let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
-            return false
-        }
-        
-        // Get the selected track
-        var track = tracks[trackIndex]
-        
-        // Ensure this is a MIDI track
-        guard track.type == .midi else {
-            return false
-        }
-        
-        // Get the selection range
-        let (startBeat, endBeat) = timelineState.normalizedSelectionRange
-        let duration = endBeat - startBeat
-        
-        // Ensure the duration is valid
-        guard duration > 0 else {
-            return false
-        }
-        
-        // Check if we can add a clip at this position (no overlaps)
-        guard track.canAddMidiClip(startBeat: startBeat, duration: duration) else {
-            return false
-        }
-        
-        // Create a new MIDI clip
-        let clipName = "Clip \(track.midiClips.count + 1)"
-        let newClip = MidiClip.createEmpty(name: clipName, startBeat: startBeat, duration: duration)
-        
-        // Add the clip to the track
-        track.addMidiClip(newClip)
-        
-        // Update the track in the view model
-        tracks[trackIndex] = track
-        
-        // Clear the selection
-        timelineState.clearSelection()
-        
-        return true
-    }
-    
-    // Remove a MIDI clip from a track
-    func removeMidiClip(trackId: UUID, clipId: UUID) -> Bool {
-        guard let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
-            return false
-        }
-        
-        var track = tracks[trackIndex]
-        
-        // Ensure this is a MIDI track
-        guard track.type == .midi else {
-            return false
-        }
-        
-        // Remove the clip
-        track.removeMidiClip(id: clipId)
-        
-        // Update the track in the view model
-        tracks[trackIndex] = track
-        
-        return true
-    }
-    
-    // Rename a MIDI clip
-    func renameMidiClip(trackId: UUID, clipId: UUID, newName: String) -> Bool {
-        guard !newName.isEmpty,
-              let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
-            return false
-        }
-        
-        var track = tracks[trackIndex]
-        
-        // Ensure this is a MIDI track
-        guard track.type == .midi else {
-            return false
-        }
-        
-        // Find the clip in the track
-        guard let clipIndex = track.midiClips.firstIndex(where: { $0.id == clipId }) else {
-            return false
-        }
-        
-        // Update the clip name
-        var updatedClip = track.midiClips[clipIndex]
-        updatedClip.name = newName
-        track.midiClips[clipIndex] = updatedClip
-        
-        // Update the track in the view model
-        tracks[trackIndex] = track
-        
-        return true
-    }
-    
-    // Get all MIDI clips for a specific track
-    func midiClipsForTrack(trackId: UUID) -> [MidiClip] {
-        guard let track = tracks.first(where: { $0.id == trackId }),
-              track.type == .midi else {
-            return []
-        }
-        
-        return track.midiClips
-    }
-    
-    // Move a MIDI clip to a new position
-    func moveMidiClip(trackId: UUID, clipId: UUID, newStartBeat: Double) -> Bool {
-        guard let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
-            print("Failed to find track with ID: \(trackId)")
-            return false
-        }
-        
-        var track = tracks[trackIndex]
-        
-        // Ensure this is a MIDI track
-        guard track.type == .midi else {
-            print("Track is not a MIDI track")
-            return false
-        }
-        
-        // Find the clip in the track
-        guard let clipIndex = track.midiClips.firstIndex(where: { $0.id == clipId }) else {
-            print("Failed to find clip with ID: \(clipId)")
-            return false
-        }
-        
-        // Get the clip we're moving
-        var clipToMove = track.midiClips[clipIndex]
-        let clipDuration = clipToMove.duration
-        let newEndBeat = newStartBeat + clipDuration
-        
-        print("Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
-        
-        // Check for overlaps with other clips
-        let overlappingClips = track.midiClips.filter { clip in
-            clip.id != clipId && // Not the clip we're moving
-            (newStartBeat < clip.endBeat && newEndBeat > clip.startBeat) // Overlaps
-        }
-        
-        // Remove any overlapping clips
-        for overlappingClip in overlappingClips {
-            track.removeMidiClip(id: overlappingClip.id)
-            print("Removed overlapping clip: \(overlappingClip.name)")
-        }
-        
-        // Update the clip's position
-        clipToMove.startBeat = newStartBeat
-        
-        // Remove the old clip and add the updated one
-        track.removeMidiClip(id: clipId)
-        _ = track.addMidiClip(clipToMove)
-        
-        // Update the track in the view model
-        tracks[trackIndex] = track
-        
-        // Update the selection to match the new clip position
-        if let timelineState = timelineState,
-           timelineState.selectionActive,
-           timelineState.selectionTrackId == trackId {
-            timelineState.startSelection(at: newStartBeat, trackId: trackId)
-            timelineState.updateSelection(to: newEndBeat)
-        }
-        
-        // Force UI update by triggering objectWillChange
+        // Notify observers that tracks have been updated
         objectWillChange.send()
-        
-        // Ensure the playhead is at the start of the moved clip
-        seekToBeat(newStartBeat)
-        
-        print("Successfully moved clip to \(newStartBeat)")
-        return true
     }
     
     // MARK: - Private
