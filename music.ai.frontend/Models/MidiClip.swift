@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 /// Represents a MIDI clip in the timeline
-struct MidiClip: Identifiable {
+struct MidiClip: Identifiable, Equatable {
     let id = UUID()
     var name: String
     var startBeat: Double // Position in the timeline (in beats)
@@ -18,6 +18,14 @@ struct MidiClip: Identifiable {
     // Create a new empty MIDI clip
     static func createEmpty(name: String, startBeat: Double, duration: Double) -> MidiClip {
         return MidiClip(name: name, startBeat: startBeat, duration: duration)
+    }
+    
+    // Implement Equatable to help with updates
+    static func == (lhs: MidiClip, rhs: MidiClip) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.name == rhs.name &&
+               lhs.startBeat == rhs.startBeat &&
+               lhs.duration == rhs.duration
     }
 }
 

@@ -316,6 +316,74 @@ class ProjectViewModel: ObservableObject {
         return track.midiClips
     }
     
+    // Move a MIDI clip to a new position
+    func moveMidiClip(trackId: UUID, clipId: UUID, newStartBeat: Double) -> Bool {
+        guard let trackIndex = tracks.firstIndex(where: { $0.id == trackId }) else {
+            print("Failed to find track with ID: \(trackId)")
+            return false
+        }
+        
+        var track = tracks[trackIndex]
+        
+        // Ensure this is a MIDI track
+        guard track.type == .midi else {
+            print("Track is not a MIDI track")
+            return false
+        }
+        
+        // Find the clip in the track
+        guard let clipIndex = track.midiClips.firstIndex(where: { $0.id == clipId }) else {
+            print("Failed to find clip with ID: \(clipId)")
+            return false
+        }
+        
+        // Get the clip we're moving
+        var clipToMove = track.midiClips[clipIndex]
+        let clipDuration = clipToMove.duration
+        let newEndBeat = newStartBeat + clipDuration
+        
+        print("Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
+        
+        // Check for overlaps with other clips
+        let overlappingClips = track.midiClips.filter { clip in
+            clip.id != clipId && // Not the clip we're moving
+            (newStartBeat < clip.endBeat && newEndBeat > clip.startBeat) // Overlaps
+        }
+        
+        // Remove any overlapping clips
+        for overlappingClip in overlappingClips {
+            track.removeMidiClip(id: overlappingClip.id)
+            print("Removed overlapping clip: \(overlappingClip.name)")
+        }
+        
+        // Update the clip's position
+        clipToMove.startBeat = newStartBeat
+        
+        // Remove the old clip and add the updated one
+        track.removeMidiClip(id: clipId)
+        _ = track.addMidiClip(clipToMove)
+        
+        // Update the track in the view model
+        tracks[trackIndex] = track
+        
+        // Update the selection to match the new clip position
+        if let timelineState = timelineState,
+           timelineState.selectionActive,
+           timelineState.selectionTrackId == trackId {
+            timelineState.startSelection(at: newStartBeat, trackId: trackId)
+            timelineState.updateSelection(to: newEndBeat)
+        }
+        
+        // Force UI update by triggering objectWillChange
+        objectWillChange.send()
+        
+        // Ensure the playhead is at the start of the moved clip
+        seekToBeat(newStartBeat)
+        
+        print("Successfully moved clip to \(newStartBeat)")
+        return true
+    }
+    
     // MARK: - Private
     
     private var playbackTimer: Timer?

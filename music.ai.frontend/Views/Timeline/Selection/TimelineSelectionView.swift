@@ -28,14 +28,34 @@ struct TimelineSelectionView: View {
         return endX - startX
     }
     
+    // Check if this selection is likely a preview for a MIDI clip drag
+    private var isMidiClipDragPreview: Bool {
+        guard hasSelection && track.type == .midi else { return false }
+        
+        // Check if the selection matches the size of any MIDI clip
+        return track.midiClips.contains { clip in
+            abs((selectionRange.end - selectionRange.start) - clip.duration) < 0.001
+        }
+    }
+    
     var body: some View {
         if hasSelection {
-            // Selection rectangle
-            Rectangle()
-                .fill(track.effectiveColor.opacity(0.3))
-                .frame(width: max(1, width), height: track.height)
-                .position(x: startX + width/2, y: track.height/2)
-                .allowsHitTesting(false) // Don't interfere with other gestures
+            ZStack {
+                // Selection rectangle
+                Rectangle()
+                    .fill(track.effectiveColor.opacity(isMidiClipDragPreview ? 0.2 : 0.3))
+                    .frame(width: max(1, width), height: track.height)
+                
+                // Add a dashed border if this is likely a MIDI clip drag preview
+                if isMidiClipDragPreview {
+                    Rectangle()
+                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                        .foregroundColor(track.effectiveColor.opacity(0.8))
+                        .frame(width: max(1, width), height: track.height)
+                }
+            }
+            .position(x: startX + width/2, y: track.height/2)
+            .allowsHitTesting(false) // Don't interfere with other gestures
         }
     }
     

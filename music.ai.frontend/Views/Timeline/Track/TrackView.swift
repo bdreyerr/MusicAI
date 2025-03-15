@@ -117,7 +117,7 @@ struct TrackView: View {
                         projectViewModel: projectViewModel
                     )
                     .environmentObject(themeManager)
-                    .zIndex(10) // Ensure clips are above other elements for better interaction
+                    .zIndex(20) // Increase z-index to ensure clips are above all other elements
                 }
             } else {
                 // Placeholder for audio tracks
@@ -135,7 +135,7 @@ struct TrackView: View {
                 state: state,
                 track: track
             )
-            .zIndex(20) // Highest z-index to capture all clicks
+            .zIndex(5) // Lower z-index than MIDI clips (20) but higher than other elements
             .allowsHitTesting(true) // Ensure the selector can receive clicks
         }
         .frame(width: width, height: track.height) // Use track's height property

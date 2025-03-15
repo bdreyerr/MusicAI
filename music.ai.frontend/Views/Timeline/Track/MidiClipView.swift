@@ -14,6 +14,8 @@ struct MidiClipView: View {
     @State private var isDragging: Bool = false
     @State private var showRenameDialog: Bool = false
     @State private var newClipName: String = ""
+    @State private var dragStartBeat: Double = 0 // Track the starting beat position for drag
+    @State private var dragStartLocation: CGPoint = .zero // Track the starting location for drag
     
     // Computed property to check if this clip is selected
     private var isSelected: Bool {
@@ -32,9 +34,6 @@ struct MidiClipView: View {
         // Calculate position and size based on timeline state
         let startX = CGFloat(clip.startBeat * state.effectivePixelsPerBeat)
         let width = CGFloat(clip.duration * state.effectivePixelsPerBeat)
-        
-        // Debug the clip position
-        let _ = print("MidiClipView for \(clip.name): startBeat=\(clip.startBeat), endBeat=\(clip.endBeat), startX=\(startX), width=\(width)")
         
         // Use a ZStack to position the clip correctly
         ZStack(alignment: .topLeading) {
@@ -55,6 +54,14 @@ struct MidiClipView: View {
                     .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
                     .opacity(isSelected ? 0.8 : 0)
                 
+                // Dragging indicator
+                if isDragging {
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                        .foregroundColor(.white)
+                        .opacity(0.9)
+                }
+                
                 // Clip name
                 Text(clip.name)
                     .font(.caption)
@@ -73,6 +80,7 @@ struct MidiClipView: View {
             }
             .frame(width: width, height: track.height - 4)
             .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
+            .contentShape(Rectangle()) // Ensure the entire area is clickable
             .onTapGesture {
                 print("Tap detected directly on MidiClipView")
                 selectThisClip()
@@ -80,12 +88,123 @@ struct MidiClipView: View {
             .onHover { hovering in
                 isHovering = hovering
                 if hovering {
-                    NSCursor.pointingHand.set()
+                    // Change cursor based on whether the clip is selected
+                    if isSelected {
+                        NSCursor.openHand.set()
+                        print("Hovering over selected clip: \(clip.name) - showing open hand cursor")
+                    } else {
+                        NSCursor.pointingHand.set()
+                    }
                     print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
                 } else if !isDragging {
                     NSCursor.arrow.set()
                 }
             }
+            // Add drag gesture for moving the clip - only works when the clip is selected
+            .gesture(
+                DragGesture(minimumDistance: 5) // Require a minimum drag distance to start
+                    .onChanged { value in
+                        // If the clip isn't selected yet, select it first
+                        if !isSelected {
+                            selectThisClip()
+                        }
+                        
+                        // If this is the start of the drag, store the starting position
+                        if !isDragging {
+                            dragStartBeat = clip.startBeat
+                            dragStartLocation = value.startLocation
+                            isDragging = true
+                            NSCursor.closedHand.set()
+                            print("Started dragging clip: \(clip.name) from position \(dragStartBeat), startLocation: \(dragStartLocation)")
+                        }
+                        
+                        // Calculate the drag distance in beats directly from the translation
+                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                        
+                        // Calculate the new beat position
+                        let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
+                        
+                        // Snap to grid
+                        let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
+                        
+                        // Ensure we don't go negative
+                        let finalPosition = max(0, snappedBeatPosition)
+                        
+                        // Update the selection to preview the new position
+                        // This will show where the clip will end up without moving it
+                        state.startSelection(at: finalPosition, trackId: track.id)
+                        state.updateSelection(to: finalPosition + clip.duration)
+                        
+                        // Debug info
+                        print("Dragging clip: \(clip.name), preview position: \(finalPosition), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats)")
+                    }
+                    .onEnded { value in
+                        // Only process if we were actually dragging
+                        guard isDragging else { return }
+                        
+                        print("Drag ended with translation: \(value.translation)")
+                        
+                        // Calculate the final drag distance directly from the translation
+                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                        
+                        // Calculate the new beat position
+                        let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
+                        
+                        // Snap to grid
+                        let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
+                        
+                        // Ensure we don't go negative
+                        let finalPosition = max(0, snappedBeatPosition)
+                        
+                        print("Final calculation: startBeat: \(dragStartBeat), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats), finalPosition: \(finalPosition)")
+                        
+                        // Only move if the position actually changed
+                        if abs(finalPosition - clip.startBeat) > 0.001 {
+                            // Move the clip to the new position
+                            let success = projectViewModel.moveMidiClip(
+                                trackId: track.id,
+                                clipId: clip.id,
+                                newStartBeat: finalPosition
+                            )
+                            
+                            if success {
+                                print("Moved clip: \(clip.name) to position \(finalPosition)")
+                                
+                                // Update the selection to match the new clip position
+                                state.startSelection(at: finalPosition, trackId: track.id)
+                                state.updateSelection(to: finalPosition + clip.duration)
+                            } else {
+                                print("Failed to move clip: \(clip.name)")
+                                
+                                // Reset the selection to the original clip position
+                                state.startSelection(at: clip.startBeat, trackId: track.id)
+                                state.updateSelection(to: clip.endBeat)
+                            }
+                        } else {
+                            // If position didn't change, reset selection to current clip position
+                            state.startSelection(at: clip.startBeat, trackId: track.id)
+                            state.updateSelection(to: clip.endBeat)
+                        }
+                        
+                        // Reset drag state
+                        isDragging = false
+                        dragStartLocation = .zero
+                        
+                        // Reset cursor based on hover state
+                        if isHovering {
+                            // If still hovering over the clip after drag, show open hand if selected
+                            if isSelected {
+                                NSCursor.openHand.set()
+                                print("Drag ended, still hovering over selected clip - showing open hand cursor")
+                            } else {
+                                NSCursor.pointingHand.set()
+                            }
+                        } else {
+                            NSCursor.arrow.set()
+                        }
+                    }
+            )
+            // Add right-click gesture
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
@@ -115,6 +234,8 @@ struct MidiClipView: View {
             }
         }
         .position(x: startX + width/2, y: (track.height - 4)/2)
+        .zIndex(20) // Ensure clips are above other elements for better interaction
+        .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.7, blendDuration: 0.1), value: clip.startBeat) // Animate when the actual clip position changes
         .alert("Rename Clip", isPresented: $showRenameDialog) {
             TextField("Clip Name", text: $newClipName)
             
@@ -153,6 +274,34 @@ struct MidiClipView: View {
         
         // Use the ProjectViewModel method to rename the clip
         _ = projectViewModel.renameMidiClip(trackId: track.id, clipId: clip.id, newName: newName)
+    }
+    
+    /// Snaps a raw beat position to the nearest visible grid marker based on the current zoom level
+    private func snapToNearestGridMarker(_ rawBeatPosition: Double) -> Double {
+        // Determine the smallest visible grid division based on zoom level
+        let gridDivision: Double
+        
+        if state.showSixteenthNotes {
+            // Snap to sixteenth notes (0.25 beat)
+            gridDivision = 0.25
+        } else if state.showEighthNotes {
+            // Snap to eighth notes (0.5 beat)
+            gridDivision = 0.5
+        } else if state.showQuarterNotes {
+            // Snap to quarter notes (1 beat)
+            gridDivision = 1.0
+        } else {
+            // When zoomed out all the way, snap to bars
+            // For bars, we need to handle differently to ensure we snap to the start of a bar
+            let beatsPerBar = Double(projectViewModel.timeSignatureBeats)
+            let barIndex = round(rawBeatPosition / beatsPerBar)
+            return max(0, barIndex * beatsPerBar) // Ensure we don't go negative
+        }
+        
+        // Calculate the nearest grid marker for beats and smaller divisions
+        let nearestGridMarker = round(rawBeatPosition / gridDivision) * gridDivision
+        
+        return max(0, nearestGridMarker) // Ensure we don't go negative
     }
 }
 

@@ -357,13 +357,13 @@ struct TimelineView: View {
                 let (selStart, selEnd) = timelineState.normalizedSelectionRange
                 
                 // Debug info
-                print("Selection: \(selStart) to \(selEnd)")
-                if !track.midiClips.isEmpty {
-                    print("Available clips:")
-                    for clip in track.midiClips {
-                        print("  - \(clip.name): \(clip.startBeat) to \(clip.endBeat)")
-                    }
-                }
+//                print("Selection: \(selStart) to \(selEnd)")
+//                if !track.midiClips.isEmpty {
+//                    print("Available clips:")
+//                    for clip in track.midiClips {
+//                        print("  - \(clip.name): \(clip.startBeat) to \(clip.endBeat)")
+//                    }
+//                }
                 
                 // Check if the selection matches a MIDI clip exactly
                 let selectedClip = track.midiClips.first(where: { clip in

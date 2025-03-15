@@ -41,8 +41,11 @@ struct TimelineSelector: View {
                             // Select the track
                             projectViewModel.selectTrack(id: track.id)
                             
-                            // Clear any existing selection first (to deselect any MIDI clip)
-                            state.clearSelection()
+                            // Check if we need to deselect a MIDI clip first
+                            if state.selectionActive && isMidiClipSelected() {
+                                state.clearSelection()
+                                print("Clearing MIDI clip selection before starting new selection")
+                            }
                             
                             // Start a new selection
                             state.startSelection(at: snappedBeatPosition, trackId: track.id)
@@ -92,35 +95,39 @@ struct TimelineSelector: View {
                 // Select the track
                 projectViewModel.selectTrack(id: track.id)
                 
-                // Clear any existing selection (to deselect any MIDI clip)
-                state.clearSelection()
-                print("Clearing selection in TimelineSelector tap handler")
+                // Check if we need to deselect a MIDI clip
+                if state.selectionActive && isMidiClipSelected() {
+                    state.clearSelection()
+                    print("Clearing MIDI clip selection on tap")
+                }
                 
                 // Move the playhead to the clicked position
                 projectViewModel.seekToBeat(snappedBeatPosition)
                 
-                print("Clicked on track at position \(snappedBeatPosition), cleared selection")
+                print("Clicked on track at position \(snappedBeatPosition)")
             }
             .allowsHitTesting(true) // Ensure the selector can receive clicks
+    }
+    
+    /// Checks if a MIDI clip is currently selected on this track
+    private func isMidiClipSelected() -> Bool {
+        guard state.selectionActive && state.selectionTrackId == track.id else {
+            return false
+        }
+        
+        // Get the selection range
+        let (selStart, selEnd) = state.normalizedSelectionRange
+        
+        // Check if the selection matches any clip exactly
+        return track.midiClips.contains { clip in
+            abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
+        }
     }
     
     /// Checks if a beat position is on a MIDI clip
     private func isPositionOnMidiClip(_ beatPosition: Double) -> Bool {
         // Only check for MIDI tracks
         guard track.type == .midi else { return false }
-        
-        print("Checking if position \(beatPosition) is on any MIDI clip")
-        
-        // Debug all clips on this track
-        if !track.midiClips.isEmpty {
-            print("Available clips on track \(track.name):")
-            for clip in track.midiClips {
-                print("  - \(clip.name): \(clip.startBeat) to \(clip.endBeat)")
-            }
-        } else {
-            print("No MIDI clips on track \(track.name)")
-            return false
-        }
         
         // Check if the position is within any clip
         // Use a small tolerance to ensure we're exactly on the clip
@@ -139,10 +146,6 @@ struct TimelineSelector: View {
                 }
             }
             return isWithinClip
-        }
-        
-        if !isOnClip {
-            print("Click at \(beatPosition) is NOT on any MIDI clip")
         }
         
         return isOnClip
