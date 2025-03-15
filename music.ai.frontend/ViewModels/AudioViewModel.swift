@@ -7,15 +7,78 @@ class AudioViewModel: ObservableObject {
     private weak var projectViewModel: ProjectViewModel?
     
     // Reference to the timeline state
-    private weak var timelineState: TimelineState?
+    private weak var timelineState: TimelineStateViewModel?
     
     // Initialize with project view model and timeline state
-    init(projectViewModel: ProjectViewModel, timelineState: TimelineState? = nil) {
+    init(projectViewModel: ProjectViewModel, timelineState: TimelineStateViewModel? = nil) {
         self.projectViewModel = projectViewModel
         self.timelineState = timelineState
     }
     
     // MARK: - Audio Clip Management
+    
+    /// Create an audio clip from a dropped file
+    /// - Parameters:
+    ///   - trackId: The ID of the track to add the clip to
+    ///   - filePath: The path to the audio file
+    ///   - fileName: The name of the audio file (without extension)
+    ///   - startBeat: The starting beat position for the clip
+    /// - Returns: True if the clip was created successfully
+    func createAudioClipFromFile(trackId: UUID, filePath: String, fileName: String, startBeat: Double) -> Bool {
+        // Ensure we have a reference to the project view model
+        guard let projectViewModel = projectViewModel,
+              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+            print("Failed to find track with ID: \(trackId)")
+            return false
+        }
+        
+        var track = projectViewModel.tracks[trackIndex]
+        
+        // Ensure this is an audio track
+        guard track.type == .audio else {
+            print("Track is not an audio track")
+            return false
+        }
+        
+        // Create a URL from the file path
+        let fileURL = URL(fileURLWithPath: filePath)
+        
+        // Calculate the duration of the audio file in beats based on the project tempo
+        let durationInBeats = AudioFileDurationCalculator.calculateDurationInBeats(
+            url: fileURL,
+            tempo: projectViewModel.tempo
+        )
+        
+        // Check if we can add a clip at this position (no overlaps)
+        guard track.canAddAudioClip(startBeat: startBeat, duration: durationInBeats) else {
+            print("Cannot add audio clip at position \(startBeat) - overlaps with existing clips")
+            return false
+        }
+        
+        // Create a new audio clip
+        let newClip = AudioClip(
+            name: fileName,
+            startBeat: startBeat,
+            duration: durationInBeats
+        )
+        
+        // Add the clip to the track
+        track.addAudioClip(newClip)
+        
+        // Update the track in the project view model
+        projectViewModel.updateTrack(at: trackIndex, with: track)
+        
+        // Select the new clip
+        if let timelineState = findTimelineState() {
+            timelineState.startSelection(at: startBeat, trackId: trackId)
+            timelineState.updateSelection(to: startBeat + durationInBeats)
+        }
+        
+        // Move playhead to the start of the clip
+        projectViewModel.seekToBeat(startBeat)
+        
+        return true
+    }
     
     /// Create an audio clip from the current selection
     func createAudioClipFromSelection() -> Bool {
@@ -158,7 +221,7 @@ class AudioViewModel: ObservableObject {
         let clipDuration = clipToMove.duration
         let newEndBeat = newStartBeat + clipDuration
         
-        print("Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
+//        print("Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
         
         // Check for overlaps with other clips
         let overlappingClips = track.audioClips.filter { clip in
@@ -193,7 +256,7 @@ class AudioViewModel: ObservableObject {
         // Ensure the playhead is at the start of the moved clip
         projectViewModel.seekToBeat(newStartBeat)
         
-        print("Successfully moved clip to \(newStartBeat)")
+//        print("Successfully moved clip to \(newStartBeat)")
         return true
     }
     
@@ -246,14 +309,14 @@ class AudioViewModel: ObservableObject {
     }
     
     /// Set the timeline state reference
-    func setTimelineState(_ timelineState: TimelineState) {
+    func setTimelineState(_ timelineState: TimelineStateViewModel) {
         self.timelineState = timelineState
     }
     
     // MARK: - Private Helpers
     
     /// Helper method to find the TimelineState if it exists
-    private func findTimelineState() -> TimelineState? {
+    private func findTimelineState() -> TimelineStateViewModel? {
         // Return the explicitly set timelineState if available
         if let timelineState = timelineState {
             return timelineState

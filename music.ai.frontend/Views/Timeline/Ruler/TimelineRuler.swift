@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Ruler component that displays bar and beat markers at the top of the timeline
 struct TimelineRuler: View {
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
     let width: CGFloat
@@ -209,7 +209,7 @@ struct TimelineRuler: View {
 
 #Preview {
     TimelineRuler(
-        state: TimelineState(),
+        state: TimelineStateViewModel(),
         projectViewModel: ProjectViewModel(),
         width: 800,
         height: 40

@@ -4,7 +4,7 @@ import SwiftUI
 /// It replaces the TimelineScrubber and adds selection functionality.
 struct TimelineSelector: View {
     @ObservedObject var projectViewModel: ProjectViewModel
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     let track: Track
     
     // Computed property to access the MIDI view model
@@ -173,7 +173,7 @@ struct TimelineSelector: View {
 #Preview {
     TimelineSelector(
         projectViewModel: ProjectViewModel(),
-        state: TimelineState(),
+        state: TimelineStateViewModel(),
         track: Track.samples[0]
     )
     .frame(width: 800, height: 100)

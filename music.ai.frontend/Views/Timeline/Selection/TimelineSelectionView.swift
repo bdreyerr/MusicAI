@@ -2,7 +2,7 @@ import SwiftUI
 
 /// View that displays the current selection on a track
 struct TimelineSelectionView: View {
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     let track: Track
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
@@ -85,7 +85,7 @@ struct TimelineSelectionView: View {
 #Preview {
     TimelineSelectionView(
         state: {
-            let state = TimelineState()
+            let state = TimelineStateViewModel()
             state.startSelection(at: 4.0, trackId: Track.samples[0].id)
             state.updateSelection(to: 8.0)
             return state

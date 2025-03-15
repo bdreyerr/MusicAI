@@ -7,10 +7,10 @@ class MidiViewModel: ObservableObject {
     private weak var projectViewModel: ProjectViewModel?
     
     // Reference to the timeline state
-    private weak var timelineState: TimelineState?
+    private weak var timelineState: TimelineStateViewModel?
     
     // Initialize with project view model and timeline state
-    init(projectViewModel: ProjectViewModel, timelineState: TimelineState? = nil) {
+    init(projectViewModel: ProjectViewModel, timelineState: TimelineStateViewModel? = nil) {
         self.projectViewModel = projectViewModel
         self.timelineState = timelineState
     }
@@ -158,7 +158,7 @@ class MidiViewModel: ObservableObject {
         let clipDuration = clipToMove.duration
         let newEndBeat = newStartBeat + clipDuration
         
-        print("Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
+//        print("Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
         
         // Check for overlaps with other clips
         let overlappingClips = track.midiClips.filter { clip in
@@ -193,7 +193,7 @@ class MidiViewModel: ObservableObject {
         // Ensure the playhead is at the start of the moved clip
         projectViewModel.seekToBeat(newStartBeat)
         
-        print("Successfully moved clip to \(newStartBeat)")
+//        print("Successfully moved clip to \(newStartBeat)")
         return true
     }
     
@@ -246,14 +246,14 @@ class MidiViewModel: ObservableObject {
     }
     
     /// Set the timeline state reference
-    func setTimelineState(_ timelineState: TimelineState) {
+    func setTimelineState(_ timelineState: TimelineStateViewModel) {
         self.timelineState = timelineState
     }
     
     // MARK: - Private Helpers
     
     /// Helper method to find the TimelineState if it exists
-    private func findTimelineState() -> TimelineState? {
+    private func findTimelineState() -> TimelineStateViewModel? {
         // Return the explicitly set timelineState if available
         if let timelineState = timelineState {
             return timelineState

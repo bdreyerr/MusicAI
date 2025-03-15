@@ -3,7 +3,7 @@ import Combine
 
 /// TimelineState manages the visual representation and zoom behavior of the timeline.
 /// This is separate from ProjectViewModel which manages the actual music project data.
-class TimelineState: ObservableObject {
+class TimelineStateViewModel: ObservableObject {
     @Published var zoomLevel: Double = 0.4 { // Increased default zoom level for better initial view
         didSet {
             // Notify that zoom level has changed

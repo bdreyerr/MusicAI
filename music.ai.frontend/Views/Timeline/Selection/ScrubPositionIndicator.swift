@@ -3,7 +3,7 @@ import SwiftUI
 /// ScrubPositionIndicator displays the current position (bar.beat) when scrubbing
 struct ScrubPositionIndicator: View {
     @ObservedObject var projectViewModel: ProjectViewModel
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     @State private var isVisible: Bool = false
     @State private var lastUpdateTime: Date = Date()
     
@@ -83,6 +83,6 @@ struct ScrubPositionIndicator: View {
 #Preview {
     ScrubPositionIndicator(
         projectViewModel: ProjectViewModel(),
-        state: TimelineState()
+        state: TimelineStateViewModel()
     )
 } 

@@ -3,7 +3,7 @@ import SwiftUI
 /// Playhead indicator that shows the current playback position in the timeline
 struct PlayheadIndicator: View {
     let currentBeat: Double
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     let track: Track? // Optional track - if nil, this is the ruler playhead
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
@@ -42,7 +42,7 @@ struct PlayheadIndicator: View {
 #Preview {
     PlayheadIndicator(
         currentBeat: 4.0, 
-        state: TimelineState(),
+        state: TimelineStateViewModel(),
         track: Track.samples[0],
         projectViewModel: ProjectViewModel()
     )

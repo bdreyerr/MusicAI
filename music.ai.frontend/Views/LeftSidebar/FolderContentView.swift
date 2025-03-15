@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 /// View for displaying the contents of a selected folder
 struct FolderContentView: View {
@@ -179,6 +180,7 @@ struct FolderItemRowView: View {
     var onFolderTap: (() -> Void)? = nil
     
     @State private var isHovering = false
+    @State private var isDragging = false
     
     var body: some View {
         HStack(spacing: 6) {
@@ -205,7 +207,7 @@ struct FolderItemRowView: View {
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
         .background(
-            isHovering ?
+            isHovering || isDragging ?
             (themeManager.currentTheme == .dark ? Color(white: 0.3) : Color(white: 0.9)) :
             themeManager.secondaryBackgroundColor
         )
@@ -217,6 +219,63 @@ struct FolderItemRowView: View {
                 onTap()
             }
             // For regular files, we'll handle playback later
+        }
+        // Make audio files draggable
+        .if(!isFolder) { view in
+            view.onDrag {
+                // Set the dragging state
+                isDragging = true
+                
+                // Debug logs
+                print("🔍 DRAG START: Starting drag for item: \(item.name)")
+                if let path = item.metadata?["path"] {
+                    print("🔍 DRAG PATH: \(path)")
+                }
+                
+                // Create the drag data
+                let dragData = AudioFileDragData(item: item)
+                
+                // Create an NSItemProvider with the audio file data
+                let provider = NSItemProvider(object: dragData)
+                
+                // Register the provider for additional UTIs to ensure compatibility
+                for typeIdentifier in ["public.data", "public.content", "public.item"] {
+                    provider.registerDataRepresentation(forTypeIdentifier: typeIdentifier,
+                                                      visibility: .all) { completion in
+                        do {
+                            let data = try JSONEncoder().encode(dragData)
+                            print("🔍 REGISTERED \(typeIdentifier) representation with size: \(data.count) bytes")
+                            completion(data, nil)
+                            return nil
+                        } catch {
+                            print("🔍 ERROR registering \(typeIdentifier): \(error)")
+                            completion(nil, error)
+                            return nil
+                        }
+                    }
+                }
+                
+                // If we have a file path, also register it as a file URL
+                if let filePath = item.metadata?["path"] {
+                    let fileURL = URL(fileURLWithPath: filePath)
+                    provider.registerFileRepresentation(forTypeIdentifier: "public.file-url",
+                                                      fileOptions: [],
+                                                      visibility: .all) { progressHandler in
+                        print("🔍 REGISTERED file URL representation for: \(fileURL.path)")
+                        progressHandler(fileURL, true, nil)
+                        return Progress.discreteProgress(totalUnitCount: 1)
+                    }
+                }
+                
+                print("🔍 DRAG PROVIDER: Created provider with type identifiers: \(provider.registeredTypeIdentifiers)")
+                
+                // Reset dragging state after a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isDragging = false
+                }
+                
+                return provider
+            }
         }
     }
 } 

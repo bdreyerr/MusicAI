@@ -4,7 +4,7 @@ import SwiftUI
 /// for scrubbing through the timeline. It converts x-position clicks to beat positions.
 struct TimelineScrubber: View {
     @ObservedObject var projectViewModel: ProjectViewModel
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     let track: Track? // Optional track - if nil, this is a global scrubber
     
     // State to track the last scrubbed position to avoid unnecessary updates
@@ -75,7 +75,7 @@ struct TimelineScrubber: View {
 #Preview {
     TimelineScrubber(
         projectViewModel: ProjectViewModel(),
-        state: TimelineState(),
+        state: TimelineStateViewModel(),
         track: Track.samples[0]
     )
     .frame(width: 800, height: 100)

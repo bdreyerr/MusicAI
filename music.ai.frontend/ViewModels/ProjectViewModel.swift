@@ -11,7 +11,7 @@ class ProjectViewModel: ObservableObject {
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
     
     // Reference to the timeline state
-    var timelineState: TimelineState? = nil
+    var timelineState: TimelineStateViewModel? = nil
     
     // MIDI view model for handling MIDI-related operations
     lazy var midiViewModel: MidiViewModel = {
@@ -182,7 +182,7 @@ class ProjectViewModel: ObservableObject {
     }
     
     // Helper method to find the TimelineState if it exists
-    private func findTimelineState() -> TimelineState? {
+    private func findTimelineState() -> TimelineStateViewModel? {
         // Simply return the timelineState property
         // This is now properly set in TimelineView's onAppear
         return timelineState

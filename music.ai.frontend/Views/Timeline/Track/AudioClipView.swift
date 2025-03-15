@@ -5,7 +5,7 @@ import AppKit
 struct AudioClipView: View {
     let clip: AudioClip
     let track: Track
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
     
@@ -39,7 +39,7 @@ struct AudioClipView: View {
     }
     
     // Initialize with additional setup for waveform data
-    init(clip: AudioClip, track: Track, state: TimelineState, projectViewModel: ProjectViewModel) {
+    init(clip: AudioClip, track: Track, state: TimelineStateViewModel, projectViewModel: ProjectViewModel) {
         self.clip = clip
         self.track = track
         self.state = state
@@ -152,11 +152,11 @@ struct AudioClipView: View {
                     // Change cursor based on whether the clip is selected
                     if isSelected {
                         NSCursor.openHand.set()
-                        print("Hovering over selected clip: \(clip.name) - showing open hand cursor")
+//                        print("Hovering over selected clip: \(clip.name) - showing open hand cursor")
                     } else {
                         NSCursor.pointingHand.set()
                     }
-                    print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
+//                    print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
                 } else if !isDragging {
                     NSCursor.arrow.set()
                 }
@@ -176,7 +176,7 @@ struct AudioClipView: View {
                             dragStartLocation = value.startLocation
                             isDragging = true
                             NSCursor.closedHand.set()
-                            print("Started dragging clip: \(clip.name) from position \(dragStartBeat), startLocation: \(dragStartLocation)")
+//                            print("Started dragging clip: \(clip.name) from position \(dragStartBeat), startLocation: \(dragStartLocation)")
                         }
                         
                         // Calculate the drag distance in beats directly from the translation
@@ -197,13 +197,13 @@ struct AudioClipView: View {
                         state.updateSelection(to: finalPosition + clip.duration)
                         
                         // Debug info
-                        print("Dragging clip: \(clip.name), preview position: \(finalPosition), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats)")
+//                        print("Dragging clip: \(clip.name), preview position: \(finalPosition), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats)")
                     }
                     .onEnded { value in
                         // Only process if we were actually dragging
                         guard isDragging else { return }
                         
-                        print("Drag ended with translation: \(value.translation)")
+//                        print("Drag ended with translation: \(value.translation)")
                         
                         // Calculate the final drag distance directly from the translation
                         let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
@@ -217,7 +217,7 @@ struct AudioClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
-                        print("Final calculation: startBeat: \(dragStartBeat), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats), finalPosition: \(finalPosition)")
+//                        print("Final calculation: startBeat: \(dragStartBeat), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats), finalPosition: \(finalPosition)")
                         
                         // Only move if the position actually changed
                         if abs(finalPosition - clip.startBeat) > 0.001 {
@@ -229,7 +229,7 @@ struct AudioClipView: View {
                             )
                             
                             if success {
-                                print("Moved clip: \(clip.name) to position \(finalPosition)")
+//                                print("Moved clip: \(clip.name) to position \(finalPosition)")
                                 
                                 // Update the selection to match the new clip position
                                 state.startSelection(at: finalPosition, trackId: track.id)
@@ -256,7 +256,7 @@ struct AudioClipView: View {
                             // If still hovering over the clip after drag, show open hand if selected
                             if isSelected {
                                 NSCursor.openHand.set()
-                                print("Drag ended, still hovering over selected clip - showing open hand cursor")
+//                                print("Drag ended, still hovering over selected clip - showing open hand cursor")
                             } else {
                                 NSCursor.pointingHand.set()
                             }
@@ -326,7 +326,7 @@ struct AudioClipView: View {
         projectViewModel.seekToBeat(clip.startBeat)
         
         // Print debug info
-        print("Clip selected: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
+//        print("Clip selected: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
     }
     
     // Rename the clip
@@ -370,7 +370,7 @@ struct AudioClipView: View {
     AudioClipView(
         clip: AudioClip(name: "Test Audio", startBeat: 4, duration: 4),
         track: Track.samples.first(where: { $0.type == .audio })!,
-        state: TimelineState(),
+        state: TimelineStateViewModel(),
         projectViewModel: ProjectViewModel()
     )
     .environmentObject(ThemeManager())

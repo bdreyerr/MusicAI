@@ -2,7 +2,7 @@ import SwiftUI
 
 /// View that displays the current selection on the ruler
 struct TimelineRulerSelectionIndicator: View {
-    @ObservedObject var state: TimelineState
+    @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
     let height: CGFloat
@@ -56,7 +56,7 @@ struct TimelineRulerSelectionIndicator: View {
 #Preview {
     TimelineRulerSelectionIndicator(
         state: {
-            let state = TimelineState()
+            let state = TimelineStateViewModel()
             state.startSelection(at: 4.0, trackId: UUID())
             state.updateSelection(to: 8.0)
             return state

@@ -44,7 +44,7 @@ class ScrollSyncCoordinator: ObservableObject {
 
 /// Main timeline view for the DAW application
 struct TimelineView: View {
-    @StateObject private var timelineState = TimelineState()
+    @StateObject private var timelineState = TimelineStateViewModel()
     @State private var startDragY: CGFloat = 0
     @State private var isDragging: Bool = false
     @StateObject private var menuCoordinator = MenuCoordinator()
