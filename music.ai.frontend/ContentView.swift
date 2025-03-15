@@ -9,9 +9,9 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var projectViewModel = ProjectViewModel()
+    @StateObject private var aiChatViewModel = AIChatViewModel()
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var sidebarViewModel: SidebarViewModel
-    @EnvironmentObject var aiChatViewModel: AIChatViewModel
     @State private var showThemeSettings = false
     
     var body: some View {
@@ -34,8 +34,13 @@ struct ContentView: View {
 //                    .environmentObject(themeManager)
                 
                 // Right sidebar for AI chat
-                RightSidebarView()
+                RightSidebarView(projectViewModel: projectViewModel)
                     .environmentObject(themeManager)
+                    .environmentObject(aiChatViewModel)
+            }
+            .onAppear {
+                // Connect the AIChatViewModel to the ProjectViewModel
+                aiChatViewModel.setProjectViewModel(projectViewModel)
             }
             
             // Bottom section for effects and instruments
@@ -50,8 +55,11 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
+    let projectViewModel = ProjectViewModel()
+    let aiChatViewModel = AIChatViewModel(projectViewModel: projectViewModel)
+    
+    return ContentView()
         .environmentObject(ThemeManager())
         .environmentObject(SidebarViewModel())
-        .environmentObject(AIChatViewModel())
+        .environmentObject(aiChatViewModel)
 }
