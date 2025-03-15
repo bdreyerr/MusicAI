@@ -13,6 +13,11 @@ struct TrackView: View {
         return projectViewModel.midiViewModel
     }
     
+    // Computed property to access the Audio view model
+    private var audioViewModel: AudioViewModel {
+        return projectViewModel.audioViewModel
+    }
+    
     // State to track local changes before updating the model
     @State private var isMuted: Bool
     @State private var isSolo: Bool
@@ -101,7 +106,7 @@ struct TrackView: View {
             .zIndex(2) // Selection above grid but below clips
             .allowsHitTesting(false) // Don't block clicks
             
-            // Display placeholder text or MIDI clips based on track type
+            // Display placeholder text or clips based on track type
             if track.type == .midi {
                 // Show placeholder text if no clips
                 if track.midiClips.isEmpty {
@@ -124,9 +129,31 @@ struct TrackView: View {
                     .environmentObject(themeManager)
                     .zIndex(20) // Increase z-index to ensure clips are above all other elements
                 }
+            } else if track.type == .audio {
+                // Show placeholder text if no clips
+                if track.audioClips.isEmpty {
+                    Text("Right-click to create audio clip")
+                        .font(.caption)
+                        .foregroundColor(themeManager.secondaryTextColor)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .zIndex(3) // Above selection but below clips
+                        .allowsHitTesting(false) // Don't block clicks
+                }
+                
+                // Display audio clips if this is an audio track
+                ForEach(track.audioClips) { clip in
+                    AudioClipView(
+                        clip: clip,
+                        track: track,
+                        state: state,
+                        projectViewModel: projectViewModel
+                    )
+                    .environmentObject(themeManager)
+                    .zIndex(20) // Increase z-index to ensure clips are above all other elements
+                }
             } else {
-                // Placeholder for audio tracks
-                Text("Drop audio clips here")
+                // Placeholder for other track types
+                Text("This track type doesn't support clips")
                     .font(.caption)
                     .foregroundColor(themeManager.secondaryTextColor)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -140,7 +167,7 @@ struct TrackView: View {
                 state: state,
                 track: track
             )
-            .zIndex(5) // Lower z-index than MIDI clips (20) but higher than other elements
+            .zIndex(5) // Lower z-index than clips (20) but higher than other elements
             .allowsHitTesting(true) // Ensure the selector can receive clicks
         }
         .frame(width: width, height: track.height) // Use track's height property
@@ -168,6 +195,15 @@ struct TrackView: View {
             if track.type == .midi && state.hasSelection(trackId: track.id) {
                 Button("Create MIDI Clip") {
                     midiViewModel.createMidiClipFromSelection()
+                }
+                
+                Divider()
+            }
+            
+            // Create audio clip option (only for audio tracks and when there's a selection)
+            if track.type == .audio && state.hasSelection(trackId: track.id) {
+                Button("Create Audio Clip") {
+                    audioViewModel.createAudioClipFromSelection()
                 }
                 
                 Divider()

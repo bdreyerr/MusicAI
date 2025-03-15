@@ -345,7 +345,7 @@ struct TimelineView: View {
     func showTimelineContextMenu(at location: CGPoint) {
         let menu = NSMenu(title: "Timeline")
         
-        // Check if there's an active selection on a MIDI track
+        // Check if there's an active selection on a track
         if timelineState.selectionActive,
            let trackId = timelineState.selectionTrackId,
            let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
@@ -353,26 +353,17 @@ struct TimelineView: View {
             // Get the track (non-optional since we have a valid index)
             let track = projectViewModel.tracks[trackIndex]
             
-            // Only proceed if this is a MIDI track
+            // Handle MIDI tracks
             if track.type == .midi {
                 // Get the selection range
                 let (selStart, selEnd) = timelineState.normalizedSelectionRange
-                
-                // Debug info
-//                print("Selection: \(selStart) to \(selEnd)")
-//                if !track.midiClips.isEmpty {
-//                    print("Available clips:")
-//                    for clip in track.midiClips {
-//                        print("  - \(clip.name): \(clip.startBeat) to \(clip.endBeat)")
-//                    }
-//                }
                 
                 // Check if the selection matches a MIDI clip exactly using the MidiViewModel
                 let isClipSelected = projectViewModel.midiViewModel.isMidiClipSelected(trackId: trackId)
                 
                 if isClipSelected {
                     // This is a selected MIDI clip - show clip-specific options
-                    print("Found selected clip")
+                    print("Found selected MIDI clip")
                     
                     menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "")
                         .target = menuCoordinator
@@ -384,9 +375,39 @@ struct TimelineView: View {
                         .target = menuCoordinator
                 } else {
                     // This is a regular selection - show option to create a new clip
-                    print("No clip found at selection")
+                    print("No MIDI clip found at selection")
                     
                     menu.addItem(withTitle: "Create MIDI Clip", action: #selector(MenuCoordinator.createMidiClip), keyEquivalent: "")
+                        .target = menuCoordinator
+                }
+                
+                menu.addItem(NSMenuItem.separator())
+            }
+            // Handle Audio tracks
+            else if track.type == .audio {
+                // Get the selection range
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Check if the selection matches an audio clip exactly using the AudioViewModel
+                let isClipSelected = projectViewModel.audioViewModel.isAudioClipSelected(trackId: trackId)
+                
+                if isClipSelected {
+                    // This is a selected audio clip - show clip-specific options
+                    print("Found selected audio clip")
+                    
+                    menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "")
+                        .target = menuCoordinator
+                    
+                    menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "")
+                        .target = menuCoordinator
+                    
+                    menu.addItem(withTitle: "Edit Audio", action: #selector(MenuCoordinator.editAudioClip), keyEquivalent: "")
+                        .target = menuCoordinator
+                } else {
+                    // This is a regular selection - show option to create a new clip
+                    print("No audio clip found at selection")
+                    
+                    menu.addItem(withTitle: "Create Audio Clip", action: #selector(MenuCoordinator.createAudioClip), keyEquivalent: "")
                         .target = menuCoordinator
                 }
                 

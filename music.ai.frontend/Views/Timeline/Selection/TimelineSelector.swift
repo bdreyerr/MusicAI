@@ -12,6 +12,11 @@ struct TimelineSelector: View {
         return projectViewModel.midiViewModel
     }
     
+    // Computed property to access the Audio view model
+    private var audioViewModel: AudioViewModel {
+        return projectViewModel.audioViewModel
+    }
+    
     // State for tracking the drag operation
     @State private var isDragging: Bool = false
     
@@ -29,10 +34,11 @@ struct TimelineSelector: View {
                         // Ensure we have a valid position (not negative)
                         guard rawBeatPosition >= 0 else { return }
                         
-                        // Check if we're clicking on a MIDI clip
+                        // Check if we're clicking on a clip
                         // If so, the clip itself will handle the selection
-                        if track.type == .midi && isPositionOnMidiClip(rawBeatPosition) {
-                            print("Drag started on MIDI clip at \(rawBeatPosition), ignoring in TimelineSelector")
+                        if (track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
+                           (track.type == .audio && isPositionOnAudioClip(rawBeatPosition)) {
+                            print("Drag started on clip at \(rawBeatPosition), ignoring in TimelineSelector")
                             return
                         }
                         
@@ -46,10 +52,10 @@ struct TimelineSelector: View {
                             // Select the track
                             projectViewModel.selectTrack(id: track.id)
                             
-                            // Check if we need to deselect a MIDI clip first
-                            if state.selectionActive && isMidiClipSelected() {
+                            // Check if we need to deselect a clip first
+                            if state.selectionActive && isClipSelected() {
                                 state.clearSelection()
-                                print("Clearing MIDI clip selection before starting new selection")
+                                print("Clearing clip selection before starting new selection")
                             }
                             
                             // Start a new selection
@@ -87,10 +93,11 @@ struct TimelineSelector: View {
                 // Ensure we have a valid position (not negative)
                 guard rawBeatPosition >= 0 else { return }
                 
-                // Check if we're clicking on a MIDI clip
+                // Check if we're clicking on a clip
                 // If so, the clip itself will handle the selection
-                if track.type == .midi && isPositionOnMidiClip(rawBeatPosition) {
-                    print("Tap detected on MIDI clip at \(rawBeatPosition), ignoring in TimelineSelector")
+                if (track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
+                   (track.type == .audio && isPositionOnAudioClip(rawBeatPosition)) {
+                    print("Tap detected on clip at \(rawBeatPosition), ignoring in TimelineSelector")
                     return
                 }
                 
@@ -100,10 +107,10 @@ struct TimelineSelector: View {
                 // Select the track
                 projectViewModel.selectTrack(id: track.id)
                 
-                // Check if we need to deselect a MIDI clip
-                if state.selectionActive && isMidiClipSelected() {
+                // Check if we need to deselect a clip
+                if state.selectionActive && isClipSelected() {
                     state.clearSelection()
-                    print("Clearing MIDI clip selection on tap")
+                    print("Clearing clip selection on tap")
                 }
                 
                 // Move the playhead to the clicked position
@@ -114,14 +121,24 @@ struct TimelineSelector: View {
             .allowsHitTesting(true) // Ensure the selector can receive clicks
     }
     
-    /// Checks if a MIDI clip is currently selected on this track
-    private func isMidiClipSelected() -> Bool {
-        return midiViewModel.isMidiClipSelected(trackId: track.id)
+    /// Checks if a clip is currently selected on this track
+    private func isClipSelected() -> Bool {
+        if track.type == .midi {
+            return midiViewModel.isMidiClipSelected(trackId: track.id)
+        } else if track.type == .audio {
+            return audioViewModel.isAudioClipSelected(trackId: track.id)
+        }
+        return false
     }
     
     /// Checks if a beat position is on a MIDI clip
     private func isPositionOnMidiClip(_ beatPosition: Double) -> Bool {
         return midiViewModel.isPositionOnMidiClip(trackId: track.id, beatPosition: beatPosition)
+    }
+    
+    /// Checks if a beat position is on an audio clip
+    private func isPositionOnAudioClip(_ beatPosition: Double) -> Bool {
+        return audioViewModel.isPositionOnAudioClip(trackId: track.id, beatPosition: beatPosition)
     }
     
     /// Snaps a raw beat position to the nearest visible grid marker based on the current zoom level

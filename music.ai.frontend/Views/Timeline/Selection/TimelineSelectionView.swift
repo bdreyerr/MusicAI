@@ -28,14 +28,23 @@ struct TimelineSelectionView: View {
         return endX - startX
     }
     
-    // Check if this selection is likely a preview for a MIDI clip drag
-    private var isMidiClipDragPreview: Bool {
-        guard hasSelection && track.type == .midi else { return false }
+    // Check if this selection is likely a preview for a clip drag
+    private var isClipDragPreview: Bool {
+        guard hasSelection else { return false }
         
-        // Check if the selection matches the size of any MIDI clip
-        return track.midiClips.contains { clip in
-            abs((selectionRange.end - selectionRange.start) - clip.duration) < 0.001
+        if track.type == .midi {
+            // Check if the selection matches the size of any MIDI clip
+            return track.midiClips.contains { clip in
+                abs((selectionRange.end - selectionRange.start) - clip.duration) < 0.001
+            }
+        } else if track.type == .audio {
+            // Check if the selection matches the size of any audio clip
+            return track.audioClips.contains { clip in
+                abs((selectionRange.end - selectionRange.start) - clip.duration) < 0.001
+            }
         }
+        
+        return false
     }
     
     var body: some View {
@@ -43,11 +52,11 @@ struct TimelineSelectionView: View {
             ZStack {
                 // Selection rectangle
                 Rectangle()
-                    .fill(track.effectiveColor.opacity(isMidiClipDragPreview ? 0.2 : 0.3))
+                    .fill(track.effectiveColor.opacity(isClipDragPreview ? 0.2 : 0.3))
                     .frame(width: max(1, width), height: track.height)
                 
-                // Add a dashed border if this is likely a MIDI clip drag preview
-                if isMidiClipDragPreview {
+                // Add a dashed border if this is likely a clip drag preview
+                if isClipDragPreview {
                     Rectangle()
                         .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
                         .foregroundColor(track.effectiveColor.opacity(0.8))

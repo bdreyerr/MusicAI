@@ -11,6 +11,7 @@ struct ContentView: View {
     @StateObject private var projectViewModel = ProjectViewModel()
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var sidebarViewModel: SidebarViewModel
+    @EnvironmentObject var aiChatViewModel: AIChatViewModel
     @State private var showThemeSettings = false
     
     var body: some View {
@@ -31,6 +32,10 @@ struct ContentView: View {
                     .environmentObject(themeManager)
 //                CoordinatedScrollView(projectViewModel: projectViewModel)
 //                    .environmentObject(themeManager)
+                
+                // Right sidebar for AI chat
+                RightSidebarView()
+                    .environmentObject(themeManager)
             }
             
             // Bottom section for effects and instruments
@@ -48,4 +53,5 @@ struct ContentView: View {
     ContentView()
         .environmentObject(ThemeManager())
         .environmentObject(SidebarViewModel())
+        .environmentObject(AIChatViewModel())
 }

@@ -56,6 +56,7 @@ struct Track: Identifiable {
     var effects: [Effect] = [] // List of effects applied to this track
     var instrument: Effect? = nil // Optional instrument for MIDI tracks
     var midiClips: [MidiClip] = [] // MIDI clips on this track
+    var audioClips: [AudioClip] = [] // Audio clips on this track
     
     // Get the effective color for the track (custom color or default type color)
     var effectiveColor: Color {
@@ -118,6 +119,39 @@ struct Track: Identifiable {
         
         // Check for overlaps with existing clips
         for clip in midiClips {
+            // If the new clip overlaps with an existing clip, return false
+            if (startBeat < clip.endBeat && endBeat > clip.startBeat) {
+                return false
+            }
+        }
+        
+        return true
+    }
+    
+    // Add an audio clip to the track (only applicable for audio tracks)
+    mutating func addAudioClip(_ clip: AudioClip) -> Bool {
+        // Only add the clip if this is an audio track
+        if type == .audio {
+            audioClips.append(clip)
+            return true
+        }
+        return false
+    }
+    
+    // Remove an audio clip from the track
+    mutating func removeAudioClip(id: UUID) {
+        audioClips.removeAll { $0.id == id }
+    }
+    
+    // Check if an audio clip can be added at the specified position
+    func canAddAudioClip(startBeat: Double, duration: Double) -> Bool {
+        // Only audio tracks can have audio clips
+        guard type == .audio else { return false }
+        
+        let endBeat = startBeat + duration
+        
+        // Check for overlaps with existing clips
+        for clip in audioClips {
             // If the new clip overlaps with an existing clip, return false
             if (startBeat < clip.endBeat && endBeat > clip.startBeat) {
                 return false

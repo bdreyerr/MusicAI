@@ -19,6 +19,12 @@ class ProjectViewModel: ObservableObject {
         return viewModel
     }()
     
+    // Audio view model for handling audio-related operations
+    lazy var audioViewModel: AudioViewModel = {
+        let viewModel = AudioViewModel(projectViewModel: self, timelineState: timelineState)
+        return viewModel
+    }()
+    
     // Effects view model for handling effects-related operations
     lazy var effectsViewModel: EffectsViewModel = {
         let viewModel = EffectsViewModel(projectViewModel: self)

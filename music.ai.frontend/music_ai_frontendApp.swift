@@ -14,12 +14,15 @@ struct music_ai_frontendApp: App {
     @StateObject private var themeManager = ThemeManager()
     // Create a shared SidebarViewModel instance
     @StateObject private var sidebarViewModel = SidebarViewModel()
+    // Create a shared AIChatViewModel instance
+    @StateObject private var aiChatViewModel = AIChatViewModel()
     
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(themeManager)
                 .environmentObject(sidebarViewModel)
+                .environmentObject(aiChatViewModel)
                 .onAppear {
                     // Apply theme to window
                     setupAppearance()
