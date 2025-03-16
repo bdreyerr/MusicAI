@@ -38,16 +38,18 @@ struct TimelineSelector: View {
                         // If so, the clip itself will handle the selection
                         if (track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
                            (track.type == .audio && isPositionOnAudioClip(rawBeatPosition)) {
-                            print("Drag started on clip at \(rawBeatPosition), ignoring in TimelineSelector")
+                            print("⚠️ TIMELINE SELECTOR: Drag started on clip at \(rawBeatPosition), ignoring in TimelineSelector")
                             return
                         }
+                        
+                        print("✅ TIMELINE SELECTOR: Drag detected at \(rawBeatPosition), not on a clip")
                         
                         // Snap to the nearest grid marker based on zoom level
                         let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
                         
                         // If this is the start of a drag, begin a new selection
                         if !isDragging {
-                            print("Starting new selection at \(snappedBeatPosition) on track \(track.id)")
+                            print("✅ TIMELINE SELECTOR: Starting new selection at \(snappedBeatPosition) on track \(track.id)")
                             
                             // Select the track
                             projectViewModel.selectTrack(id: track.id)
@@ -55,7 +57,7 @@ struct TimelineSelector: View {
                             // Check if we need to deselect a clip first
                             if state.selectionActive && isClipSelected() {
                                 state.clearSelection()
-                                print("Clearing clip selection before starting new selection")
+                                print("✅ TIMELINE SELECTOR: Clearing clip selection before starting new selection")
                             }
                             
                             // Start a new selection

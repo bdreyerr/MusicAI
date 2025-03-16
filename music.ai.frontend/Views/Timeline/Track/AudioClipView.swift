@@ -27,15 +27,15 @@ struct AudioClipView: View {
     
     // Computed property to check if this clip is selected
     private var isSelected: Bool {
-        guard state.selectionActive, 
-              state.selectionTrackId == track.id else { 
-            return false 
+        guard state.selectionActive,
+                state.selectionTrackId == track.id else {
+            return false
         }
         
         // Check if the selection range matches this clip's range
         let (selStart, selEnd) = state.normalizedSelectionRange
-        return abs(selStart - clip.startBeat) < 0.001 && 
-               abs(selEnd - clip.endBeat) < 0.001
+        return abs(selStart - clip.startBeat) < 0.001 &&
+        abs(selEnd - clip.endBeat) < 0.001
     }
     
     // Initialize with additional setup for waveform data
@@ -152,21 +152,24 @@ struct AudioClipView: View {
                     // Change cursor based on whether the clip is selected
                     if isSelected {
                         NSCursor.openHand.set()
-//                        print("Hovering over selected clip: \(clip.name) - showing open hand cursor")
+                        //                        print("Hovering over selected clip: \(clip.name) - showing open hand cursor")
                     } else {
                         NSCursor.pointingHand.set()
                     }
-//                    print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
+                    //                    print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
                 } else if !isDragging {
                     NSCursor.arrow.set()
                 }
             }
             // Add drag gesture for moving the clip - only works when the clip is selected
-            .gesture(
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 5) // Require a minimum drag distance to start
                     .onChanged { value in
+                        print("🔍 HIGH PRIORITY DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
+                        
                         // If the clip isn't selected yet, select it first
                         if !isSelected {
+                            print("🔍 HIGH PRIORITY DRAG: Clip not selected, selecting now")
                             selectThisClip()
                         }
                         
@@ -176,7 +179,7 @@ struct AudioClipView: View {
                             dragStartLocation = value.startLocation
                             isDragging = true
                             NSCursor.closedHand.set()
-//                            print("Started dragging clip: \(clip.name) from position \(dragStartBeat), startLocation: \(dragStartLocation)")
+                            print("🔍 HIGH PRIORITY DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat) - Start location: \(dragStartLocation)")
                         }
                         
                         // Calculate the drag distance in beats directly from the translation
@@ -191,19 +194,23 @@ struct AudioClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
+                        print("🔄 HIGH PRIORITY DRAG UPDATE: Clip \(clip.name) - Current position: \(clip.startBeat) - Preview position: \(finalPosition) - Translation: \(value.translation) - Distance in beats: \(dragDistanceInBeats)")
+                        
                         // Update the selection to preview the new position
                         // This will show where the clip will end up without moving it
                         state.startSelection(at: finalPosition, trackId: track.id)
                         state.updateSelection(to: finalPosition + clip.duration)
-                        
-                        // Debug info
-//                        print("Dragging clip: \(clip.name), preview position: \(finalPosition), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats)")
                     }
                     .onEnded { value in
-                        // Only process if we were actually dragging
-                        guard isDragging else { return }
+                        print("✅ HIGH PRIORITY DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
-//                        print("Drag ended with translation: \(value.translation)")
+                        // Only process if we were actually dragging
+                        guard isDragging else {
+                            print("❌ HIGH PRIORITY DRAG END: Not dragging, ignoring")
+                            return
+                        }
+                        
+                        print("✅ HIGH PRIORITY DRAG ENDED: Clip \(clip.name) - Translation: \(value.translation)")
                         
                         // Calculate the final drag distance directly from the translation
                         let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
@@ -217,11 +224,14 @@ struct AudioClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
-//                        print("Final calculation: startBeat: \(dragStartBeat), translation: \(value.translation), dragDistanceInBeats: \(dragDistanceInBeats), finalPosition: \(finalPosition)")
+                        print("📊 HIGH PRIORITY DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition) - Distance in beats: \(dragDistanceInBeats)")
                         
                         // Only move if the position actually changed
                         if abs(finalPosition - clip.startBeat) > 0.001 {
+                            print("🔄 MOVING CLIP: Clip \(clip.name) from \(clip.startBeat) to \(finalPosition)")
+                            
                             // Move the clip to the new position using the Audio view model
+                            print("📞 CALLING AUDIO VIEW MODEL: moveAudioClip(trackId: \(track.id), clipId: \(clip.id), newStartBeat: \(finalPosition))")
                             let success = audioViewModel.moveAudioClip(
                                 trackId: track.id,
                                 clipId: clip.id,
@@ -229,19 +239,21 @@ struct AudioClipView: View {
                             )
                             
                             if success {
-//                                print("Moved clip: \(clip.name) to position \(finalPosition)")
+                                print("✅ MOVE SUCCESS: Clip \(clip.name) moved to \(finalPosition)")
                                 
                                 // Update the selection to match the new clip position
                                 state.startSelection(at: finalPosition, trackId: track.id)
                                 state.updateSelection(to: finalPosition + clip.duration)
                             } else {
-                                print("Failed to move clip: \(clip.name)")
+                                print("❌ MOVE FAILED: Could not move clip \(clip.name) to \(finalPosition)")
                                 
                                 // Reset the selection to the original clip position
                                 state.startSelection(at: clip.startBeat, trackId: track.id)
                                 state.updateSelection(to: clip.endBeat)
                             }
                         } else {
+                            print("ℹ️ NO MOVE NEEDED: Clip \(clip.name) position unchanged")
+                            
                             // If position didn't change, reset selection to current clip position
                             state.startSelection(at: clip.startBeat, trackId: track.id)
                             state.updateSelection(to: clip.endBeat)
@@ -256,7 +268,7 @@ struct AudioClipView: View {
                             // If still hovering over the clip after drag, show open hand if selected
                             if isSelected {
                                 NSCursor.openHand.set()
-//                                print("Drag ended, still hovering over selected clip - showing open hand cursor")
+                                print("Drag ended, still hovering over selected clip - showing open hand cursor")
                             } else {
                                 NSCursor.pointingHand.set()
                             }
@@ -264,7 +276,7 @@ struct AudioClipView: View {
                             NSCursor.arrow.set()
                         }
                     }
-            )
+                , isEnabled: true)
             // Add right-click gesture
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -295,7 +307,7 @@ struct AudioClipView: View {
             }
         }
         .position(x: startX + width/2, y: (track.height - 4)/2)
-        .zIndex(20) // Ensure clips are above other elements for better interaction
+        .zIndex(40) // Ensure clips are above other elements for better interaction
         .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.7, blendDuration: 0.1), value: clip.startBeat) // Animate when the actual clip position changes
         .alert("Rename Clip", isPresented: $showRenameDialog) {
             TextField("Clip Name", text: $newClipName)
@@ -326,7 +338,7 @@ struct AudioClipView: View {
         projectViewModel.seekToBeat(clip.startBeat)
         
         // Print debug info
-//        print("Clip selected: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
+        //        print("Clip selected: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
     }
     
     // Rename the clip
@@ -375,4 +387,4 @@ struct AudioClipView: View {
     )
     .environmentObject(ThemeManager())
     .frame(width: 400, height: 70)
-} 
+}

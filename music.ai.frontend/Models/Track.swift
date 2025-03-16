@@ -99,15 +99,27 @@ struct Track: Identifiable {
     mutating func addMidiClip(_ clip: MidiClip) -> Bool {
         // Only add the clip if this is a MIDI track
         if type == .midi {
+            print("🎹 TRACK MODEL: Adding MIDI clip \(clip.name) (id: \(clip.id)) at position \(clip.startBeat)")
             midiClips.append(clip)
+            print("🎹 TRACK MODEL: MIDI clip added successfully. Total clips: \(midiClips.count)")
             return true
         }
+        print("❌ TRACK MODEL: Failed to add MIDI clip - track type is not MIDI")
         return false
     }
     
     // Remove a MIDI clip from the track
     mutating func removeMidiClip(id: UUID) {
+        print("🎹 TRACK MODEL: Removing MIDI clip with id: \(id)")
+        let countBefore = midiClips.count
         midiClips.removeAll { $0.id == id }
+        let countAfter = midiClips.count
+        
+        if countBefore != countAfter {
+            print("🎹 TRACK MODEL: MIDI clip removed successfully. Remaining clips: \(countAfter)")
+        } else {
+            print("❌ TRACK MODEL: Failed to remove MIDI clip - clip not found")
+        }
     }
     
     // Check if a MIDI clip can be added at the specified position
@@ -132,15 +144,27 @@ struct Track: Identifiable {
     mutating func addAudioClip(_ clip: AudioClip) -> Bool {
         // Only add the clip if this is an audio track
         if type == .audio {
+            print("🔊 TRACK MODEL: Adding audio clip \(clip.name) (id: \(clip.id)) at position \(clip.startBeat)")
             audioClips.append(clip)
+            print("🔊 TRACK MODEL: Audio clip added successfully. Total clips: \(audioClips.count)")
             return true
         }
+        print("❌ TRACK MODEL: Failed to add audio clip - track type is not audio")
         return false
     }
     
     // Remove an audio clip from the track
     mutating func removeAudioClip(id: UUID) {
+        print("🔊 TRACK MODEL: Removing audio clip with id: \(id)")
+        let countBefore = audioClips.count
         audioClips.removeAll { $0.id == id }
+        let countAfter = audioClips.count
+        
+        if countBefore != countAfter {
+            print("🔊 TRACK MODEL: Audio clip removed successfully. Remaining clips: \(countAfter)")
+        } else {
+            print("❌ TRACK MODEL: Failed to remove audio clip - clip not found")
+        }
     }
     
     // Check if an audio clip can be added at the specified position

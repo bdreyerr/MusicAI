@@ -55,15 +55,14 @@ struct TrackView: View {
             )
             .zIndex(1) // Grid lines above background
             
-            // Add the selection visualization
+            // Add the selection view
             TimelineSelectionView(
                 state: state,
                 track: track,
                 projectViewModel: projectViewModel
             )
             .environmentObject(themeManager)
-            .zIndex(2) // Selection above grid but below clips
-            .allowsHitTesting(false) // Don't block clicks
+            .zIndex(5) // Selection above grid but below clips
             
             // Display clips based on track type
             TrackContentView(
@@ -72,15 +71,15 @@ struct TrackView: View {
                 projectViewModel: projectViewModel
             )
             .environmentObject(themeManager)
-            .zIndex(3)
+            .zIndex(30) // Clips should have the highest z-index
             
-            // Add the selector overlay for click/drag interactions
+            // Add the timeline selector for handling clicks and drags
             TimelineSelector(
                 projectViewModel: projectViewModel,
                 state: state,
                 track: track
             )
-            .zIndex(5) // Lower z-index than clips (20) but higher than other elements
+            .zIndex(3) // Lower z-index than clips (30) but higher than other elements
             .allowsHitTesting(true) // Ensure the selector can receive clicks
             
             // Drop target indicator (only shown when dragging over an audio track)
@@ -491,7 +490,7 @@ struct TrackContentView: View {
                     projectViewModel: projectViewModel
                 )
                 .environmentObject(themeManager)
-                .zIndex(20) // Increase z-index to ensure clips are above all other elements
+                .zIndex(40) // Increase z-index to ensure clips are above all other elements
             }
         }
     }
@@ -517,7 +516,7 @@ struct TrackContentView: View {
                     projectViewModel: projectViewModel
                 )
                 .environmentObject(themeManager)
-                .zIndex(20) // Increase z-index to ensure clips are above all other elements
+                .zIndex(40) // Increase z-index to ensure clips are above all other elements
             }
         }
     }

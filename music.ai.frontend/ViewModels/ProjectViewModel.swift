@@ -141,8 +141,58 @@ class ProjectViewModel: ObservableObject {
     
     // Update a track
     func updateTrack(at index: Int, with updatedTrack: Track) {
-        guard index >= 0 && index < tracks.count else { return }
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track - index \(index) out of bounds")
+            return
+        }
+        
+        let oldTrack = tracks[index]
+        print("📝 PROJECT VM: Updating track at index \(index): \(oldTrack.name) (id: \(oldTrack.id))")
+        
+        // Check if audio clips are changing
+        if oldTrack.type == .audio {
+            print("📝 PROJECT VM: Audio track - Old clip count: \(oldTrack.audioClips.count), New clip count: \(updatedTrack.audioClips.count)")
+            
+            // Log details about the clips
+            if oldTrack.audioClips.count != updatedTrack.audioClips.count {
+                print("📝 PROJECT VM: Audio clip count changed")
+            }
+            
+            // Check for position changes in clips
+            for (i, newClip) in updatedTrack.audioClips.enumerated() {
+                if let oldClip = oldTrack.audioClips.first(where: { $0.id == newClip.id }) {
+                    if oldClip.startBeat != newClip.startBeat {
+                        print("📝 PROJECT VM: Audio clip \(newClip.name) position changed from \(oldClip.startBeat) to \(newClip.startBeat)")
+                    }
+                } else {
+                    print("📝 PROJECT VM: New audio clip added: \(newClip.name) at position \(newClip.startBeat)")
+                }
+            }
+        }
+        
+        // Check if MIDI clips are changing
+        if oldTrack.type == .midi {
+            print("📝 PROJECT VM: MIDI track - Old clip count: \(oldTrack.midiClips.count), New clip count: \(updatedTrack.midiClips.count)")
+            
+            // Log details about the clips
+            if oldTrack.midiClips.count != updatedTrack.midiClips.count {
+                print("📝 PROJECT VM: MIDI clip count changed")
+            }
+            
+            // Check for position changes in clips
+            for (i, newClip) in updatedTrack.midiClips.enumerated() {
+                if let oldClip = oldTrack.midiClips.first(where: { $0.id == newClip.id }) {
+                    if oldClip.startBeat != newClip.startBeat {
+                        print("📝 PROJECT VM: MIDI clip \(newClip.name) position changed from \(oldClip.startBeat) to \(newClip.startBeat)")
+                    }
+                } else {
+                    print("📝 PROJECT VM: New MIDI clip added: \(newClip.name) at position \(newClip.startBeat)")
+                }
+            }
+        }
+        
         tracks[index] = updatedTrack
+        print("✅ PROJECT VM: Track updated successfully")
         
         // Handle solo logic - if any track is soloed, mute all non-soloed tracks
         let hasSoloedTrack = tracks.contains { $0.isSolo }
@@ -154,7 +204,9 @@ class ProjectViewModel: ObservableObject {
         }
         
         // Notify observers that tracks have been updated
+        print("📢 PROJECT VM: Notifying observers of track update")
         objectWillChange.send()
+        print("📢 PROJECT VM: Observers notified")
     }
     
     // MARK: - Private

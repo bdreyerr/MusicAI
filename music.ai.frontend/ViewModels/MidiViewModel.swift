@@ -133,32 +133,38 @@ class MidiViewModel: ObservableObject {
     
     /// Move a MIDI clip to a new position
     func moveMidiClip(trackId: UUID, clipId: UUID, newStartBeat: Double) -> Bool {
+        print("📝 MIDI VM: moveMidiClip CALLED with trackId: \(trackId), clipId: \(clipId), newStartBeat: \(newStartBeat)")
+        
         guard let projectViewModel = projectViewModel,
               let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
-            print("Failed to find track with ID: \(trackId)")
+            print("❌ MIDI VM: Failed to find track with ID: \(trackId)")
             return false
         }
+        
+        print("📝 MIDI VM: Found track at index: \(trackIndex)")
         
         var track = projectViewModel.tracks[trackIndex]
         
         // Ensure this is a MIDI track
         guard track.type == .midi else {
-            print("Track is not a MIDI track")
+            print("❌ MIDI VM: Track is not a MIDI track")
             return false
         }
         
         // Find the clip in the track
         guard let clipIndex = track.midiClips.firstIndex(where: { $0.id == clipId }) else {
-            print("Failed to find clip with ID: \(clipId)")
+            print("❌ MIDI VM: Failed to find clip with ID: \(clipId)")
             return false
         }
+        
+        print("📝 MIDI VM: Found clip at index: \(clipIndex)")
         
         // Get the clip we're moving
         var clipToMove = track.midiClips[clipIndex]
         let clipDuration = clipToMove.duration
         let newEndBeat = newStartBeat + clipDuration
         
-//        print("Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
+        print("📝 MIDI VM: Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
         
         // Check for overlaps with other clips
         let overlappingClips = track.midiClips.filter { clip in
@@ -169,7 +175,7 @@ class MidiViewModel: ObservableObject {
         // Remove any overlapping clips
         for overlappingClip in overlappingClips {
             track.removeMidiClip(id: overlappingClip.id)
-            print("Removed overlapping clip: \(overlappingClip.name)")
+            print("📝 MIDI VM: Removed overlapping clip: \(overlappingClip.name)")
         }
         
         // Update the clip's position
@@ -179,21 +185,29 @@ class MidiViewModel: ObservableObject {
         track.removeMidiClip(id: clipId)
         _ = track.addMidiClip(clipToMove)
         
+        print("📝 MIDI VM: Updated clip position in track")
+        
         // Update the track in the project view model
         projectViewModel.updateTrack(at: trackIndex, with: track)
         
+        print("📝 MIDI VM: Updated track in project view model")
+        
         // Update the selection to match the new clip position
-        if let timelineState = timelineState,
+        if let timelineState = findTimelineState(),
            timelineState.selectionActive,
            timelineState.selectionTrackId == trackId {
             timelineState.startSelection(at: newStartBeat, trackId: trackId)
             timelineState.updateSelection(to: newEndBeat)
+            print("📝 MIDI VM: Updated selection to match new clip position")
         }
         
         // Ensure the playhead is at the start of the moved clip
         projectViewModel.seekToBeat(newStartBeat)
         
-//        print("Successfully moved clip to \(newStartBeat)")
+        // Force UI update by triggering objectWillChange
+        projectViewModel.objectWillChange.send()
+        
+        print("✅ MIDI VM: Successfully moved clip to \(newStartBeat)")
         return true
     }
     
@@ -228,7 +242,7 @@ class MidiViewModel: ObservableObject {
         let isOnClip = track.midiClips.contains { clip in
             let isWithinClip = beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
             if isWithinClip {
-                print("Position \(beatPosition) is on clip: \(clip.name) (clip range: \(clip.startBeat)-\(clip.endBeat))")
+//                print("Position \(beatPosition) is on clip: \(clip.name) (clip range: \(clip.startBeat)-\(clip.endBeat))")
                 
                 // Try to select the clip directly
                 if let timelineState = findTimelineState() {

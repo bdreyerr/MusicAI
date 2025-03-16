@@ -1,0 +1,7 @@
+---
+description: Rules for testing changes and running the proejct
+globs: *.swift
+alwaysApply: false
+---
+
+# This program is being developed in XCode, and such, we can't properly test changes by trying to run the program on the command line. Please don't try to test things that way, instead just ask the user to manually open the application and test the changes.
