@@ -1,10 +1,14 @@
 import SwiftUI
 import Foundation
+import UniformTypeIdentifiers
+// Import our drag and drop manager
+// no module import needed for AudioDragDropViewModel since it's part of our project
 
 /// View for displaying the contents of a selected folder
 struct FolderContentView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject var viewModel: SidebarViewModel
+    @StateObject private var dragDropViewModel = AudioDragDropViewModel.shared
     @State private var searchText: String = ""
     @FocusState private var isSearchFieldFocused: Bool
     
@@ -140,11 +144,11 @@ struct FolderContentView: View {
                             } else {
                                 ForEach(viewModel.selectedFolderItems) { item in
                                     if item.metadata?["type"] == "folder" {
-                                        FolderItemRowView(item: item, isFolder: true) {
+                                        FolderItemRowView(item: item, isFolder: true, dragDropViewModel: dragDropViewModel) {
                                             viewModel.navigateToSubfolder(item)
                                         }
                                     } else {
-                                        FolderItemRowView(item: item, isFolder: false)
+                                        FolderItemRowView(item: item, isFolder: false, dragDropViewModel: dragDropViewModel)
                                     }
                                 }
                             }
@@ -177,6 +181,7 @@ struct FolderItemRowView: View {
     @EnvironmentObject var themeManager: ThemeManager
     let item: FolderItem
     let isFolder: Bool
+    let dragDropViewModel: AudioDragDropViewModel
     var onFolderTap: (() -> Void)? = nil
     
     @State private var isHovering = false
@@ -230,51 +235,132 @@ struct FolderItemRowView: View {
                 print("🔍 DRAG START: Starting drag for item: \(item.name)")
                 if let path = item.metadata?["path"] {
                     print("🔍 DRAG PATH: \(path)")
-                }
-                
-                // Create the drag data
-                let dragData = AudioFileDragData(item: item)
-                
-                // Create an NSItemProvider with the audio file data
-                let provider = NSItemProvider(object: dragData)
-                
-                // Register the provider for additional UTIs to ensure compatibility
-                for typeIdentifier in ["public.data", "public.content", "public.item"] {
-                    provider.registerDataRepresentation(forTypeIdentifier: typeIdentifier,
+                    
+                    // Store this path in the AudioDragDropViewModel for easier access during drop
+                    dragDropViewModel.cacheDragPath(fileName: item.name, path: path)
+                    
+                    // Create a file URL
+                    let fileURL = URL(fileURLWithPath: path)
+                    
+                    // For audio files, we'll create a custom NSItemProvider
+                    // that properly handles security-scoped access
+                    let provider = NSItemProvider()
+                    
+                    // Set the suggested name for better identification
+                    provider.suggestedName = item.name
+                    
+                    // Create and register our custom drag data object
+                    let dragData = AudioFileDragData(item: item)
+                    
+                    // Register the drag data as the primary representation
+                    provider.registerObject(dragData, visibility: .all)
+                    
+                    // Register the file path as plain text for fallback
+                    provider.registerDataRepresentation(forTypeIdentifier: UTType.plainText.identifier, 
                                                       visibility: .all) { completion in
-                        do {
-                            let data = try JSONEncoder().encode(dragData)
-                            print("🔍 REGISTERED \(typeIdentifier) representation with size: \(data.count) bytes")
+                        if let data = path.data(using: .utf8) {
+                            print("🔍 REGISTERED file path as text: \(path)")
                             completion(data, nil)
-                            return nil
-                        } catch {
-                            print("🔍 ERROR registering \(typeIdentifier): \(error)")
-                            completion(nil, error)
+                        } else {
+                            completion(Data(), NSError(domain: "com.music.ai", code: 1, userInfo: nil))
+                        }
+                        return nil
+                    }
+                    
+                    // Register the file URL as URL data
+                    provider.registerDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier,
+                                                       visibility: .all) { completion in
+                        if let urlData = fileURL.dataRepresentation {
+                            print("🔍 REGISTERED file URL data: \(fileURL.path)")
+                            completion(urlData, nil)
+                        } else {
+                            completion(Data(), NSError(domain: "com.music.ai", code: 2, userInfo: nil))
+                        }
+                        return nil
+                    }
+                    
+                    // For audio file formats, register specific type identifiers
+                    let fileExtension = fileURL.pathExtension.lowercased()
+                    
+                    // For WAV files
+                    if fileExtension == "wav" {
+                        // Register the classic waveform audio type
+                        provider.registerDataRepresentation(forTypeIdentifier: "com.microsoft.waveform-audio",
+                                                          visibility: .all) { completion in
+                            if FileManager.default.fileExists(atPath: path) {
+                                do {
+                                    let fileData = try Data(contentsOf: fileURL)
+                                    print("🔍 REGISTERED WAV data: \(fileData.count) bytes")
+                                    completion(fileData, nil)
+                                } catch {
+                                    print("⚠️ ERROR reading WAV file: \(error.localizedDescription)")
+                                    completion(Data(), error)
+                                }
+                            } else {
+                                completion(Data(), NSError(domain: "com.music.ai", code: 3, userInfo: nil))
+                            }
                             return nil
                         }
                     }
-                }
-                
-                // If we have a file path, also register it as a file URL
-                if let filePath = item.metadata?["path"] {
-                    let fileURL = URL(fileURLWithPath: filePath)
-                    provider.registerFileRepresentation(forTypeIdentifier: "public.file-url",
-                                                      fileOptions: [],
-                                                      visibility: .all) { progressHandler in
-                        print("🔍 REGISTERED file URL representation for: \(fileURL.path)")
-                        progressHandler(fileURL, true, nil)
-                        return Progress.discreteProgress(totalUnitCount: 1)
+                    
+                    // For MP3 files
+                    if fileExtension == "mp3" {
+                        provider.registerDataRepresentation(forTypeIdentifier: "public.mp3",
+                                                          visibility: .all) { completion in
+                            if FileManager.default.fileExists(atPath: path) {
+                                do {
+                                    let fileData = try Data(contentsOf: fileURL)
+                                    print("🔍 REGISTERED MP3 data: \(fileData.count) bytes")
+                                    completion(fileData, nil)
+                                } catch {
+                                    print("⚠️ ERROR reading MP3 file: \(error.localizedDescription)")
+                                    completion(Data(), error)
+                                }
+                            } else {
+                                completion(Data(), NSError(domain: "com.music.ai", code: 4, userInfo: nil))
+                            }
+                            return nil
+                        }
                     }
+                    
+                    // Register raw data as a last resort
+                    provider.registerDataRepresentation(forTypeIdentifier: UTType.data.identifier,
+                                                      visibility: .all) { completion in
+                        // Create a small data package with the filename and path
+                        let infoDict = ["name": item.name, "path": path]
+                        if let jsonData = try? JSONSerialization.data(withJSONObject: infoDict) {
+                            print("🔍 REGISTERED file info as data: \(jsonData.count) bytes")
+                            completion(jsonData, nil)
+                        } else {
+                            completion(Data(), NSError(domain: "com.music.ai", code: 5, userInfo: nil))
+                        }
+                        return nil
+                    }
+                    
+                    print("🔍 DRAG PROVIDER: Created provider with type identifiers: \(provider.registeredTypeIdentifiers)")
+                    
+                    // Reset dragging state after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isDragging = false
+                        // Notify the view model that the drag has ended
+                        dragDropViewModel.registerDragEnded(successful: true)
+                    }
+                    
+                    return provider
+                } else {
+                    // If we don't have a path, create a simpler provider with just the name
+                    let dragData = AudioFileDragData(item: item)
+                    let provider = NSItemProvider(object: dragData)
+                    
+                    // Reset dragging state after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isDragging = false
+                        // Notify the view model that the drag has ended
+                        dragDropViewModel.registerDragEnded(successful: false)
+                    }
+                    
+                    return provider
                 }
-                
-                print("🔍 DRAG PROVIDER: Created provider with type identifiers: \(provider.registeredTypeIdentifiers)")
-                
-                // Reset dragging state after a delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    isDragging = false
-                }
-                
-                return provider
             }
         }
     }

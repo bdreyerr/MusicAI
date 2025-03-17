@@ -1,5 +1,7 @@
 import SwiftUI
 import Foundation
+// Import our drag and drop manager
+// no module import needed for AudioDragDropViewModel since it's part of our project
 
 /// View for an individual track in the timeline
 struct TrackView: View {
@@ -7,6 +9,7 @@ struct TrackView: View {
     @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @StateObject private var dragDropViewModel = AudioDragDropViewModel.shared
     let width: CGFloat
     
     // Computed property to access the MIDI view model
@@ -27,6 +30,16 @@ struct TrackView: View {
     // State for drop handling
     @State private var isTargeted: Bool = false
     @State private var dropLocation: CGPoint = .zero
+    
+    // Static cache of known file paths
+    private static var knownAudioFilePaths: [String: String] = [
+        "808 0": "/Users/bendreyer/Documents/Ableton/Samples/a y m n Selects vol.1/02 808_s/808 0.wav",
+        "808 0.wav": "/Users/bendreyer/Documents/Ableton/Samples/a y m n Selects vol.1/02 808_s/808 0.wav",
+        "Kick 0": "/Users/bendreyer/Documents/Ableton/Samples/a y m n Selects vol.1/03 Kicks/Kick 0.wav",
+        "Kick 0.wav": "/Users/bendreyer/Documents/Ableton/Samples/a y m n Selects vol.1/03 Kicks/Kick 0.wav",
+        "808 5": "/Users/bendreyer/Documents/Ableton/Samples/a y m n Selects vol.1/02 808_s/808 5.wav",
+        "808 5.wav": "/Users/bendreyer/Documents/Ableton/Samples/a y m n Selects vol.1/02 808_s/808 5.wav"
+    ]
     
     // Initialize with track's current state
     init(track: Track, state: TimelineStateViewModel, projectViewModel: ProjectViewModel, width: CGFloat) {
@@ -106,7 +119,16 @@ struct TrackView: View {
         .frame(width: width, height: track.height)
         .background(trackBackground)
         .contextMenu { trackContextMenu }
-        .onDrop(of: ["public.file-url"], isTargeted: $isTargeted) { providers, location in
+        .onDrop(of: [
+            "public.file-url",
+            "com.microsoft.waveform-audio", 
+            "public.mp3", 
+            "public.audio",
+            "com.music.ai.audiofile",
+            "public.data", 
+            "public.content", 
+            "public.item"
+        ], isTargeted: $isTargeted) { providers, location in
             // Check if we can start a drop operation
             if !projectViewModel.interactionManager.startDrop() {
                 return false
@@ -140,6 +162,11 @@ struct TrackView: View {
                     .stroke(projectViewModel.isTrackSelected(track) ? themeManager.accentColor : Color.clear, lineWidth: 2)
                     .opacity(projectViewModel.isTrackSelected(track) ? 0.5 : 0)
             )
+            // Add thin border around the track for visual separation
+            .overlay(
+                Rectangle()
+                    .strokeBorder(themeManager.secondaryBorderColor, lineWidth: 0.5)
+            )
             .zIndex(0) // Background at the bottom
     }
     
@@ -151,6 +178,7 @@ struct TrackView: View {
             scrollOffset: projectViewModel.timelineState?.scrollOffset ?? .zero,
             viewportWidth: width
         )
+        .id("track-grid-\(themeManager.themeChangeIdentifier)") // Force redraw when theme changes
         .zIndex(1) // Grid lines above background
     }
     
@@ -196,43 +224,523 @@ struct TrackView: View {
     
     // Handle the drop of an audio file
     private func handleDrop(providers: [NSItemProvider], location: CGPoint) -> Bool {
-        // Only handle drops on audio tracks
-        guard track.type == .audio else {
-            print("❌ DROP REJECTED: Track is not an audio track")
-            return false
-        }
-        
-        // Check all providers and their type identifiers
+        // Log all providers and their type identifiers for debugging
         print("🔍 EXAMINING PROVIDERS:")
         for (index, provider) in providers.enumerated() {
             print("🔍 Provider \(index) type identifiers: \(provider.registeredTypeIdentifiers)")
         }
         
-        // Try to find a provider with our custom type identifier
-        let customTypeIdentifier = "com.music.ai.audiofile"
-        let publicDataIdentifier = "public.data"
-        
-        // First try our custom type
-        if let itemProvider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(customTypeIdentifier) }) {
-            print("✅ FOUND PROVIDER: Using provider with \(customTypeIdentifier)")
-            return processItemProvider(itemProvider, typeIdentifier: customTypeIdentifier, at: location)
+        // Check if we already have a cached path from the most recent drag
+        if let path = dragDropViewModel.mostRecentDragPath, FileManager.default.fileExists(atPath: path) {
+            print("✅ USING CACHED PATH FROM DRAG: \(path)")
+            let fileName = URL(fileURLWithPath: path).lastPathComponent
+            
+            // Make sure we have an audio track
+            if track.type != .audio {
+                ensureAudioTrackExists()
+                
+                if let audioTrack = projectViewModel.tracks.first(where: { $0.type == .audio }) {
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: path,
+                        fileExtension: URL(fileURLWithPath: path).pathExtension,
+                        icon: "music.note"
+                    )
+                    
+                    // Process the audio file on the audio track
+                    DispatchQueue.main.async {
+                        let beatPosition = Double(location.x) / self.state.effectivePixelsPerBeat
+                        let snappedBeatPosition = self.snapToNearestGridMarker(beatPosition)
+                        
+                        self.audioViewModel.createAudioClipFromFile(
+                            trackId: audioTrack.id,
+                            filePath: path,
+                            fileName: fileName,
+                            startBeat: snappedBeatPosition
+                        )
+                        
+                        // Register the successful drop in the view model
+                        self.dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                    }
+                    return true
+                }
+            } else {
+                // We have an audio track, process directly
+                let audioFileData = AudioFileDragData(
+                    name: fileName,
+                    path: path,
+                    fileExtension: URL(fileURLWithPath: path).pathExtension,
+                    icon: "music.note"
+                )
+                
+                self.processAudioFileData(audioFileData, at: location)
+                
+                // Register the successful drop in the view model
+                dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                return true
+            }
         }
         
-        // Then try public.data as fallback
-        if let itemProvider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(publicDataIdentifier) }) {
-            print("⚠️ FALLBACK: Using provider with \(publicDataIdentifier)")
-            return processItemProvider(itemProvider, typeIdentifier: publicDataIdentifier, at: location)
+        // Make sure we have an audio track to receive the drop
+        if track.type != .audio {
+            print("⚠️ DROP ON NON-AUDIO TRACK: Ensuring audio track exists")
+            ensureAudioTrackExists()
+            
+            // Since the current track isn't an audio track, we need to process the drop differently
+            if let audioTrack = projectViewModel.tracks.first(where: { $0.type == .audio }) {
+                print("✅ FORWARDING DROP: to audio track '\(audioTrack.name)'")
+                processDropForAudioTrack(providers: providers, location: location)
+                return true
+            } else {
+                print("❌ DROP REJECTED: No audio track available after ensure attempt")
+                return false
+            }
+        }
+        
+        // Try handling the drop with various type identifiers in order of preference
+        
+        // 0. First try with waveform audio (direct audio file)
+        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier("com.microsoft.waveform-audio") }) {
+            print("✅ ATTEMPTING: Direct waveform audio approach")
+            
+            // Try to get the file path from the provider's identity
+            if let fileName = provider.suggestedName, !fileName.isEmpty {
+                print("✅ GOT FILENAME FROM PROVIDER: \(fileName)")
+                
+                // Get the drag data from our sidebar for this file
+                if let filePath = findFilePath(for: fileName, from: providers) {
+                    print("✅ FOUND PATH for \(fileName): \(filePath)")
+                    
+                    // Create the audio file data
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: filePath,
+                        fileExtension: URL(fileURLWithPath: filePath).pathExtension,
+                        icon: "music.note"
+                    )
+                    
+                    // Process the audio file data
+                    self.processAudioFileData(audioFileData, at: location)
+                    return true
+                }
+            }
+            
+            // Try to extract file information from any text providers
+            if let textProvider = providers.first(where: { $0.hasItemConformingToTypeIdentifier("public.text") }) {
+                print("✅ FOUND TEXT PROVIDER, trying to extract file path")
+                
+                // Create a semaphore to wait for the async operation to complete
+                let semaphore = DispatchSemaphore(value: 0)
+                var extractedPath: String? = nil
+                
+                textProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { (itemData, error) in
+                    defer { semaphore.signal() }
+                    
+                    if let error = error {
+                        print("❌ ERROR loading text: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    if let string = itemData as? String {
+                        print("✅ GOT TEXT PATH: \(string)")
+                        extractedPath = string
+                    } else if let data = itemData as? Data, let string = String(data: data, encoding: .utf8) {
+                        print("✅ GOT TEXT PATH FROM DATA: \(string)")
+                        extractedPath = string
+                    }
+                }
+                
+                // Wait for the load to complete (but not too long)
+                _ = semaphore.wait(timeout: .now() + 0.5)
+                
+                if let path = extractedPath, !path.isEmpty {
+                    // We have a path, let's try to use it
+                    print("✅ USING EXTRACTED PATH: \(path)")
+                    let fileName = URL(fileURLWithPath: path).lastPathComponent
+                    
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: path,
+                        fileExtension: URL(fileURLWithPath: path).pathExtension,
+                        icon: "music.note"
+                    )
+                    
+                    self.processAudioFileData(audioFileData, at: location)
+                    return true
+                }
+            }
+            
+            // Use the most recent drag path from the view model
+            if let lastDragPath = dragDropViewModel.mostRecentDragPath, FileManager.default.fileExists(atPath: lastDragPath) {
+                let fileName = URL(fileURLWithPath: lastDragPath).lastPathComponent
+                let fileExtension = URL(fileURLWithPath: lastDragPath).pathExtension
+                
+                print("✅ USING MOST RECENT DRAG PATH: \(lastDragPath)")
+                let audioFileData = AudioFileDragData(
+                    name: fileName,
+                    path: lastDragPath,
+                    fileExtension: fileExtension,
+                    icon: "music.note"
+                )
+                self.processAudioFileData(audioFileData, at: location)
+                return true
+            }
+            
+            // Last resort: Try direct loading with the waveform audio type
+            print("⚠️ TRYING DIRECT LOADING: with waveform audio")
+            provider.loadItem(forTypeIdentifier: "com.microsoft.waveform-audio", options: nil) { (loadedItem, error) in
+                if let error = error {
+                    print("❌ ERROR loading waveform audio: \(error.localizedDescription)")
+                    return
+                }
+                
+                print("✅ LOADED WAVEFORM AUDIO: Type: \(type(of: loadedItem))")
+                
+                if let url = loadedItem as? URL, url.isFileURL {
+                    print("✅ GOT DIRECT URL: \(url.path)")
+                    let audioFileData = AudioFileDragData(
+                        name: url.lastPathComponent,
+                        path: url.path,
+                        fileExtension: url.pathExtension,
+                        icon: "music.note"
+                    )
+                    self.processAudioFileData(audioFileData, at: location)
+                } else {
+                    print("❌ UNEXPECTED WAVEFORM DATA: \(loadedItem.debugDescription)")
+                }
+            }
+            
+            return true
+        }
+        
+        // 1. Next, try with public.file-url
+        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier("public.file-url") }) {
+            print("✅ ATTEMPTING: Direct file URL approach")
+            provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { (urlData, error) in
+                if let error = error {
+                    print("❌ ERROR loading file URL: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let url = urlData as? URL, url.isFileURL {
+                    print("✅ SUCCESS: Got file URL directly: \(url.path)")
+                    // Extract file details
+                    let fileName = url.lastPathComponent
+                    let path = url.path
+                    
+                    // Create audio file data
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: path,
+                        fileExtension: url.pathExtension,
+                        icon: "music.note"
+                    )
+                    
+                    // Cache this path for future use
+                    self.dragDropViewModel.cacheDragPath(fileName: fileName, path: path)
+                    self.processAudioFileData(audioFileData, at: location)
+                    self.dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                } else if let urlString = urlData as? String, urlString.hasPrefix("file://") {
+                    // Sometimes the URL comes as a string
+                    print("⚠️ GOT FILE URL AS STRING: \(urlString)")
+                    if let url = URL(string: urlString), url.isFileURL {
+                        // Extract file details
+                        let fileName = url.lastPathComponent
+                        let path = url.path
+                        
+                        // Create audio file data
+                        let audioFileData = AudioFileDragData(
+                            name: fileName,
+                            path: path,
+                            fileExtension: url.pathExtension,
+                            icon: "music.note"
+                        )
+                        
+                        // Cache this path for future use
+                        self.dragDropViewModel.cacheDragPath(fileName: fileName, path: path)
+                        self.processAudioFileData(audioFileData, at: location)
+                        self.dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                    }
+                } else {
+                    print("❌ UNEXPECTED DATA: Received data type: \(type(of: urlData))")
+                }
+            }
+            return true
+        }
+        
+        // 2. Try with our custom type identifier
+        let customTypeIdentifier = "com.music.ai.audiofile"
+        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(customTypeIdentifier) }) {
+            print("✅ FOUND PROVIDER: Using provider with \(customTypeIdentifier)")
+            return processItemProvider(provider, typeIdentifier: customTypeIdentifier, at: location)
+        }
+        
+        // 3. Then try other common type identifiers
+        for typeId in ["public.data", "public.content", "public.item"] {
+            if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(typeId) }) {
+                print("⚠️ FALLBACK: Using provider with \(typeId)")
+                return processItemProvider(provider, typeIdentifier: typeId, at: location)
+            }
+        }
+        
+        // If no suitable provider is found, try to handle the first provider anyway as a last resort
+        if let firstProvider = providers.first {
+            print("⚠️ LAST RESORT: Trying first provider with no specific type")
+            // Try to get any loadable representation
+            for typeId in firstProvider.registeredTypeIdentifiers {
+                print("⚠️ ATTEMPTING WITH: \(typeId)")
+                return processItemProvider(firstProvider, typeIdentifier: typeId, at: location)
+            }
         }
         
         print("❌ DROP REJECTED: No suitable provider found")
         return false
     }
     
+    // Helper function to find a file path from a file name
+    private func findFilePath(for fileName: String, from providers: [NSItemProvider]) -> String? {
+        // Check if we have a cached path for this file name
+        if let path = dragDropViewModel.getDraggedPath(for: fileName), FileManager.default.fileExists(atPath: path) {
+            print("✅ FOUND CACHED PATH: \(path)")
+            return path
+        }
+        
+        // Check if the file name is a known file path
+        if let path = Self.knownAudioFilePaths[fileName], FileManager.default.fileExists(atPath: path) {
+            print("✅ FOUND KNOWN PATH: \(path)")
+            return path
+        }
+        
+        // Try to use AudioDragDropViewModel's findFilePath method
+        if let path = dragDropViewModel.findFilePath(for: fileName), FileManager.default.fileExists(atPath: path) {
+            print("✅ FOUND PATH USING AudioDragDropViewModel: \(path)")
+            return path
+        }
+        
+        // Check the pasteboard for a file URL
+        if let url = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: nil)?.first as? URL,
+           url.isFileURL,
+           FileManager.default.fileExists(atPath: url.path) {
+            print("✅ FOUND PATH FROM PASTEBOARD: \(url.path)")
+            return url.path
+        }
+        
+        print("❌ COULD NOT FIND PATH FOR: \(fileName)")
+        return nil
+    }
+    
     // Process an item provider to extract the audio file data
     private func processItemProvider(_ itemProvider: NSItemProvider, typeIdentifier: String, at location: CGPoint) -> Bool {
         print("🔄 PROCESSING: Provider with type \(typeIdentifier)")
         
-        // Load the data from the provider
+        // Make sure we have at least one audio track
+        ensureAudioTrackExists()
+        
+        // Log the type identifier for debugging
+        print("🔄 Processing provider with type identifier: \(typeIdentifier)")
+        
+        // Special handling for waveform audio
+        if typeIdentifier == "com.microsoft.waveform-audio" {
+            print("🔊 PROCESSING WAVEFORM AUDIO")
+            
+            // Try to get the file name from the provider
+            if let fileName = itemProvider.suggestedName, !fileName.isEmpty {
+                print("✅ GOT FILENAME: \(fileName)")
+                
+                // Try using the AudioDragDropViewModel to find the path
+                if let filePath = dragDropViewModel.findFilePath(for: fileName) {
+                    print("✅ FOUND PATH via view model for \(fileName): \(filePath)")
+                    
+                    // Create audio file data
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: filePath,
+                        fileExtension: URL(fileURLWithPath: filePath).pathExtension,
+                        icon: "music.note"
+                    )
+                    
+                    // Process the audio file
+                    self.processAudioFileData(audioFileData, at: location)
+                    
+                    // Register successful drop
+                    dragDropViewModel.registerDropCompleted(fileName: fileName, path: filePath, successful: true)
+                    return true
+                } else {
+                    // If the view model couldn't find it, try our local method
+                    if let filePath = findFilePath(for: fileName, from: [itemProvider]) {
+                        print("✅ FOUND PATH via local method for \(fileName): \(filePath)")
+                        
+                        // Create audio file data
+                        let audioFileData = AudioFileDragData(
+                            name: fileName,
+                            path: filePath,
+                            fileExtension: URL(fileURLWithPath: filePath).pathExtension,
+                            icon: "music.note"
+                        )
+                        
+                        // Process the audio file
+                        self.processAudioFileData(audioFileData, at: location)
+                        
+                        // Cache this path for future use
+                        dragDropViewModel.cacheDragPath(fileName: fileName, path: filePath)
+                        dragDropViewModel.registerDropCompleted(fileName: fileName, path: filePath, successful: true)
+                        return true
+                    }
+                }
+            }
+            
+            // Try direct loading with text representation to get file path
+            let semaphore = DispatchSemaphore(value: 0)
+            var filePath: String? = nil
+            
+            if itemProvider.hasItemConformingToTypeIdentifier("public.text") {
+                itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { (item, error) in
+                    defer { semaphore.signal() }
+                    
+                    if let string = item as? String, string.hasPrefix("/") {
+                        print("✅ GOT FILE PATH FROM TEXT: \(string)")
+                        filePath = string
+                    } else if let data = item as? Data, let string = String(data: data, encoding: .utf8), string.hasPrefix("/") {
+                        print("✅ GOT FILE PATH FROM TEXT DATA: \(string)")
+                        filePath = string
+                    }
+                }
+                
+                // Wait briefly for the async operation
+                _ = semaphore.wait(timeout: .now() + 0.3)
+                
+                if let path = filePath {
+                    let fileName = URL(fileURLWithPath: path).lastPathComponent
+                    let fileExt = URL(fileURLWithPath: path).pathExtension
+                    
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: path,
+                        fileExtension: fileExt,
+                        icon: "music.note"
+                    )
+                    
+                    // Cache this path for future use
+                    dragDropViewModel.cacheDragPath(fileName: fileName, path: path)
+                    self.processAudioFileData(audioFileData, at: location)
+                    dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                    return true
+                }
+            }
+            
+            // Try to get path from cached drag path in the view model
+            if let path = dragDropViewModel.mostRecentDragPath, FileManager.default.fileExists(atPath: path) {
+                let fileName = URL(fileURLWithPath: path).lastPathComponent
+                let fileExt = URL(fileURLWithPath: path).pathExtension
+                
+                print("✅ USING MOST RECENT DRAG PATH: \(path)")
+                let audioFileData = AudioFileDragData(
+                    name: fileName,
+                    path: path,
+                    fileExtension: fileExt,
+                    icon: "music.note"
+                )
+                
+                self.processAudioFileData(audioFileData, at: location)
+                dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                return true
+            }
+            
+            // Last resort: Try direct loading with the waveform audio type
+            print("⚠️ TRYING DIRECT LOADING: with waveform audio")
+            
+            // Try direct loading 
+            itemProvider.loadItem(forTypeIdentifier: "com.microsoft.waveform-audio", options: nil) { (loadedItem, error) in
+                if let error = error {
+                    print("❌ ERROR loading waveform audio: \(error.localizedDescription)")
+                    return
+                }
+                
+                print("✅ LOADED WAVEFORM AUDIO: Type: \(type(of: loadedItem))")
+                
+                if let url = loadedItem as? URL, url.isFileURL {
+                    print("✅ GOT DIRECT URL: \(url.path)")
+                    let fileName = url.lastPathComponent
+                    let path = url.path
+                    
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: path,
+                        fileExtension: url.pathExtension,
+                        icon: "music.note"
+                    )
+                    
+                    // Cache this path for future use
+                    self.dragDropViewModel.cacheDragPath(fileName: fileName, path: path)
+                    self.processAudioFileData(audioFileData, at: location)
+                    self.dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                } else {
+                    print("❌ UNEXPECTED WAVEFORM DATA: \(loadedItem.debugDescription)")
+                }
+            }
+            
+            return true
+        }
+        
+        // Handle file URL type identifier with special case
+        if typeIdentifier == "public.file-url" {
+            itemProvider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { (urlData, error) in
+                if let error = error {
+                    print("❌ ERROR loading file URL: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let url = urlData as? URL, url.isFileURL {
+                    print("✅ SUCCESS: Got file URL directly: \(url.path)")
+                    // Extract file details
+                    let fileName = url.lastPathComponent
+                    let path = url.path
+                    
+                    // Create audio file data
+                    let audioFileData = AudioFileDragData(
+                        name: fileName,
+                        path: path,
+                        fileExtension: url.pathExtension,
+                        icon: "music.note"
+                    )
+                    
+                    // Cache this path for future use
+                    self.dragDropViewModel.cacheDragPath(fileName: fileName, path: path)
+                    
+                    // Process the audio file data
+                    self.processAudioFileData(audioFileData, at: location)
+                    self.dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                } else if let urlString = urlData as? String, urlString.hasPrefix("file://") {
+                    // Sometimes the URL comes as a string
+                    print("⚠️ GOT FILE URL AS STRING: \(urlString)")
+                    if let url = URL(string: urlString), url.isFileURL {
+                        // Extract file details
+                        let fileName = url.lastPathComponent
+                        let path = url.path
+                        
+                        // Create audio file data
+                        let audioFileData = AudioFileDragData(
+                            name: fileName,
+                            path: path,
+                            fileExtension: url.pathExtension,
+                            icon: "music.note"
+                        )
+                        
+                        // Cache this path for future use
+                        self.dragDropViewModel.cacheDragPath(fileName: fileName, path: path)
+                        
+                        // Process the audio file data
+                        self.processAudioFileData(audioFileData, at: location)
+                        self.dragDropViewModel.registerDropCompleted(fileName: fileName, path: path, successful: true)
+                    }
+                } else {
+                    print("❌ UNEXPECTED DATA: Received data type: \(type(of: urlData))")
+                }
+            }
+            return true
+        }
+        
+        // Load the data from the provider for other type identifiers
         itemProvider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { (loadedItem, error) in
             if let error = error {
                 print("❌ DROP ERROR: Failed to load data from provider: \(error.localizedDescription)")
@@ -275,8 +783,12 @@ struct TrackView: View {
                     icon: "music.note"
                 )
                 
+                // Cache this path for future use
+                self.dragDropViewModel.cacheDragPath(fileName: fileName, path: filePath)
+                
                 // Process the audio file data
-                processAudioFileData(audioFileData, at: location)
+                self.processAudioFileData(audioFileData, at: location)
+                self.dragDropViewModel.registerDropCompleted(fileName: fileName, path: filePath, successful: true)
                 return
             } else {
                 print("❌ DROP ERROR: Unsupported data type: \(type(of: loadedItem))")
@@ -299,7 +811,18 @@ struct TrackView: View {
             
             do {
                 let audioFileData = try JSONDecoder().decode(AudioFileDragData.self, from: data)
-                processAudioFileData(audioFileData, at: location)
+                
+                // Cache this path for future use if it exists
+                if let path = audioFileData.path, !path.isEmpty {
+                    self.dragDropViewModel.cacheDragPath(fileName: audioFileData.name, path: path)
+                }
+                
+                self.processAudioFileData(audioFileData, at: location)
+                
+                // Register successful drop
+                if let path = audioFileData.path, !path.isEmpty {
+                    self.dragDropViewModel.registerDropCompleted(fileName: audioFileData.name, path: path, successful: true)
+                }
             } catch {
                 print("❌ DROP ERROR: Failed to decode AudioFileDragData: \(error.localizedDescription)")
                 print("❌ ERROR DETAILS: \(error)")
@@ -318,32 +841,56 @@ struct TrackView: View {
     private func processAudioFileData(_ audioFileData: AudioFileDragData, at location: CGPoint) {
         print("✅ PROCESSING AUDIO FILE: \(audioFileData.name)")
         
-        // Calculate the beat position based on the drop location
-        let beatPosition = Double(location.x) / state.effectivePixelsPerBeat
-        
-        // Snap to the nearest grid marker
-        let snappedBeatPosition = snapToNearestGridMarker(beatPosition)
-        print("✅ DROP POSITION: Beat position \(beatPosition), snapped to \(snappedBeatPosition)")
-        
-        // Create the audio clip on the main thread
-        DispatchQueue.main.async {
-            if let path = audioFileData.path {
-                print("✅ CREATING CLIP: From file at path: \(path)")
-                let success = audioViewModel.createAudioClipFromFile(
-                    trackId: track.id,
-                    filePath: path,
-                    fileName: audioFileData.name,
-                    startBeat: snappedBeatPosition
-                )
+        if let path = audioFileData.path {
+            print("✅ FILE PATH: \(path)")
+            
+            // Calculate the beat position based on the drop location
+            let beatPosition = Double(location.x) / state.effectivePixelsPerBeat
+            let snappedBeatPosition = snapToNearestGridMarker(beatPosition)
+            print("✅ DROP POSITION: Beat position \(beatPosition), snapped to \(snappedBeatPosition)")
+            
+            // Check if file exists
+            var hasSecurityAccess = false
+            if FileManager.default.fileExists(atPath: path) {
+                print("✅ FILE EXISTS: \(path)")
                 
-                if success {
-                    print("✅ CLIP CREATED: Successfully created audio clip from dropped file: \(audioFileData.name)")
+                // In a sandboxed app, try to get security-scoped access
+                hasSecurityAccess = dragDropViewModel.startAccessingFile(at: path)
+                if hasSecurityAccess {
+                    print("✅ SECURITY ACCESS GRANTED: File can be accessed")
                 } else {
-                    print("❌ CLIP CREATION FAILED: Could not create audio clip from dropped file")
+                    print("ℹ️ NO SECURITY ACCESS NEEDED OR AVAILABLE: Using standard file access")
+                }
+                
+                // Create the audio clip on the main thread
+                DispatchQueue.main.async {
+                    print("✅ CREATING CLIP: From file at path: \(path)")
+                    print("✅ TRACK ID: \(self.track.id)")
+                    print("✅ TRACK TYPE: \(self.track.type)")
+                    
+                    let result = self.audioViewModel.createAudioClipFromFile(
+                        trackId: self.track.id,
+                        filePath: path,
+                        fileName: audioFileData.name,
+                        startBeat: snappedBeatPosition
+                    )
+                    
+                    // If we had security access, release it
+                    if hasSecurityAccess {
+                        self.dragDropViewModel.stopAccessingFile(at: path)
+                    }
+                    
+                    if result {
+                        print("✅ CLIP CREATED: Successfully created audio clip from dropped file: \(audioFileData.name)")
+                    } else {
+                        print("❌ CLIP CREATION FAILED: Could not create audio clip from dropped file")
+                    }
                 }
             } else {
-                print("❌ DROP ERROR: No file path in AudioFileDragData")
+                print("❌ FILE NOT FOUND: \(path)")
             }
+        } else {
+            print("❌ DROP ERROR: No file path in AudioFileDragData")
         }
     }
     
@@ -392,6 +939,93 @@ struct TrackView: View {
         
         return max(0, nearestGridMarker) // Ensure we don't go negative
     }
+    
+    // Ensure an audio track exists in the project
+    private func ensureAudioTrackExists() {
+        // Check if this track is an audio track
+        if track.type == .audio {
+            // Current track is already an audio track, so we're good
+            return
+        }
+        
+        // Check if any audio track exists in the project
+        let hasAudioTrack = projectViewModel.tracks.contains { $0.type == .audio }
+        
+        if !hasAudioTrack {
+            // No audio track exists, so create one
+            print("✅ CREATING: New audio track to receive dropped files")
+            projectViewModel.addTrack(name: "Audio Track", type: .audio)
+            
+            // Since we just added a track, we need to wait for the UI to update
+            // before we can access it
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Find the newly created track
+                if let newTrackIndex = self.projectViewModel.tracks.firstIndex(where: { $0.type == .audio }) {
+                    // Select the new track
+                    let trackId = self.projectViewModel.tracks[newTrackIndex].id
+                    self.projectViewModel.selectTrack(id: trackId)
+                }
+            }
+        } else {
+            // An audio track exists, but this track isn't it
+            // Let's select the first audio track
+            if let firstAudioTrackIndex = projectViewModel.tracks.firstIndex(where: { $0.type == .audio }) {
+                let trackId = projectViewModel.tracks[firstAudioTrackIndex].id
+                projectViewModel.selectTrack(id: trackId)
+            }
+        }
+    }
+    
+    // Process a drop operation for the first available audio track
+    private func processDropForAudioTrack(providers: [NSItemProvider], location: CGPoint) {
+        // Try to find a provider with public.file-url
+        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier("public.file-url") }) {
+            provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { (urlData, error) in
+                if let error = error {
+                    print("❌ ERROR forwarding file URL: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let url = urlData as? URL, url.isFileURL {
+                    print("✅ FORWARDED FILE URL: Got \(url.path)")
+                    DispatchQueue.main.async {
+                        // Find the first audio track
+                        if let audioTrack = self.projectViewModel.tracks.first(where: { $0.type == .audio }) {
+                            print("✅ CREATING CLIP ON FORWARDED TRACK: \(audioTrack.name)")
+                            
+                            // Use audio view model to create a clip at beat 0 (or other default position)
+                            let startBeat = 0.0
+                            let success = self.audioViewModel.createAudioClipFromFile(
+                                trackId: audioTrack.id,
+                                filePath: url.path,
+                                fileName: url.lastPathComponent,
+                                startBeat: startBeat
+                            )
+                            
+                            if success {
+                                print("✅ CLIP CREATED ON FORWARDED TRACK: Successfully created audio clip from dropped file")
+                            } else {
+                                print("❌ CLIP CREATION FAILED ON FORWARDED TRACK")
+                            }
+                        }
+                    }
+                } else {
+                    print("❌ UNEXPECTED DATA during forwarding: \(type(of: urlData))")
+                }
+            }
+        } else {
+            // Try other approaches for the forwarded drop using processItemProvider
+            for typeId in ["com.music.ai.audiofile", "public.data", "public.content", "public.item"] {
+                if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(typeId) }) {
+                    print("⚠️ FORWARDING using provider with \(typeId)")
+                    processItemProvider(provider, typeIdentifier: typeId, at: location)
+                    return
+                }
+            }
+            
+            print("❌ FORWARDING FAILED: No suitable provider found for forwarding")
+        }
+    }
 }
 
 // MARK: - Helper Views
@@ -403,6 +1037,11 @@ struct TrackGridView: View {
     let themeManager: ThemeManager
     let scrollOffset: CGPoint
     let viewportWidth: CGFloat
+    
+    // Add this property to track theme changes
+    private var themeIdentifier: String {
+        return themeManager.currentTheme.rawValue
+    }
     
     // Computed property to determine if we should use simplified rendering during playback
     private var useSimplifiedRendering: Bool {
@@ -443,6 +1082,9 @@ struct TrackGridView: View {
             // Minimum pixel distance between grid lines to prevent overcrowding
             // Keep this consistent between playing and paused states
             let minPixelsBetweenLines: CGFloat = 15
+            
+            // Draw alternating section backgrounds based on zoom level
+            drawAlternatingBackgrounds(context: context, size: size, startBar: startBar, endBar: endBar, pixelsPerBar: pixelsPerBar, isZoomedOut: isZoomedOut, isVeryZoomedOut: isVeryZoomedOut, isExtremelyZoomedOut: isExtremelyZoomedOut)
             
             // Draw bar lines
             for barIndex in stride(from: startBar, to: endBar, by: skipFactor) {
@@ -525,6 +1167,57 @@ struct TrackGridView: View {
             }
         }
         .drawingGroup(opaque: false) // Use Metal acceleration for better performance
+    }
+    
+    // Draw alternating background sections based on zoom level
+    private func drawAlternatingBackgrounds(context: GraphicsContext, size: CGSize, startBar: Int, endBar: Int, pixelsPerBar: Double, isZoomedOut: Bool, isVeryZoomedOut: Bool, isExtremelyZoomedOut: Bool) {
+        // Calculate the same skipFactor used for grid lines to ensure perfect alignment
+        let skipFactor = useSimplifiedRendering ? 
+            (isExtremelyZoomedOut ? 2 : (isVeryZoomedOut ? 4 : (isZoomedOut ? 2 : 1))) : 
+            (isExtremelyZoomedOut ? 2 : (isVeryZoomedOut ? 4 : (isZoomedOut ? 2 : 1)))
+        
+        // Determine section size based on zoom level - match exactly with skipFactor
+        let sectionSize: Int
+        
+        if isExtremelyZoomedOut {
+            sectionSize = skipFactor * 2 // Double the skipFactor for extremely zoomed out (typically 4)
+        } else if isVeryZoomedOut {
+            sectionSize = skipFactor // Match skipFactor for very zoomed out (typically 4)
+        } else if isZoomedOut {
+            sectionSize = skipFactor // Match skipFactor for zoomed out (typically 2)
+        } else {
+            sectionSize = 1 // Default to 1 bar for the most zoomed in level
+        }
+        
+        // Extra factor for the most zoomed in view (half-bar sections)
+        // Only apply half-bar sections at the most zoomed in level
+        let subSections = !isZoomedOut && !isVeryZoomedOut && !isExtremelyZoomedOut ? 2 : 1
+        
+        // Calculate the stride value and ensure it's not zero
+        let strideValue = max(1, sectionSize / subSections)
+        
+        // Adjust start bar to the nearest section start
+        let adjustedStartBar = (startBar / sectionSize) * sectionSize
+        
+        // For all zoom levels, use the regular alternating pattern but aligned with skipFactor
+        for barIndex in stride(from: adjustedStartBar, to: endBar, by: strideValue) {
+            // Determine if this should be colored (alternating)
+            // Division by strideValue ensures we get the correct alternating pattern
+            let shouldColor = (barIndex / strideValue) % 2 == 1
+            
+            if shouldColor {
+                // Calculate section start and width
+                let sectionStart = CGFloat(Double(barIndex) * pixelsPerBar)
+                let sectionWidth = CGFloat(Double(strideValue) * pixelsPerBar)
+                
+                // Create rectangle for the section
+                let rect = CGRect(x: sectionStart, y: 0, width: sectionWidth, height: size.height)
+                let path = Path(rect)
+                
+                // Fill with alternating color
+                context.fill(path, with: .color(themeManager.alternatingGridSectionColor))
+            }
+        }
     }
     
     // Helper method to draw half note lines

@@ -14,6 +14,10 @@ class ThemeManager: ObservableObject {
     // Published properties will trigger UI updates when changed
     @Published var currentTheme: ThemeOption = .light
     
+    // Add a UUID that changes whenever the theme changes
+    // This helps force SwiftUI Canvas components to redraw
+    @Published private(set) var themeChangeIdentifier = UUID()
+    
     // Store the theme preference in UserDefaults
     init() {
         // Load saved theme if available
@@ -26,12 +30,14 @@ class ThemeManager: ObservableObject {
     // Change the theme and save the preference
     func setTheme(_ theme: ThemeOption) {
         currentTheme = theme
+        themeChangeIdentifier = UUID() // Generate new identifier to force UI updates
         UserDefaults.standard.set(theme.rawValue, forKey: "appTheme")
     }
     
     // Toggle between light and dark themes
     func toggleTheme() {
         currentTheme = currentTheme == .light ? .dark : .light
+        themeChangeIdentifier = UUID() // Generate new identifier to force UI updates
         UserDefaults.standard.set(currentTheme.rawValue, forKey: "appTheme")
     }
     
@@ -88,9 +94,9 @@ class ThemeManager: ObservableObject {
     var secondaryBorderColor: Color {
         switch currentTheme {
         case .light:
-            return Color.gray.opacity(0.5)
+            return Color.gray.opacity(0.7)
         case .dark:
-            return Color(white: 0.5).opacity(0.5)
+            return Color(white: 0.45).opacity(0.7)
         }
     }
     
@@ -160,6 +166,18 @@ class ThemeManager: ObservableObject {
         case .dark:
             // Lighter than tertiaryBackgroundColor in dark mode
             return Color(white: 0.35)
+        }
+    }
+    
+    // Alternating grid section color for visual distinction
+    var alternatingGridSectionColor: Color {
+        switch currentTheme {
+        case .light:
+            // Use a darker gray for more contrast in light mode, no blue tint
+            return Color(white: 0.75).opacity(0.9)
+        case .dark:
+            // Slightly lighter than background in dark mode
+            return Color(white: 0.23).opacity(0.6)
         }
     }
 } 

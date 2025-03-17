@@ -57,7 +57,7 @@ struct TrackControlsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 
                 // Track controls row - aligned at the top
-                HStack {
+                VStack {
                     // Track icon and name
                     HStack(spacing: 6) {
                         // Track icon with color
@@ -115,85 +115,91 @@ struct TrackControlsView: View {
                                 }
                                 .help("Double-click to rename")
                         }
+                        Spacer()
                     }
                     .padding(.leading, 8)
-                    
-                    Spacer()
-                    
-                    // Track controls
-                    HStack(spacing: 8) {
-                        // Enable/Disable toggle
-                        Button(action: {
-                            isEnabled.toggle()
-                            updateTrack()
-                        }) {
-                            Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(isEnabled ? .green : themeManager.primaryTextColor)
-                                .font(.caption)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help(isEnabled ? "Disable Track" : "Enable Track")
+                    HStack {
+                       
                         
-                        // Mute button
-                        Button(action: {
-                            isMuted.toggle()
-                            updateTrack()
-                        }) {
-                            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2")
-                                .foregroundColor(isMuted ? .red : themeManager.primaryTextColor)
-                                .font(.caption)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Mute Track")
+//                        Spacer()
                         
-                        // Solo button
-                        Button(action: {
-                            isSolo.toggle()
-                            updateTrack()
-                        }) {
-                            Image(systemName: isSolo ? "s.square.fill" : "s.square")
-                                .font(.caption)
-                                .foregroundColor(isSolo ? .yellow : themeManager.primaryTextColor)
+                        // Track controls
+                        HStack(spacing: 8) {
+                            // Enable/Disable toggle
+                            Button(action: {
+                                isEnabled.toggle()
+                                updateTrack()
+                            }) {
+                                Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(isEnabled ? .green : themeManager.primaryTextColor)
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help(isEnabled ? "Disable Track" : "Enable Track")
+                            
+                            // Mute button
+                            Button(action: {
+                                isMuted.toggle()
+                                updateTrack()
+                            }) {
+                                Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2")
+                                    .foregroundColor(isMuted ? .red : themeManager.primaryTextColor)
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Mute Track")
+                            
+                            // Solo button
+                            Button(action: {
+                                isSolo.toggle()
+                                updateTrack()
+                            }) {
+                                Image(systemName: isSolo ? "s.square.fill" : "s.square")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(isSolo ? .yellow : themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Solo Track")
+                            
+                            // Record arm button
+                            Button(action: {
+                                isArmed.toggle()
+                                updateTrack()
+                            }) {
+                                Image(systemName: "record.circle")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(isArmed ? .red : themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Arm Track for Recording")
+                            
+                            // Delete track button
+                            Button(action: {
+                                showingDeleteConfirmation = true
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Delete Track")
+                            .alert(isPresented: $showingDeleteConfirmation) {
+                                Alert(
+                                    title: Text("Delete Track"),
+                                    message: Text("Are you sure you want to delete '\(trackName)'? This cannot be undone."),
+                                    primaryButton: .destructive(Text("Delete")) {
+                                        deleteTrack()
+                                    },
+                                    secondaryButton: .cancel()
+                                )
+                            }
                         }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Solo Track")
-                        
-                        // Record arm button
-                        Button(action: {
-                            isArmed.toggle()
-                            updateTrack()
-                        }) {
-                            Image(systemName: "record.circle")
-                                .font(.caption)
-                                .foregroundColor(isArmed ? .red : themeManager.primaryTextColor)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Arm Track for Recording")
-                        
-                        // Delete track button
-                        Button(action: {
-                            showingDeleteConfirmation = true
-                        }) {
-                            Image(systemName: "trash")
-                                .font(.caption)
-                                .foregroundColor(themeManager.primaryTextColor)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Delete Track")
-                        .alert(isPresented: $showingDeleteConfirmation) {
-                            Alert(
-                                title: Text("Delete Track"),
-                                message: Text("Are you sure you want to delete '\(trackName)'? This cannot be undone."),
-                                primaryButton: .destructive(Text("Delete")) {
-                                    deleteTrack()
-                                },
-                                secondaryButton: .cancel()
-                            )
-                        }
+                        .padding(.trailing, 8)
+                        Spacer()
                     }
-                    .padding(.trailing, 8)
+                    .padding(.leading, 8)
                 }
-                .frame(height: 40)
+                .frame(height: 50)
                 .frame(maxWidth: .infinity)
             }
             

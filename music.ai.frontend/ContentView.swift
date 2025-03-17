@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var aiChatViewModel = AIChatViewModel()
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var sidebarViewModel: SidebarViewModel
+    @EnvironmentObject var audioDragDropViewModel: AudioDragDropViewModel
     @State private var showThemeSettings = false
     
     var body: some View {
@@ -26,10 +27,12 @@ struct ContentView: View {
                 LeftSidebarView()
                     .environmentObject(themeManager)
                     .environmentObject(sidebarViewModel)
+                    .environmentObject(audioDragDropViewModel)
                 
                 // Timeline view - using the new ClaudeTimeline
                 TimelineView(projectViewModel: projectViewModel)
                     .environmentObject(themeManager)
+                    .environmentObject(audioDragDropViewModel)
 //                CoordinatedScrollView(projectViewModel: projectViewModel)
 //                    .environmentObject(themeManager)
                 
@@ -61,5 +64,5 @@ struct ContentView: View {
     return ContentView()
         .environmentObject(ThemeManager())
         .environmentObject(SidebarViewModel())
-        .environmentObject(aiChatViewModel)
+        .environmentObject(AudioDragDropViewModel.shared)
 }
