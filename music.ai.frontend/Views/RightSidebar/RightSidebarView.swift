@@ -60,9 +60,7 @@ struct RightSidebarView: View {
                     if isCollapsed {
                         // Expand button when collapsed
                         Button(action: {
-                            withAnimation(.spring()) {
-                                isCollapsed.toggle()
-                            }
+                            isCollapsed.toggle()
                         }) {
                             Image(systemName: "chevron.left")
                                 .foregroundColor(themeManager.primaryTextColor)
@@ -102,9 +100,7 @@ struct RightSidebarView: View {
                         
                         // Collapse button
                         Button(action: {
-                            withAnimation(.spring()) {
-                                isCollapsed.toggle()
-                            }
+                            isCollapsed.toggle()
                         }) {
                             Image(systemName: "chevron.right")
                                 .foregroundColor(themeManager.primaryTextColor)
@@ -372,7 +368,7 @@ struct RightSidebarView: View {
         .frame(width: effectiveWidth)
         .background(themeManager.backgroundColor)
         .border(themeManager.secondaryBorderColor, width: 0.5)
-        .animation(.spring(), value: isCollapsed)
+        // Removed animation for collapsing/uncollapsing
     }
     
     private func estimateHeight(for text: String) -> CGFloat {

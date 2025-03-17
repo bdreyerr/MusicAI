@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 /// Represents the type of effect or instrument
-enum EffectType {
+enum EffectType: Equatable {
     case equalizer
     case compressor
     case reverb
@@ -90,7 +90,7 @@ enum EffectType {
 }
 
 /// Represents an effect or instrument that can be applied to a track
-struct Effect: Identifiable {
+struct Effect: Identifiable, Equatable {
     let id = UUID()
     var type: EffectType
     var name: String
@@ -137,6 +137,14 @@ struct Effect: Identifiable {
             // Other effects might have their own parameters
             parameters = [:]
         }
+    }
+    
+    // Implement Equatable for Effect
+    static func == (lhs: Effect, rhs: Effect) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.type == rhs.type &&
+               lhs.name == rhs.name &&
+               lhs.isEnabled == rhs.isEnabled
     }
 }
 

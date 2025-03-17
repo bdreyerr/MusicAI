@@ -38,18 +38,18 @@ struct TimelineSelector: View {
                         // If so, the clip itself will handle the selection
                         if (track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
                            (track.type == .audio && isPositionOnAudioClip(rawBeatPosition)) {
-                            print("⚠️ TIMELINE SELECTOR: Drag started on clip at \(rawBeatPosition), ignoring in TimelineSelector")
+                            // print("⚠️ TIMELINE SELECTOR: Drag started on clip at \(rawBeatPosition), ignoring in TimelineSelector")
                             return
                         }
                         
-                        print("✅ TIMELINE SELECTOR: Drag detected at \(rawBeatPosition), not on a clip")
+                        // print("✅ TIMELINE SELECTOR: Drag detected at \(rawBeatPosition), not on a clip")
                         
                         // Snap to the nearest grid marker based on zoom level
                         let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
                         
                         // If this is the start of a drag, begin a new selection
                         if !isDragging {
-                            print("✅ TIMELINE SELECTOR: Starting new selection at \(snappedBeatPosition) on track \(track.id)")
+                            // print("✅ TIMELINE SELECTOR: Starting new selection at \(snappedBeatPosition) on track \(track.id)")
                             
                             // Select the track
                             projectViewModel.selectTrack(id: track.id)
@@ -57,7 +57,7 @@ struct TimelineSelector: View {
                             // Check if we need to deselect a clip first
                             if state.selectionActive && isClipSelected() {
                                 state.clearSelection()
-                                print("✅ TIMELINE SELECTOR: Clearing clip selection before starting new selection")
+                                // print("✅ TIMELINE SELECTOR: Clearing clip selection before starting new selection")
                             }
                             
                             // Start a new selection
@@ -70,6 +70,7 @@ struct TimelineSelector: View {
                         } else {
                             // Update the selection end point
                             state.updateSelection(to: snappedBeatPosition)
+                            // print("✅ TIMELINE SELECTOR: Updating selection to \(snappedBeatPosition)")
                         }
                     }
                     .onEnded { _ in
@@ -79,14 +80,16 @@ struct TimelineSelector: View {
                         let (start, end) = state.normalizedSelectionRange
                         if abs(end - start) < 0.001 {
                             state.clearSelection()
+                            // print("✅ TIMELINE SELECTOR: Selection too small, clearing")
                         } else {
                             // Ensure the playhead is at the leftmost point of the selection
                             // This handles the case where the user drags from right to left
                             projectViewModel.seekToBeat(start)
+                            // print("✅ TIMELINE SELECTOR: Selection completed: \(start) to \(end)")
                         }
                     }
             )
-            // Clear selection when tapped elsewhere
+            // Handle taps to move the playhead without stopping playback
             .onTapGesture { location in
                 // Convert tap location to beat position
                 let xPosition = location.x
@@ -99,7 +102,7 @@ struct TimelineSelector: View {
                 // If so, the clip itself will handle the selection
                 if (track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
                    (track.type == .audio && isPositionOnAudioClip(rawBeatPosition)) {
-                    print("Tap detected on clip at \(rawBeatPosition), ignoring in TimelineSelector")
+                    // print("Tap detected on clip at \(rawBeatPosition), ignoring in TimelineSelector")
                     return
                 }
                 
@@ -112,13 +115,14 @@ struct TimelineSelector: View {
                 // Check if we need to deselect a clip
                 if state.selectionActive && isClipSelected() {
                     state.clearSelection()
-                    print("Clearing clip selection on tap")
+                    // print("Clearing clip selection on tap")
                 }
                 
                 // Move the playhead to the clicked position
+                // The seekToBeat function now handles playback state internally
                 projectViewModel.seekToBeat(snappedBeatPosition)
                 
-                print("Clicked on track at position \(snappedBeatPosition)")
+                // print("Clicked on track at position \(snappedBeatPosition)")
             }
             .allowsHitTesting(true) // Ensure the selector can receive clicks
     }

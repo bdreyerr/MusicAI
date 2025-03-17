@@ -201,9 +201,8 @@ struct TopControlBarView: View {
                         .font(.subheadline)
                         .foregroundColor(themeManager.primaryTextColor)
                     
-                    Text(projectViewModel.formattedPosition())
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundColor(themeManager.primaryTextColor)
+                    // Use a custom view for the position display that updates less frequently
+                    PositionDisplayView(projectViewModel: projectViewModel)
                         .frame(width: 70, alignment: .leading)
                 }
                 
@@ -219,6 +218,30 @@ struct TopControlBarView: View {
                         .frame(width: 50, alignment: .leading)
                 }
                 
+                // Performance mode toggle
+                Button(action: {
+                    projectViewModel.togglePerformanceMode()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "gauge")
+                            .font(.subheadline)
+                            .foregroundColor(themeManager.primaryTextColor)
+                        Text(projectViewModel.performanceModeName())
+                            .font(.subheadline)
+                            .foregroundColor(themeManager.primaryTextColor)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(themeManager.secondaryBackgroundColor)
+                            .opacity(1.0)
+                    )
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .help("Toggle performance mode")
+                
+                // Theme toggle
                 Button(action: {
                     themeManager.toggleTheme()
                 }) {
@@ -226,7 +249,7 @@ struct TopControlBarView: View {
                        .foregroundColor(themeManager.primaryTextColor)
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                // .help("Toggle between light and dark theme")
+                .help("Toggle between light and dark theme")
             }
             .padding(.horizontal, 16)
         }

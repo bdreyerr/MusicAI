@@ -1,0 +1,156 @@
+---
+description: SwiftUI macOS Application Development Rules
+globs: *.swift
+alwaysApply: false
+---
+## Architecture and Structure
+
+1. **MVVM Architecture**
+   - Implement strict MVVM separation (Model, ViewModel, View)
+   - ViewModels should conform to `ObservableObject`
+   - Models should be independent of UI concerns
+   - Views should be thin and presentation-focused
+
+2. **File Organization**
+   - Group files by feature rather than type
+   - Keep views and their associated ViewModels in the same directory
+   - Create dedicated directories for reusable components
+   - Separate audio engine components from UI components
+
+3. **Naming Conventions**
+   - Views should end with "View" (e.g., `TrackView`)
+   - ViewModels should end with "ViewModel" (e.g., `TrackViewModel`)
+   - Models should have clear domain names (e.g., `AudioTrack`)
+   - Extensions should be in separate files with descriptive names
+
+## UI Design Guidelines
+
+# Theme manager
+- This program uses a theme manager, it's stored in ViewModels/ThemeManager.swift
+- This stores the state of the current theme, and what colors every view in the project should use, please use this manager to color views, don't try to color things on your own
+
+4. **Default Styling**
+   - Use light gray (`Color(NSColor.lightGray)`) as the default background color
+   - Apply black borders with `.border(Color.black, width: 1)`
+   - Round corners using `.cornerRadius(4)` for consistency
+   - Apply appropriate padding using `.padding()` to ensure proper spacing
+
+5. **Dynamic Resizing**
+   - Use `GeometryReader` for custom sizing based on available space
+   - Avoid fixed dimensions; use proportional sizing instead
+   - Implement minimum sizes to prevent unusable UI states
+   - Use `aspectRatio` for components that need to maintain proportions
+
+6. **Responsive Layout**
+   - Implement views that adapt to window size changes
+   - Use `HStack` and `VStack` with appropriate spacing
+   - Leverage `LazyVGrid` and `LazyHGrid` for collections of items
+   - Use `.frame(minWidth:, idealWidth:, maxWidth:, ...)` for flexible sizing
+
+7. **macOS-Specific Patterns**
+   - Support window resizing with appropriate layout constraints
+   - Implement proper sidebar navigation patterns
+   - Use standard toolbar items for common actions
+   - Support column views for hierarchical data
+
+## SwiftUI Prioritization
+
+8. **SwiftUI-First Approach**
+   - Implement UI components in SwiftUI when possible
+   - Use SwiftUI's declarative syntax for layout and state management
+   - Leverage SwiftUI's built-in animations and transitions
+   - Use SwiftUI's state management tools (`@State`, `@Binding`, etc.)
+
+9. **AppKit Integration**
+   - Use `NSViewRepresentable` to wrap AppKit views when needed
+   - Create clean interfaces between SwiftUI and AppKit components
+   - Implement proper lifecycle management for AppKit views
+   - Document where and why AppKit is used over SwiftUI
+
+10. **AppKit Usage Criteria**
+    - Use AppKit for complex audio visualizations requiring custom drawing
+    - Use AppKit for performance-critical UI elements
+    - Use AppKit for functionality not yet available in SwiftUI
+    - Use AppKit when fine-grained control over events is required
+
+## State Management
+
+11. **Source of Truth**
+    - Define a single source of truth for all data
+    - Use `@Published` properties in ViewModels for observable state
+    - Implement `EnvironmentObject` for global state when appropriate
+    - Use `@AppStorage` for persisting user preferences
+
+12. **State Updates**
+    - Perform state updates on appropriate threads
+    - Use `DispatchQueue.main.async` when updating UI state from background threads
+    - Batch UI updates when possible to improve performance
+    - Implement debouncing for frequent state changes
+
+13. **Data Flow**
+    - Use `Binding` to create two-way connections between views
+    - Implement clean data passing using environment objects for global state
+    - Use view models as mediators between models and views
+    - Document the flow of data throughout the application
+
+## Audio-Specific UI Guidelines
+
+14. **Waveform Visualization**
+    - Implement efficient waveform rendering using SwiftUI shapes when possible
+    - Fall back to AppKit for complex or performance-intensive waveforms
+    - Cache visualization data to prevent recalculation
+    - Support different zoom levels and time scales
+
+15. **Control Surfaces**
+    - Create reusable control components (knobs, faders, buttons)
+    - Implement proper touch/mouse handling for controls
+    - Support keyboard shortcuts for common actions
+    - Ensure controls provide appropriate feedback
+
+16. **Metering**
+    - Update meters at appropriate intervals (not every audio buffer)
+    - Implement peak hold and decay for professional metering
+    - Use efficient drawing techniques for level meters
+    - Provide both peak and RMS metering options
+
+## Performance Considerations
+
+17. **View Efficiency**
+    - Limit view hierarchy depth to improve performance
+    - Use `@ViewBuilder` to construct complex views programmatically
+    - Implement `Equatable` for custom views to optimize diffing
+    - Use `LazyVStack` and `LazyHStack` for large collections
+
+18. **SwiftUI Rendering**
+    - Monitor and optimize SwiftUI rendering performance
+    - Use the Time Profiler to identify bottlenecks
+    - Cache expensive computations outside the view body
+    - Use `drawingGroup()` for complex views that can benefit from Metal acceleration
+
+19. **Background Processing**
+    - Move intensive operations off the main thread
+    - Use Swift concurrency (async/await) for background tasks
+    - Update UI only when necessary
+    - Implement proper cancellation for long-running tasks
+
+## Accessibility
+
+20. **Accessibility Support**
+    - Provide appropriate accessibility labels and hints
+    - Support VoiceOver navigation
+    - Implement keyboard navigation throughout the application
+    - Test with accessibility tools regularly
+
+## Testing
+
+21. **UI Testing**
+    - Write UI tests for critical user flows
+    - Create preview providers for all SwiftUI views
+    - Test different window sizes and states
+    - Use snapshot testing for visual regression testing
+
+22. **Platform-Specific Testing**
+    - Test on different macOS versions
+    - Verify behavior with different system settings
+    - Test with various input devices (mouse, trackpad, keyboard)
+    - Verify performance on target hardware profiles

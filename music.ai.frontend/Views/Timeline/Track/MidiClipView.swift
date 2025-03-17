@@ -87,7 +87,7 @@ struct MidiClipView: View {
             .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
             .contentShape(Rectangle()) // Ensure the entire area is clickable
             .onTapGesture {
-                print("Tap detected directly on MidiClipView")
+                // print("Tap detected directly on MidiClipView")
                 selectThisClip()
             }
             .onHover { hovering in
@@ -96,11 +96,11 @@ struct MidiClipView: View {
                     // Change cursor based on whether the clip is selected
                     if isSelected {
                         NSCursor.openHand.set()
-                        //                        print("Hovering over selected clip: \(clip.name) - showing open hand cursor")
+                        // print("Hovering over selected clip: \(clip.name) - showing open hand cursor")
                     } else {
                         NSCursor.pointingHand.set()
                     }
-                    //                    print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
+                    // print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
                 } else if !isDragging {
                     NSCursor.arrow.set()
                 }
@@ -109,11 +109,11 @@ struct MidiClipView: View {
             .highPriorityGesture(
                 DragGesture(minimumDistance: 5) // Require a minimum drag distance to start
                     .onChanged { value in
-                        print("🔍 HIGH PRIORITY MIDI DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
+                        // print("🔍 HIGH PRIORITY MIDI DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // If the clip isn't selected yet, select it first
                         if !isSelected {
-                            print("🔍 HIGH PRIORITY MIDI DRAG: Clip not selected, selecting now")
+                            // print("🔍 HIGH PRIORITY MIDI DRAG: Clip not selected, selecting now")
                             selectThisClip()
                         }
                         
@@ -123,7 +123,7 @@ struct MidiClipView: View {
                             dragStartLocation = value.startLocation
                             isDragging = true
                             NSCursor.closedHand.set()
-                            print("🔍 HIGH PRIORITY MIDI DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat) - Start location: \(dragStartLocation)")
+                            // print("🔍 HIGH PRIORITY MIDI DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat) - Start location: \(dragStartLocation)")
                         }
                         
                         // Calculate the drag distance in beats directly from the translation
@@ -138,7 +138,7 @@ struct MidiClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
-                        print("🔄 HIGH PRIORITY MIDI DRAG UPDATE: Clip \(clip.name) - Current position: \(clip.startBeat) - Preview position: \(finalPosition) - Translation: \(value.translation) - Distance in beats: \(dragDistanceInBeats)")
+                        // print("🔄 HIGH PRIORITY MIDI DRAG UPDATE: Clip \(clip.name) - Current position: \(clip.startBeat) - Preview position: \(finalPosition) - Translation: \(value.translation) - Distance in beats: \(dragDistanceInBeats)")
                         
                         // Update the selection to preview the new position
                         // This will show where the clip will end up without moving it
@@ -146,15 +146,15 @@ struct MidiClipView: View {
                         state.updateSelection(to: finalPosition + clip.duration)
                     }
                     .onEnded { value in
-                        print("✅ HIGH PRIORITY MIDI DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
+                        // print("✅ HIGH PRIORITY MIDI DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // Only process if we were actually dragging
                         guard isDragging else {
-                            print("❌ HIGH PRIORITY MIDI DRAG END: Not dragging, ignoring")
+                            // print("❌ HIGH PRIORITY MIDI DRAG END: Not dragging, ignoring")
                             return
                         }
                         
-                        print("✅ HIGH PRIORITY MIDI DRAG ENDED: Clip \(clip.name) - Translation: \(value.translation)")
+                        // print("✅ HIGH PRIORITY MIDI DRAG ENDED: Clip \(clip.name) - Translation: \(value.translation)")
                         
                         // Calculate the final drag distance directly from the translation
                         let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
@@ -168,14 +168,14 @@ struct MidiClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
-                        print("📊 HIGH PRIORITY MIDI DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition) - Distance in beats: \(dragDistanceInBeats)")
+                        // print("📊 HIGH PRIORITY MIDI DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition) - Distance in beats: \(dragDistanceInBeats)")
                         
                         // Only move if the position actually changed
                         if abs(finalPosition - clip.startBeat) > 0.001 {
-                            print("🔄 MOVING MIDI CLIP: Clip \(clip.name) from \(clip.startBeat) to \(finalPosition)")
+                            // print("🔄 MOVING MIDI CLIP: Clip \(clip.name) from \(clip.startBeat) to \(finalPosition)")
                             
                             // Move the clip to the new position using the MIDI view model
-                            print("📞 CALLING MIDI VIEW MODEL: moveMidiClip(trackId: \(track.id), clipId: \(clip.id), newStartBeat: \(finalPosition))")
+                            // print("📞 CALLING MIDI VIEW MODEL: moveMidiClip(trackId: \(track.id), clipId: \(clip.id), newStartBeat: \(finalPosition))")
                             let success = midiViewModel.moveMidiClip(
                                 trackId: track.id,
                                 clipId: clip.id,
@@ -183,20 +183,20 @@ struct MidiClipView: View {
                             )
                             
                             if success {
-                                print("✅ MIDI MOVE SUCCESS: Clip \(clip.name) moved to \(finalPosition)")
+                                // print("✅ MIDI MOVE SUCCESS: Clip \(clip.name) moved to \(finalPosition)")
                                 
                                 // Update the selection to match the new clip position
                                 state.startSelection(at: finalPosition, trackId: track.id)
                                 state.updateSelection(to: finalPosition + clip.duration)
                             } else {
-                                print("❌ MIDI MOVE FAILED: Could not move clip \(clip.name) to \(finalPosition)")
+                                // print("❌ MIDI MOVE FAILED: Could not move clip \(clip.name) to \(finalPosition)")
                                 
                                 // Reset the selection to the original clip position
                                 state.startSelection(at: clip.startBeat, trackId: track.id)
                                 state.updateSelection(to: clip.endBeat)
                             }
                         } else {
-                            print("ℹ️ MIDI NO MOVE NEEDED: Clip \(clip.name) position unchanged")
+                            // print("ℹ️ MIDI NO MOVE NEEDED: Clip \(clip.name) position unchanged")
                             
                             // If position didn't change, reset selection to current clip position
                             state.startSelection(at: clip.startBeat, trackId: track.id)
@@ -227,7 +227,7 @@ struct MidiClipView: View {
                         // Check if this is a right-click (secondary click)
                         if let event = NSApp.currentEvent, event.type == .rightMouseUp {
                             // First select the clip
-                            print("Right-click detected on MidiClipView")
+                            // print("Right-click detected on MidiClipView")
                             selectThisClip()
                         }
                     }
@@ -245,7 +245,7 @@ struct MidiClipView: View {
                 Divider()
                 
                 Button("Edit Notes") {
-                    print("Edit notes functionality will be implemented later")
+                    // print("Edit notes functionality will be implemented later")
                 }
             }
         }

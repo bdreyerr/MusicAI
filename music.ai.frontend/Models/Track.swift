@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-enum TrackType {
+enum TrackType: Equatable {
     case audio
     case midi
     case instrument
@@ -41,7 +41,7 @@ enum TrackType {
     }
 }
 
-struct Track: Identifiable {
+struct Track: Identifiable, Equatable {
     let id = UUID()
     var name: String
     var type: TrackType
@@ -178,6 +178,48 @@ struct Track: Identifiable {
         for clip in audioClips {
             // If the new clip overlaps with an existing clip, return false
             if (startBeat < clip.endBeat && endBeat > clip.startBeat) {
+                return false
+            }
+        }
+        
+        return true
+    }
+    
+    // MARK: - Equatable
+    
+    static func == (lhs: Track, rhs: Track) -> Bool {
+        // Compare the basic properties
+        guard lhs.id == rhs.id &&
+              lhs.name == rhs.name &&
+              lhs.type == rhs.type &&
+              lhs.isMuted == rhs.isMuted &&
+              lhs.isSolo == rhs.isSolo &&
+              lhs.isArmed == rhs.isArmed &&
+              lhs.isEnabled == rhs.isEnabled &&
+              lhs.volume == rhs.volume &&
+              lhs.pan == rhs.pan &&
+              lhs.height == rhs.height &&
+              lhs.midiClips.count == rhs.midiClips.count &&
+              lhs.audioClips.count == rhs.audioClips.count else {
+            return false
+        }
+        
+        // Compare the MIDI clips
+        for (index, lhsClip) in lhs.midiClips.enumerated() {
+            let rhsClip = rhs.midiClips[index]
+            if lhsClip.id != rhsClip.id ||
+               lhsClip.startBeat != rhsClip.startBeat ||
+               lhsClip.duration != rhsClip.duration {
+                return false
+            }
+        }
+        
+        // Compare the audio clips
+        for (index, lhsClip) in lhs.audioClips.enumerated() {
+            let rhsClip = rhs.audioClips[index]
+            if lhsClip.id != rhsClip.id ||
+               lhsClip.startBeat != rhsClip.startBeat ||
+               lhsClip.duration != rhsClip.duration {
                 return false
             }
         }

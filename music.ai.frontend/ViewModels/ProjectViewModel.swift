@@ -10,6 +10,9 @@ class ProjectViewModel: ObservableObject {
     @Published var tracks: [Track] = Track.samples
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
     
+    // Performance optimization settings
+    @Published var performanceMode: PerformanceMode = .balanced
+    
     // Reference to the timeline state
     var timelineState: TimelineStateViewModel? = nil
     
@@ -49,6 +52,67 @@ class ProjectViewModel: ObservableObject {
         tracks.first { $0.id == selectedTrackId }
     }
     
+    // Performance mode enum
+    enum PerformanceMode {
+        case quality    // Prioritize visual quality over performance
+        case balanced   // Balance between quality and performance
+        case performance // Prioritize performance over visual quality
+        
+        // UI update frequency in Hz based on performance mode
+        var uiUpdateFrequency: Double {
+            switch self {
+            case .quality:
+                return 30.0 // 30 Hz (smoother but more CPU intensive)
+            case .balanced:
+                return 15.0 // 15 Hz (good balance)
+            case .performance:
+                return 10.0 // 10 Hz (less smooth but better performance)
+            }
+        }
+        
+        // Playback timer frequency in Hz based on performance mode
+        var playbackTimerFrequency: Double {
+            switch self {
+            case .quality:
+                return 60.0 // 60 Hz (more accurate timing)
+            case .balanced:
+                return 60.0 // 60 Hz (accurate timing)
+            case .performance:
+                return 30.0 // 30 Hz (less accurate but better performance)
+            }
+        }
+    }
+    
+    // Toggle performance mode
+    func togglePerformanceMode() {
+        switch performanceMode {
+        case .quality:
+            performanceMode = .balanced
+        case .balanced:
+            performanceMode = .performance
+        case .performance:
+            performanceMode = .quality
+        }
+        
+        // If we're playing, restart the playback timer with the new settings
+        if isPlaying {
+            stopPlaybackTimer()
+            startPlaybackTimer()
+        }
+    }
+    
+    // Get the current performance mode name
+    func performanceModeName() -> String {
+        switch performanceMode {
+        case .quality:
+            return "Quality"
+        case .balanced:
+            return "Balanced"
+        case .performance:
+            return "Performance"
+        }
+    }
+    
     // Convert beat to bar and beat display (1-indexed)
     func barAndBeat(fromBeat beat: Double) -> (Int, Double) {
         let bar = Int(beat) / timeSignatureBeats + 1
@@ -69,30 +133,63 @@ class ProjectViewModel: ObservableObject {
         if !isPlaying {
             if let timelineState = findTimelineState(), timelineState.selectionActive {
                 let (start, _) = timelineState.normalizedSelectionRange
+                
+                // Use our improved seekToBeat method
+                // We don't need to worry about playback state here since we're not playing yet
                 seekToBeat(start)
             }
-        }
-        
-        isPlaying.toggle()
-        
-        // For demo purposes, increment the currentBeat when playing
-        if isPlaying {
-            // This would be handled by the audio engine in a real app
+            
+            // Start playback
+            isPlaying = true
             startPlaybackTimer()
         } else {
+            // Stop playback
+            isPlaying = false
             stopPlaybackTimer()
         }
     }
     
     // Rewind to beginning
     func rewind() {
+        // Store the current playback state
+        let wasPlaying = isPlaying
+        
+        // If currently playing, stop playback first
+        if wasPlaying {
+            stopPlaybackTimer()
+        }
+        
+        // Reset position to beginning
         currentBeat = 0.0
+        internalBeatPosition = 0.0
+        
+        // If it was playing before, restart playback from the beginning
+        if wasPlaying {
+            startPlaybackTimer()
+        }
     }
     
     // Seek to a specific beat position
     func seekToBeat(_ beat: Double) {
+        // Store the current playback state
+        let wasPlaying = isPlaying
+        
+        // If currently playing, stop the playback timer temporarily
+        if wasPlaying {
+            stopPlaybackTimer()
+        }
+        
         // Ensure beat is not negative
-        currentBeat = max(0, beat)
+        let targetBeat = max(0, beat)
+        
+        // Update both the visible position and the internal position tracker
+        currentBeat = targetBeat
+        internalBeatPosition = targetBeat
+        
+        // If it was playing before, restart playback from the new position
+        if wasPlaying {
+            startPlaybackTimer()
+        }
         
         // In a real app, you would also update the audio engine's playback position here
         // For example: audioEngine.seekToPosition(currentBeat)
@@ -118,6 +215,9 @@ class ProjectViewModel: ObservableObject {
         if tracks.count == 1 {
             selectedTrackId = newTrack.id
         }
+        
+        // Update the timeline content width
+        updateTimelineContentWidth()
     }
     
     // Remove a track
@@ -137,6 +237,9 @@ class ProjectViewModel: ObservableObject {
                 selectedTrackId = nil
             }
         }
+        
+        // Update the timeline content width
+        updateTimelineContentWidth()
     }
     
     // Update a track
@@ -207,30 +310,73 @@ class ProjectViewModel: ObservableObject {
         print("📢 PROJECT VM: Notifying observers of track update")
         objectWillChange.send()
         print("📢 PROJECT VM: Observers notified")
+        
+        // Update the timeline content width if needed
+        updateTimelineContentWidth()
     }
     
     // MARK: - Private
     
     private var playbackTimer: Timer?
+    private var internalBeatPosition: Double = 0.0
+    private var lastUIUpdateTime: Date = Date()
     
     private func startPlaybackTimer() {
-        // Update position 60 times per second for smooth playhead movement
-        playbackTimer = Timer.scheduledTimer(withTimeInterval: 1/60, repeats: true) { [weak self] _ in
+        // Make sure isPlaying is set to true
+        isPlaying = true
+        
+        // Store the current beat position in our internal tracker
+        internalBeatPosition = currentBeat
+        lastUIUpdateTime = Date()
+        
+        // Get the timer frequency from the performance mode
+        let timerFrequency = performanceMode.playbackTimerFrequency
+        let updateFrequency = performanceMode.uiUpdateFrequency
+        
+        // Use a high precision timer for internal beat tracking
+        // but limit UI updates based on performance mode
+        playbackTimer = Timer.scheduledTimer(withTimeInterval: 1/timerFrequency, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             
             // Calculate how much to increment based on tempo
-            // At 60 BPM, we advance 1 beat per second
-            // At 120 BPM, we advance 2 beats per second
             let beatsPerSecond = self.tempo / 60.0
-            let increment = beatsPerSecond / 60.0 // For 60 fps
+            let increment = beatsPerSecond / timerFrequency
             
-            self.currentBeat += increment
+            // Update internal position always for accurate timing
+            self.internalBeatPosition += increment
+            
+            // Only update the UI at the rate specified by the performance mode
+            let now = Date()
+            if now.timeIntervalSince(self.lastUIUpdateTime) >= 1/updateFrequency {
+                // Simple update strategy - always update but at different rates
+                // Check if we should use a reduced update rate
+                let shouldUseReducedRate = self.findTimelineState()?.isScrolling == true
+                
+                // Use a reduced update rate during scrolling
+                if shouldUseReducedRate {
+                    if now.timeIntervalSince(self.lastUIUpdateTime) >= 1/10.0 {
+                        self.currentBeat = self.internalBeatPosition
+                        self.lastUIUpdateTime = now
+                    }
+                } else {
+                    // Normal update when not scrolling
+                    self.currentBeat = self.internalBeatPosition
+                    self.lastUIUpdateTime = now
+                }
+            }
         }
     }
     
     private func stopPlaybackTimer() {
+        // Stop the timer
         playbackTimer?.invalidate()
         playbackTimer = nil
+        
+        // Make sure isPlaying is set to false
+        isPlaying = false
+        
+        // Ensure the published position matches our internal position
+        currentBeat = internalBeatPosition
     }
     
     // Helper method to find the TimelineState if it exists
@@ -238,5 +384,31 @@ class ProjectViewModel: ObservableObject {
         // Simply return the timelineState property
         // This is now properly set in TimelineView's onAppear
         return timelineState
+    }
+    
+    // Update the timeline content width based on current tracks and clips
+    private func updateTimelineContentWidth() {
+        // Only update if we have a reference to the timeline state
+        guard let timelineState = findTimelineState() else { 
+            print("⚠️ PROJECT VM: Cannot update timeline width - no timeline state reference")
+            return 
+        }
+        
+        print("📏 PROJECT VM: Updating timeline content width based on current tracks and clips")
+        
+        // Force a UI update by triggering a small change in the zoom level
+        // This will cause the timeline to recalculate its content width
+        let currentZoom = timelineState.zoomLevel
+        
+        // Apply a small change to trigger recalculation
+        DispatchQueue.main.async {
+            timelineState.zoomLevel = currentZoom + 0.001
+            
+            // Reset to original zoom level after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                timelineState.zoomLevel = currentZoom
+                print("📏 PROJECT VM: Timeline content width updated")
+            }
+        }
     }
 } 

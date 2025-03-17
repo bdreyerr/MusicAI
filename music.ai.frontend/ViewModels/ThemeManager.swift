@@ -37,6 +37,16 @@ class ThemeManager: ObservableObject {
     
     // MARK: - Color Properties
     
+    // Accent color for selections and highlights
+    var accentColor: Color {
+        switch currentTheme {
+        case .light:
+            return Color.blue
+        case .dark:
+            return Color.blue.opacity(0.8)
+        }
+    }
+    
     // Background colors
     var backgroundColor: Color {
         switch currentTheme {
@@ -128,6 +138,28 @@ class ThemeManager: ObservableObject {
             return Color.gray.opacity(0.1)
         case .dark:
             return Color.white.opacity(0.08)
+        }
+    }
+    
+    // New property for grid lines
+    var gridLineColor: Color {
+        switch currentTheme {
+        case .light:
+            return Color.black.opacity(0.4)
+        case .dark:
+            return Color.white.opacity(0.4)
+        }
+    }
+    
+    // Background color specifically for the ruler
+    var rulerBackgroundColor: Color {
+        switch currentTheme {
+        case .light:
+            // Darker than tertiaryBackgroundColor in light mode
+            return Color(white: 0.8)
+        case .dark:
+            // Lighter than tertiaryBackgroundColor in dark mode
+            return Color(white: 0.35)
         }
     }
 } 

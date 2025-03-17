@@ -17,126 +17,134 @@ struct TimelineRuler: View {
     private let midBarDotRadius: CGFloat = 1.5 // Radius for mid-bar dots when zoomed out
     
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            // Ruler background - solid color
-            Rectangle()
-                .fill(themeManager.tertiaryBackgroundColor)
-                .frame(width: width, height: height)
+        Canvas { context, size in
+            // Calculate grid dimensions
+            let pixelsPerBeat = state.effectivePixelsPerBeat
+            let pixelsPerBar = pixelsPerBeat * Double(projectViewModel.timeSignatureBeats)
             
-            // Ticks, dots and bar numbers
-            Canvas { context, size in
-                // Calculate visible time range
-                let pixelsPerBeat = state.effectivePixelsPerBeat
-                let pixelsPerBar = pixelsPerBeat * Double(projectViewModel.timeSignatureBeats)
+            // Calculate visible range based on scroll offset
+            let scrollX = state.scrollOffset.x
+            let startX = scrollX
+            let endX = startX + size.width
+            
+            // Calculate the visible bar range
+            let startBar = max(0, Int(floor(startX / CGFloat(pixelsPerBar))))
+            
+            // Calculate the maximum bar index based on content width
+            let maxBarIndex = Int(ceil(width / CGFloat(pixelsPerBar)))
+            let endBar = min(maxBarIndex, Int(ceil(endX / CGFloat(pixelsPerBar))) + 1)
+            
+            // Determine if we're zoomed out (based on pixels per bar)
+            let isZoomedOut = pixelsPerBar < 40
+            let isVeryZoomedOut = pixelsPerBar < 20
+            let isExtremelyZoomedOut = pixelsPerBar < 10
+            
+            // Minimum pixel distance between bar numbers to prevent overcrowding
+            let minPixelsBetweenBarNumbers: CGFloat = 60
+            
+            // Use simplified rendering during playback
+            let useSimplifiedRendering = projectViewModel.isPlaying
+            
+            // Skip factor for rendering based on zoom level and playback state
+            let skipFactor = isExtremelyZoomedOut ? 8 : (isVeryZoomedOut ? 4 : (isZoomedOut ? 2 : 1))
+            
+            // Minimum pixel distance between grid lines to prevent overcrowding
+            let minPixelsBetweenLines: CGFloat = 15
+            
+            // Draw bar lines and numbers
+            for barIndex in stride(from: startBar, to: endBar, by: skipFactor) {
+                let xPosition = CGFloat(Double(barIndex) * pixelsPerBar)
                 
-                // Number of divisions visible
-                let visibleBars = 100 // Match the content width calculation
+                // Skip if the bar is outside the viewport
+                if xPosition + CGFloat(pixelsPerBar) < scrollX || xPosition > scrollX + size.width {
+                    continue
+                }
                 
-                // Get theme colors for drawing
-                let textColor = themeManager.primaryTextColor.opacity(0.6) // Lighter text for bar numbers
-                let barLineColor = themeManager.currentTheme == .light ? 
-                    Color.black.opacity(0.5) : Color.white.opacity(0.5)
-                let dotColor = themeManager.currentTheme == .light ? 
-                    Color.black.opacity(0.3) : Color.white.opacity(0.3)
+                // Determine if we should show this bar's line and number based on zoom level
+                let showBarLine: Bool
+                if isExtremelyZoomedOut {
+                    showBarLine = barIndex % 2 == 0
+                } else if isVeryZoomedOut {
+                    showBarLine = barIndex % 4 == 0
+                } else if isZoomedOut {
+                    showBarLine = barIndex % 2 == 0
+                } else {
+                    showBarLine = true
+                }
                 
-                // Determine if we're zoomed out (based on pixels per bar)
-                let isZoomedOut = pixelsPerBar < 20 // Lower threshold for "zoomed out" state (was 40)
+                // Determine if we should show the bar number
+                let showBarNumber = showBarLine && 
+                                   (pixelsPerBar >= minPixelsBetweenBarNumbers || barIndex % 4 == 0) &&
+                                   state.shouldShowBarNumber(for: barIndex)
                 
-                // Draw bar ticks, horizontal markers, and numbers
-                for barIndex in 0..<visibleBars {
-                    let xPosition = CGFloat(Double(barIndex) * pixelsPerBar)
+                // Draw bar tick - shorter vertical line (only at appropriate intervals when zoomed out)
+                if showBarLine {
+                    var path = Path()
+                    path.move(to: CGPoint(x: xPosition, y: size.height - 8))
+                    path.addLine(to: CGPoint(x: xPosition, y: size.height))
                     
-                    // Determine if we should show this bar's line and number based on zoom level
-                    let showBarLine = !isZoomedOut || barIndex % 4 == 0
-                    let showBarNumber = state.shouldShowBarNumber(for: barIndex) && 
-                                       (!isZoomedOut || (barIndex % 4 == 0))
+                    context.stroke(
+                        path,
+                        with: .color(themeManager.primaryTextColor),
+                        lineWidth: 1.0
+                    )
+                }
+                
+                // Draw bar number (only at appropriate intervals)
+                if showBarNumber {
+                    let text = Text("\(barIndex + 1)")
+                        .font(.system(size: 10, weight: .regular))
+                        .foregroundColor(themeManager.primaryTextColor)
                     
-                    // Draw bar tick - shorter vertical line (only at appropriate intervals when zoomed out)
-                    if showBarLine {
-                        var barTickPath = Path()
-                        barTickPath.move(to: CGPoint(x: xPosition, y: size.height))
-                        barTickPath.addLine(to: CGPoint(x: xPosition, y: size.height - barTickHeight))
-                        context.stroke(barTickPath, with: .color(barLineColor), lineWidth: barTickWidth)
+                    context.draw(text, at: CGPoint(x: xPosition + 4, y: 4))
+                }
+                
+                // Only draw beat ticks if we're not extremely zoomed out and have enough space between lines
+                if !isExtremelyZoomedOut && pixelsPerBeat >= minPixelsBetweenLines {
+                    // Draw beat ticks
+                    for beat in 1..<projectViewModel.timeSignatureBeats {
+                        let beatX = xPosition + CGFloat(Double(beat) * pixelsPerBeat)
                         
-                        // Draw horizontal marker at the top of the bar tick
-                        var horizontalMarkerPath = Path()
-                        horizontalMarkerPath.move(to: CGPoint(x: xPosition, y: size.height - barTickHeight))
-                        horizontalMarkerPath.addLine(to: CGPoint(x: xPosition + horizontalMarkerWidth, y: size.height - barTickHeight))
-                        context.stroke(horizontalMarkerPath, with: .color(barLineColor), lineWidth: horizontalMarkerHeight)
-                    }
-                    // When zoomed out, draw dots at increments of 2 bars (if not already showing a line)
-                    else if isZoomedOut && barIndex % 2 == 0 {
-                        let dotRect = CGRect(
-                            x: xPosition - midBarDotRadius,
-                            y: size.height - midBarDotRadius * 2,
-                            width: midBarDotRadius * 2,
-                            height: midBarDotRadius * 2
+                        // Skip if the beat is outside the viewport
+                        if beatX < scrollX || beatX > scrollX + size.width {
+                            continue
+                        }
+                        
+                        // Draw beat tick - shorter than bar ticks
+                        var beatPath = Path()
+                        beatPath.move(to: CGPoint(x: beatX, y: size.height - 5))
+                        beatPath.addLine(to: CGPoint(x: beatX, y: size.height))
+                        
+                        context.stroke(
+                            beatPath,
+                            with: .color(themeManager.secondaryTextColor),
+                            lineWidth: 0.5
                         )
-                        var dotPath = Path(ellipseIn: dotRect)
-                        context.fill(dotPath, with: .color(dotColor.opacity(0.7)))
                     }
+                }
+            }
+            
+            // Draw the playhead position indicator
+            if projectViewModel.isPlaying || true { // Always draw the playhead
+                let playheadX = CGFloat(projectViewModel.currentBeat * pixelsPerBeat)
+                
+                // Only draw if visible in the viewport
+                if playheadX >= scrollX && playheadX <= scrollX + size.width {
+                    var playheadPath = Path()
+                    playheadPath.move(to: CGPoint(x: playheadX, y: 0))
+                    playheadPath.addLine(to: CGPoint(x: playheadX, y: size.height))
                     
-                    // Draw bar number (1-indexed) with lighter, smaller text
-                    if showBarNumber {
-                        let barText = Text("\(barIndex + 1)")
-                            .font(.system(size: 9, weight: .light))
-                            .foregroundColor(textColor)
-                        context.draw(barText, at: CGPoint(x: xPosition + horizontalMarkerWidth + 2, y: size.height - barTickHeight - 4))
-                    }
-                    
-                    // Draw beat dots within this bar (only if not zoomed out)
-                    if !isZoomedOut && state.showQuarterNotes {
-                        for beat in 1..<projectViewModel.timeSignatureBeats {
-                            let beatX = xPosition + CGFloat(Double(beat) * pixelsPerBeat)
-                            let dotRect = CGRect(
-                                x: beatX - dotRadius,
-                                y: size.height - dotRadius * 2,
-                                width: dotRadius * 2,
-                                height: dotRadius * 2
-                            )
-                            var dotPath = Path(ellipseIn: dotRect)
-                            context.fill(dotPath, with: .color(dotColor))
-                        }
-                    }
-                    
-                    // Draw eighth note dots if zoom level permits
-                    if !isZoomedOut && state.showEighthNotes {
-                        for beat in 0..<(projectViewModel.timeSignatureBeats * 2) {
-                            let eighthX = xPosition + CGFloat(Double(beat) * pixelsPerBeat / 2)
-                            if eighthX.truncatingRemainder(dividingBy: CGFloat(pixelsPerBeat)) != 0 {
-                                let dotRect = CGRect(
-                                    x: eighthX - dotRadius * 0.8,
-                                    y: size.height - dotRadius * 1.6,
-                                    width: dotRadius * 1.6,
-                                    height: dotRadius * 1.6
-                                )
-                                var dotPath = Path(ellipseIn: dotRect)
-                                context.fill(dotPath, with: .color(dotColor.opacity(0.8)))
-                            }
-                        }
-                    }
-                    
-                    // Draw sixteenth note dots if zoom level permits
-                    if !isZoomedOut && state.showSixteenthNotes {
-                        for beat in 0..<(projectViewModel.timeSignatureBeats * 4) {
-                            let sixteenthX = xPosition + CGFloat(Double(beat) * pixelsPerBeat / 4)
-                            if sixteenthX.truncatingRemainder(dividingBy: CGFloat(pixelsPerBeat / 2)) != 0 &&
-                               sixteenthX.truncatingRemainder(dividingBy: CGFloat(pixelsPerBeat)) != 0 {
-                                let dotRect = CGRect(
-                                    x: sixteenthX - dotRadius * 0.6,
-                                    y: size.height - dotRadius * 1.2,
-                                    width: dotRadius * 1.2,
-                                    height: dotRadius * 1.2
-                                )
-                                var dotPath = Path(ellipseIn: dotRect)
-                                context.fill(dotPath, with: .color(dotColor.opacity(0.6)))
-                            }
-                        }
-                    }
+                    context.stroke(
+                        playheadPath,
+                        with: .color(.blue),
+                        lineWidth: 1.0
+                    )
                 }
             }
         }
         .frame(height: height)
+        .background(themeManager.rulerBackgroundColor)
+        .drawingGroup(opaque: false) // Use Metal acceleration for better performance
         // Add a tap gesture to clear the selection and move the playhead
         .contentShape(Rectangle())
         .onTapGesture { location in
@@ -178,21 +186,18 @@ struct TimelineRuler: View {
         } else if state.showQuarterNotes {
             // Snap to quarter notes (1 beat)
             gridDivision = 1.0
+        } else if state.showHalfNotes {
+            // Snap to half notes (2 beats)
+            gridDivision = 2.0
         } else if isZoomedOut {
-            // When zoomed out all the way, snap to 2-bar increments or 4-bar increments
+            // When zoomed out all the way, snap to 2-bar increments
             let beatsPerBar = Double(projectViewModel.timeSignatureBeats)
             
-            // Calculate the nearest 2-bar and 4-bar positions
+            // Calculate the nearest 2-bar position
             let barPosition = rawBeatPosition / beatsPerBar
             let nearestTwoBarIndex = round(barPosition / 2.0) * 2.0
-            let nearestFourBarIndex = round(barPosition / 4.0) * 4.0
             
-            // Determine which is closer: the nearest 2-bar or 4-bar position
-            let distanceToTwoBar = abs(barPosition - nearestTwoBarIndex)
-            let distanceToFourBar = abs(barPosition - nearestFourBarIndex)
-            
-            let nearestBarIndex = distanceToTwoBar < distanceToFourBar ? nearestTwoBarIndex : nearestFourBarIndex
-            return max(0, nearestBarIndex * beatsPerBar) // Ensure we don't go negative
+            return max(0, nearestTwoBarIndex * beatsPerBar) // Ensure we don't go negative
         } else {
             // When zoomed out but not all the way, snap to bars
             let beatsPerBar = Double(projectViewModel.timeSignatureBeats)

@@ -72,18 +72,49 @@ struct TimelineView: View {
                         // Single ScrollView for vertical scrolling
                         ScrollView(.vertical, showsIndicators: false) {
                             // Use a LazyVStack to ensure views are only created when needed
-                            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                                // Header section with ruler
-                                Section(header: 
-                                    // Header with ruler that stays pinned
-                                    HStack(spacing: 0) {
-                                        // Ruler label area
+                            LazyVStack(spacing: 0) {
+                                // Main content area with tracks and ruler
+                                HStack(spacing: 0) {
+                                    // Left side: Track controls column
+                                    VStack(spacing: 0) {
+                                        // Ruler label area (empty space above track controls)
                                         Rectangle()
-                                            .fill(themeManager.tertiaryBackgroundColor)
+                                            .fill(themeManager.rulerBackgroundColor)
                                             .frame(width: controlsWidth, height: rulerHeight)
                                         
-                                        // Non-scrollable ruler that syncs with tracks
-                                        ZStack(alignment: .topLeading) {
+                                        // Track controls
+                                        ForEach(projectViewModel.tracks) { track in
+                                            TrackControlsView(
+                                                track: track,
+                                                projectViewModel: projectViewModel
+                                            )
+                                            .environmentObject(themeManager)
+                                            .frame(width: controlsWidth)
+                                        }
+                                        
+                                        // Add track button
+                                        Button(action: showAddTrackMenu) {
+                                            HStack {
+                                                Image(systemName: "plus.circle.fill")
+                                                    .foregroundColor(themeManager.primaryTextColor)
+                                                Text("Add Track")
+                                                    .foregroundColor(themeManager.primaryTextColor)
+                                            }
+                                            .padding(8)
+                                            .frame(width: controlsWidth, alignment: .leading)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                        .background(themeManager.secondaryBackgroundColor.opacity(0.3))
+                                        .padding(.top, 4)
+                                        
+                                        Spacer()
+                                    }
+                                    .frame(width: controlsWidth)
+                                    
+                                    // Right side: Horizontal scroll view containing both ruler and tracks
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        VStack(spacing: 0) {
+                                            // Ruler at the top
                                             TimelineRuler(
                                                 state: timelineState,
                                                 projectViewModel: projectViewModel,
@@ -111,7 +142,6 @@ struct TimelineView: View {
                                                         timelineState.zoomLevel = max(0.146, min(2.0, newZoom))
                                                         
                                                         // Ensure the playhead stays at the correct beat position
-                                                        // This is redundant but ensures the position is updated
                                                         projectViewModel.seekToBeat(currentBeat)
                                                         
                                                         if dragDelta < 0 {
@@ -134,62 +164,33 @@ struct TimelineView: View {
                                                     NSCursor.arrow.set()
                                                 }
                                             }
-                                            
-                                            // Add the ruler selection indicator
-                                            TimelineRulerSelectionIndicator(
-                                                state: timelineState,
-                                                projectViewModel: projectViewModel,
-                                                height: rulerHeight
+                                            .overlay(
+                                                // Add the ruler selection indicator
+                                                TimelineRulerSelectionIndicator(
+                                                    state: timelineState,
+                                                    projectViewModel: projectViewModel,
+                                                    height: rulerHeight
+                                                )
+                                                .environmentObject(themeManager)
                                             )
-                                            .environmentObject(themeManager)
-                                        }
-                                        // Offset the ruler based on tracks scrolling
-                                        .offset(x: -scrollSyncCoordinator.tracksOffset.x)
-                                        // Clip the ruler to the visible area
-                                        .frame(width: geometry.size.width - controlsWidth, height: rulerHeight, alignment: .leading)
-                                        .clipped()
-                                    }
-                                    .background(themeManager.tertiaryBackgroundColor)
-                                    .frame(height: rulerHeight)
-                                ) {
-                                    HStack(spacing: 0) {
-                                        // Left side: Track controls column
-                                        VStack(spacing: 0) {
-                                            // Track controls
-                                            ForEach(projectViewModel.tracks) { track in
-                                                TrackControlsView(
-                                                    track: track,
+                                            // Add the playhead indicator for the ruler
+                                            .overlay(
+                                                PlayheadIndicator(
+                                                    currentBeat: projectViewModel.currentBeat,
+                                                    state: timelineState,
                                                     projectViewModel: projectViewModel
                                                 )
                                                 .environmentObject(themeManager)
-                                                .frame(width: controlsWidth)
-                                            }
+                                                .frame(height: rulerHeight)
+                                            )
+                                            .frame(height: rulerHeight)
+                                            .background(themeManager.rulerBackgroundColor)
                                             
-                                            // Add track button
-                                            Button(action: showAddTrackMenu) {
-                                                HStack {
-                                                    Image(systemName: "plus.circle.fill")
-                                                        .foregroundColor(themeManager.primaryTextColor)
-                                                    Text("Add Track")
-                                                        .foregroundColor(themeManager.primaryTextColor)
-                                                }
-                                                .padding(8)
-                                                .frame(width: controlsWidth, alignment: .leading)
-                                            }
-                                            .buttonStyle(BorderlessButtonStyle())
-                                            .background(themeManager.secondaryBackgroundColor.opacity(0.3))
-                                            .padding(.top, 4)
-                                            
-                                            Spacer()
-                                        }
-                                        .frame(width: controlsWidth)
-                                        
-                                        // Right side: Single horizontal scroll view for all tracks
-                                        ScrollView(.horizontal, showsIndicators: false) {
-                                            VStack(spacing: 0) {
-                                                // All track content
-                                                ForEach(projectViewModel.tracks) { track in
-                                                    ZStack(alignment: .topLeading) {
+                                            // All track content
+                                            ZStack(alignment: .topLeading) {
+                                                // Track content first (lower z-index)
+                                                VStack(spacing: 0) {
+                                                    ForEach(projectViewModel.tracks) { track in
                                                         TrackView(
                                                             track: track,
                                                             state: timelineState,
@@ -197,82 +198,80 @@ struct TimelineView: View {
                                                             width: calculateContentWidth(geometry: geometry)
                                                         )
                                                         .environmentObject(themeManager)
-                                                        
-                                                        // Playhead indicator for this track
-                                                        PlayheadIndicator(
-                                                            currentBeat: projectViewModel.currentBeat,
-                                                            state: timelineState,
-                                                            track: track,
-                                                            projectViewModel: projectViewModel
-                                                        )
-                                                        .environmentObject(themeManager)
-                                                        .frame(height: track.height)
+                                                        .id("track-\(track.id)") // Add an ID to help with debugging
+                                                        .onAppear {
+                                                            // Debug print to help diagnose playhead visibility
+                                                            print("Track view appeared: \(track.name), isSelected: \(projectViewModel.isTrackSelected(track))")
+                                                        }
                                                     }
+                                                    
+                                                    // Empty space for the add track button area
+                                                    Rectangle()
+                                                        .fill(Color.clear)
+                                                        .frame(height: 40)
+                                                        .padding(.top, 4)
+                                                        // Clear selection when clicking on empty space
+                                                        .onTapGesture {
+                                                            timelineState.clearSelection()
+                                                        }
                                                 }
                                                 
-                                                // Empty space for the add track button area
-                                                Rectangle()
-                                                    .fill(Color.clear)
-                                                    .frame(height: 40)
-                                                    .padding(.top, 4)
-                                                    // Clear selection when clicking on empty space
-                                                    .onTapGesture {
-                                                        timelineState.clearSelection()
-                                                    }
-                                                
-                                                Spacer()
+                                                // Shared playhead on top (higher z-index)
+                                                SharedPlayheadView(
+                                                    projectViewModel: projectViewModel,
+                                                    state: timelineState
+                                                )
+                                                .environmentObject(themeManager)
+                                                .zIndex(1000) // Higher zIndex to ensure playhead is on top
                                             }
-                                            .frame(width: calculateContentWidth(geometry: geometry))
-                                            .background(
-                                                GeometryReader { geo in
-                                                    Color.clear
-                                                        .preference(
-                                                            key: ScrollOffsetPreferenceKey.self,
-                                                            value: CGPoint(
-                                                                x: geo.frame(in: .named(scrollSyncCoordinator.id)).minX * -1,
-                                                                y: geo.frame(in: .named(scrollSyncCoordinator.id)).minY * -1
-                                                            )
+                                            
+                                            Spacer()
+                                        }
+                                        .frame(width: calculateContentWidth(geometry: geometry))
+                                        // Track scroll position for the entire content
+                                        .background(
+                                            GeometryReader { geo in
+                                                Color.clear
+                                                    .preference(
+                                                        key: ScrollOffsetPreferenceKey.self,
+                                                        value: CGPoint(
+                                                            x: geo.frame(in: .named(scrollSyncCoordinator.id)).minX * -1,
+                                                            y: geo.frame(in: .named(scrollSyncCoordinator.id)).minY * -1
                                                         )
-                                                }
-                                            )
-                                            // Add gesture recognizer for right-click
-                                            .background(
-                                                EmptyView()
-                                                    .contentShape(Rectangle())
-                                                    .onTapGesture(count: 1, perform: { _ in })
-                                                    .gesture(
-                                                        DragGesture(minimumDistance: 0)
-                                                            .onEnded { value in
-                                                                // Check if this is a right-click (secondary click)
-                                                                if let event = NSApp.currentEvent, event.type == .rightMouseUp {
-                                                                    showTimelineContextMenu(at: value.location)
-                                                                }
-                                                            }
                                                     )
-                                            )
-                                        }
-                                        .coordinateSpace(name: scrollSyncCoordinator.id)
-                                        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                                            scrollSyncCoordinator.tracksOffset = value
-                                        }
-                                        .frame(width: geometry.size.width - controlsWidth)
+                                            }
+                                        )
+                                        // Add gesture recognizer for right-click
+                                        .background(
+                                            EmptyView()
+                                                .contentShape(Rectangle())
+                                                .onTapGesture(count: 1, perform: { _ in })
+                                                .gesture(
+                                                    DragGesture(minimumDistance: 0)
+                                                        .onEnded { value in
+                                                            // Check if this is a right-click (secondary click)
+                                                            if let event = NSApp.currentEvent, event.type == .rightMouseUp {
+                                                                showTimelineContextMenu(at: value.location)
+                                                            }
+                                                        }
+                                                )
+                                        )
                                     }
-                                    
-                                    // Extra space at the bottom
-                                    Rectangle()
-                                        .fill(Color.clear)
-                                        .frame(height: 100)
-                                        .id("bottom-space")
+                                    .coordinateSpace(name: scrollSyncCoordinator.id)
+                                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+                                        scrollSyncCoordinator.tracksOffset = value
+                                    }
+                                    .frame(width: geometry.size.width - controlsWidth)
                                 }
+                                
+                                // Extra space at the bottom
+                                Rectangle()
+                                    .fill(Color.clear)
+                                    .frame(height: 100)
+                                    .id("bottom-space")
                             }
                         }
                     }
-//                    .onChange(of: projectViewModel.tracks.count) { _ in
-//                        // When tracks are added or removed, scroll to the last track
-//                        withAnimation {
-//                            scrollProxy.scrollTo("bottom-space", anchor: .bottom)
-//                        }
-//                    }
                 }
                 .background(themeManager.backgroundColor)
                 .onAppear {
@@ -298,14 +297,6 @@ struct TimelineView: View {
                     timelineState.clearSelection()
                     print("Clicked on TimelineView background, cleared selection")
                 }
-                
-                // Position indicator for scrubbing - we don't need it since we have the beeat position in controls bar
-//                ScrubPositionIndicator(
-//                    projectViewModel: projectViewModel,
-//                    state: timelineState
-//                )
-//                .padding(.top, 40)
-//                .padding(.trailing, 20)
             }
         }
     }
@@ -315,7 +306,8 @@ struct TimelineView: View {
         let baseWidth = max(
             timelineState.calculateContentWidth(
                 viewWidth: geometry.size.width - controlsWidth,
-                timeSignatureBeats: projectViewModel.timeSignatureBeats
+                timeSignatureBeats: projectViewModel.timeSignatureBeats,
+                tracks: projectViewModel.tracks
             ),
             geometry.size.width - controlsWidth
         )

@@ -53,7 +53,7 @@ struct TrackControlsView: View {
             ZStack(alignment: .top) {
                 // Background
                 Rectangle()
-                    .fill(themeManager.secondaryBackgroundColor)
+                    .fill(track.effectiveBackgroundColor(for: themeManager.currentTheme))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 
                 // Track controls row - aligned at the top
@@ -62,7 +62,7 @@ struct TrackControlsView: View {
                     HStack(spacing: 6) {
                         // Track icon with color
                         Image(systemName: track.type.icon)
-                            .foregroundColor(customColor ?? track.type.color)
+                            .foregroundColor(themeManager.primaryTextColor)
                             .onTapGesture {
                                 showingColorPicker.toggle()
                             }
@@ -128,7 +128,7 @@ struct TrackControlsView: View {
                             updateTrack()
                         }) {
                             Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(isEnabled ? .green : themeManager.secondaryTextColor)
+                                .foregroundColor(isEnabled ? .green : themeManager.primaryTextColor)
                                 .font(.caption)
                         }
                         .buttonStyle(BorderlessButtonStyle())
@@ -165,7 +165,7 @@ struct TrackControlsView: View {
                         }) {
                             Image(systemName: "record.circle")
                                 .font(.caption)
-                                .foregroundColor(isArmed ? .red : themeManager.secondaryTextColor)
+                                .foregroundColor(isArmed ? .red : themeManager.primaryTextColor)
                         }
                         .buttonStyle(BorderlessButtonStyle())
                         .help("Arm Track for Recording")
@@ -176,7 +176,7 @@ struct TrackControlsView: View {
                         }) {
                             Image(systemName: "trash")
                                 .font(.caption)
-                                .foregroundColor(themeManager.secondaryTextColor)
+                                .foregroundColor(themeManager.primaryTextColor)
                         }
                         .buttonStyle(BorderlessButtonStyle())
                         .help("Delete Track")
@@ -200,7 +200,7 @@ struct TrackControlsView: View {
             // Volume slider section
             HStack(spacing: 8) {
                 Image(systemName: "speaker.wave.1")
-                    .foregroundColor(themeManager.secondaryTextColor)
+                    .foregroundColor(themeManager.primaryTextColor)
                     .font(.caption)
                 
                 Slider(value: $volume, in: 0...1) { editing in
@@ -212,14 +212,14 @@ struct TrackControlsView: View {
                 
                 Text("\(Int(volume * 100))%")
                     .font(.caption)
-                    .foregroundColor(themeManager.secondaryTextColor)
+                    .foregroundColor(themeManager.primaryTextColor)
                     .frame(width: 40, alignment: .trailing)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
         }
         .frame(height: currentHeight)
-        .background(themeManager.secondaryBackgroundColor)
+        .background(track.effectiveBackgroundColor(for: themeManager.currentTheme))
         // Add a selection highlight for the entire control area
         .overlay(
             ZStack {
@@ -231,13 +231,13 @@ struct TrackControlsView: View {
                 // Selection highlight for the entire control area
                 if projectViewModel.isTrackSelected(track) {
                     Rectangle()
-                        .fill(track.effectiveColor.opacity(0.15))
+                        .fill(themeManager.accentColor.opacity(0.15))
                         .brightness(0.1)
                         .allowsHitTesting(false)
                     
                     // Selection border
                     Rectangle()
-                        .stroke(track.effectiveColor.opacity(0.9), lineWidth: 1.5)
+                        .stroke(themeManager.accentColor.opacity(0.9), lineWidth: 1.5)
                         .brightness(0.3)
                         .allowsHitTesting(false)
                 }
@@ -258,7 +258,7 @@ struct TrackControlsView: View {
                 .frame(maxWidth: .infinity)
                 .background(
                     isHoveringResizeHandle ? 
-                    themeManager.secondaryBackgroundColor.opacity(0.3) : 
+                    track.effectiveColor.opacity(0.5) : 
                         Color.clear
                 )
                 .onHover { hovering in

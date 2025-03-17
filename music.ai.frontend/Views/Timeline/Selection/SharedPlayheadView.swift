@@ -1,16 +1,15 @@
 import SwiftUI
 
-/// Playhead indicator that shows the current playback position in the timeline
-/// Now used only for the ruler playhead
-struct PlayheadIndicator: View {
-    let currentBeat: Double
-    @ObservedObject var state: TimelineStateViewModel
+/// A shared playhead that spans the entire timeline height
+/// This replaces individual track playheads for better performance
+struct SharedPlayheadView: View {
     @ObservedObject var projectViewModel: ProjectViewModel
+    @ObservedObject var state: TimelineStateViewModel
     @EnvironmentObject var themeManager: ThemeManager
     
     // Computed property for the x-offset based on current beat and zoom level
     private var xOffset: CGFloat {
-        CGFloat(currentBeat) * CGFloat(state.effectivePixelsPerBeat)
+        CGFloat(projectViewModel.currentBeat) * CGFloat(state.effectivePixelsPerBeat)
     }
     
     // Check if the playhead is visible in the current viewport
@@ -23,29 +22,27 @@ struct PlayheadIndicator: View {
     }
     
     var body: some View {
-        // Simple conditional rendering
-        if isVisibleInViewport {
+        // Only render if visible and not scrolling
+        if isVisibleInViewport && !state.isScrolling {
             Rectangle()
                 .fill(Color.blue)
                 .frame(width: 1.0)
                 .frame(maxHeight: .infinity)
                 .offset(x: xOffset)
-                .zIndex(100) // Ensure it's above everything else
+                .zIndex(1000) // Ensure it's above everything else
                 // Only animate position changes when NOT playing to improve performance
                 .animation(projectViewModel.isPlaying ? nil : .interactiveSpring(response: 0.3, dampingFraction: 0.7), value: state.zoomLevel)
         } else {
-            // Return an empty view when the playhead shouldn't be shown
             EmptyView()
         }
     }
 }
 
 #Preview {
-    PlayheadIndicator(
-        currentBeat: 4.0, 
-        state: TimelineStateViewModel(),
-        projectViewModel: ProjectViewModel()
+    SharedPlayheadView(
+        projectViewModel: ProjectViewModel(),
+        state: TimelineStateViewModel()
     )
     .environmentObject(ThemeManager())
-    .frame(height: 200)
+    .frame(height: 500)
 } 

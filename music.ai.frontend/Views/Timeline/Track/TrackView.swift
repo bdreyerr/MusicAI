@@ -48,114 +48,101 @@ struct TrackView: View {
             trackBackground
             
             // Beat/bar divisions
-            TrackGridView(
+            trackGridLines
+            
+            // Track content based on type
+            Group {
+                if track.type == .midi {
+                    // MIDI clips
+                    ForEach(track.midiClips) { clip in
+                        MidiClipView(
+                            clip: clip,
+                            track: track,
+                            state: state,
+                            projectViewModel: projectViewModel
+                        )
+                        .environmentObject(themeManager)
+                    }
+                } else if track.type == .audio {
+                    // Audio clips
+                    ForEach(track.audioClips) { clip in
+                        AudioClipView(
+                            clip: clip,
+                            track: track,
+                            state: state,
+                            projectViewModel: projectViewModel
+                        )
+                        .environmentObject(themeManager)
+                    }
+                }
+            }
+            
+            // Selection overlay
+            TimelineSelectionOverlay(
                 state: state,
                 projectViewModel: projectViewModel,
-                themeManager: themeManager
-            )
-            .zIndex(1) // Grid lines above background
-            
-            // Add the selection view
-            TimelineSelectionView(
-                state: state,
-                track: track,
-                projectViewModel: projectViewModel
+                track: track
             )
             .environmentObject(themeManager)
-            .zIndex(5) // Selection above grid but below clips
+            .zIndex(5) // Ensure selection overlay is above other elements
+            .id("selection-overlay-\(track.id)-\(state.selectionActive)-\(state.selectionStartBeat)-\(state.selectionEndBeat)") // Force redraw when selection changes
             
-            // Display clips based on track type
-            TrackContentView(
-                track: track,
-                state: state,
-                projectViewModel: projectViewModel
-            )
-            .environmentObject(themeManager)
-            .zIndex(30) // Clips should have the highest z-index
-            
-            // Add the timeline selector for handling clicks and drags
+            // Transparent overlay for handling clicks and drags
             TimelineSelector(
                 projectViewModel: projectViewModel,
                 state: state,
                 track: track
             )
-            .zIndex(3) // Lower z-index than clips (30) but higher than other elements
-            .allowsHitTesting(true) // Ensure the selector can receive clicks
+            .zIndex(10) // Ensure selector is at the top to receive all interactions
             
-            // Drop target indicator (only shown when dragging over an audio track)
-            if isTargeted && track.type == .audio {
-                DropTargetIndicator(
-                    track: track,
-                    width: width,
-                    height: track.height
-                )
-                .zIndex(30) // Above everything else
+            // Drop target indicator
+            if isTargeted {
+                Rectangle()
+                    .fill(Color.blue.opacity(0.3))
+                    .frame(width: 4, height: track.height)
+                    .offset(x: dropLocation.x)
             }
         }
-        .frame(width: width, height: track.height) // Use track's height property
-        .overlay(trackBorder)
-        .opacity((!track.isEnabled || isMuted) && !isSolo ? 0.5 : 1.0) // Dim the track if disabled or muted (unless soloed)
-        .contextMenu { trackContextMenu }
-        // Add drop handling for audio files (only for audio tracks)
-        .if(track.type == .audio) { view in
-            view.onDrop(
-                of: [
-                    "com.music.ai.audiofile",
-                    "public.data",
-                    "public.content",
-                    "public.item"
-                ],
-                isTargeted: $isTargeted
-            ) { providers, location in
-                // Debug logs
-                print("🎯 DROP DETECTED: Drop event on track: \(track.name)")
-                print("🎯 DROP PROVIDERS: \(providers.count) providers available")
-                for (index, provider) in providers.enumerated() {
-                    print("🎯 DROP PROVIDER \(index): Type identifiers: \(provider.registeredTypeIdentifiers)")
-                }
-                
-                // Store the drop location
-                dropLocation = location
-                print("🎯 DROP LOCATION: \(location)")
-                
-                // Select this track
-                projectViewModel.selectTrack(id: track.id)
-                
-                // Handle the dropped item
-                return handleDrop(providers: providers, at: location)
-            }
+        .frame(width: width, height: track.height)
+        .background(trackBackground)
+        .onDrop(of: ["public.file-url"], isTargeted: $isTargeted) { providers, location in
+            dropLocation = location
+            return handleDrop(providers: providers, location: location)
         }
+        .onTapGesture {
+            // Select this track when clicked
+            projectViewModel.selectTrack(id: track.id)
+        }
+        // Apply highlight if this track is selected
+        .overlay(
+            Rectangle()
+                .stroke(projectViewModel.isTrackSelected(track) ? themeManager.accentColor : Color.clear, lineWidth: 2)
+        )
     }
     
     // MARK: - View Components
     
     private var trackBackground: some View {
         Rectangle()
-            .fill(track.effectiveBackgroundColor(for: themeManager.currentTheme))
+            .fill(themeManager.tertiaryBackgroundColor)
             // Add a subtle highlight when the track is selected
             .overlay(
                 Rectangle()
-                    .stroke(Color.white, lineWidth: projectViewModel.isTrackSelected(track) ? 2 : 0)
+                    .stroke(projectViewModel.isTrackSelected(track) ? themeManager.accentColor : Color.clear, lineWidth: 2)
                     .opacity(projectViewModel.isTrackSelected(track) ? 0.5 : 0)
             )
             .zIndex(0) // Background at the bottom
     }
     
-    private var trackBorder: some View {
-        ZStack {
-            // Regular border for all tracks
-            Rectangle()
-                .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
-                .allowsHitTesting(false)
-            
-            // Special border for selected track - using a brighter version of the track's color
-            if projectViewModel.isTrackSelected(track) {
-                Rectangle()
-                    .stroke(track.effectiveColor.opacity(0.9), lineWidth: 1.5)
-                    .brightness(0.3) // Make the color brighter for better visibility
-                    .allowsHitTesting(false)
-            }
-        }
+    private var trackGridLines: some View {
+        TrackGridView(
+            state: state,
+            projectViewModel: projectViewModel,
+            themeManager: themeManager,
+            scrollOffset: projectViewModel.timelineState?.scrollOffset ?? .zero,
+            viewportWidth: width
+        )
+        .zIndex(1) // Grid lines above background
     }
     
     @ViewBuilder
@@ -199,7 +186,7 @@ struct TrackView: View {
     }
     
     // Handle the drop of an audio file
-    private func handleDrop(providers: [NSItemProvider], at location: CGPoint) -> Bool {
+    private func handleDrop(providers: [NSItemProvider], location: CGPoint) -> Bool {
         // Only handle drops on audio tracks
         guard track.type == .audio else {
             print("❌ DROP REJECTED: Track is not an audio track")
@@ -380,6 +367,9 @@ struct TrackView: View {
         } else if state.showQuarterNotes {
             // Snap to quarter notes (1 beat)
             gridDivision = 1.0
+        } else if state.showHalfNotes {
+            // Snap to half notes (2 beats)
+            gridDivision = 2.0
         } else {
             // When zoomed out all the way, snap to bars
             // For bars, we need to handle differently to ensure we snap to the start of a bar
@@ -402,6 +392,13 @@ struct TrackGridView: View {
     @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     let themeManager: ThemeManager
+    let scrollOffset: CGPoint
+    let viewportWidth: CGFloat
+    
+    // Computed property to determine if we should use simplified rendering during playback
+    private var useSimplifiedRendering: Bool {
+        return projectViewModel.isPlaying
+    }
     
     var body: some View {
         Canvas { context, size in
@@ -409,43 +406,173 @@ struct TrackGridView: View {
             let pixelsPerBeat = state.effectivePixelsPerBeat
             let pixelsPerBar = pixelsPerBeat * Double(projectViewModel.timeSignatureBeats)
             
-            // Number of bars visible
-            let visibleBars = 100 // Match the content width calculation
+            // Calculate visible range based on scroll offset
+            let startX = scrollOffset.x
+            let endX = startX + viewportWidth
             
-            // Vertical grid lines (time divisions)
-            for barIndex in 0..<visibleBars {
+            // Calculate the total content width in pixels
+            let totalContentWidth = size.width
+            
+            // Calculate the visible bar range
+            let startBar = max(0, Int(floor(startX / CGFloat(pixelsPerBar))))
+            
+            // Calculate the maximum bar index based on content width instead of using a fixed value
+            let maxBarIndex = Int(ceil(totalContentWidth / CGFloat(pixelsPerBar)))
+            let endBar = min(maxBarIndex, Int(ceil(endX / CGFloat(pixelsPerBar))) + 1) // Add 1 to ensure we render the partial bar at the end
+            
+            // Determine if we're zoomed out (based on pixels per bar)
+            let isZoomedOut = pixelsPerBar < 40
+            let isVeryZoomedOut = pixelsPerBar < 20
+            let isExtremelyZoomedOut = pixelsPerBar < 10
+            
+            // During playback, use a slightly simplified grid rendering
+            // but maintain visual consistency with non-playing state
+            let skipFactor = useSimplifiedRendering ? 
+                (isExtremelyZoomedOut ? 2 : (isVeryZoomedOut ? 4 : (isZoomedOut ? 2 : 1))) : 
+                (isExtremelyZoomedOut ? 2 : (isVeryZoomedOut ? 4 : (isZoomedOut ? 2 : 1)))
+            
+            // Minimum pixel distance between grid lines to prevent overcrowding
+            // Keep this consistent between playing and paused states
+            let minPixelsBetweenLines: CGFloat = 15
+            
+            // Draw bar lines
+            for barIndex in stride(from: startBar, to: endBar, by: skipFactor) {
                 let xPosition = CGFloat(Double(barIndex) * pixelsPerBar)
                 
-                // Bar lines (strong)
-                var barPath = Path()
-                barPath.move(to: CGPoint(x: xPosition, y: 0))
-                barPath.addLine(to: CGPoint(x: xPosition, y: size.height))
-                context.stroke(barPath, with: .color(themeManager.gridColor), lineWidth: 1.0)
+                // Skip if the bar is outside the viewport
+                if xPosition + CGFloat(pixelsPerBar) < startX || xPosition > endX {
+                    continue
+                }
                 
-                // Beat lines (medium)
-                if state.showQuarterNotes {
-                    for beat in 1..<projectViewModel.timeSignatureBeats {
-                        let beatX = xPosition + CGFloat(Double(beat) * pixelsPerBeat)
-                        var beatPath = Path()
-                        beatPath.move(to: CGPoint(x: beatX, y: 0))
-                        beatPath.addLine(to: CGPoint(x: beatX, y: size.height))
-                        context.stroke(beatPath, with: .color(themeManager.secondaryGridColor), lineWidth: 0.5)
+                // Draw the bar line
+                var path = Path()
+                path.move(to: CGPoint(x: xPosition, y: 0))
+                path.addLine(to: CGPoint(x: xPosition, y: size.height))
+                
+                // Use a more prominent color for bar lines
+                context.stroke(
+                    path,
+                    with: .color(themeManager.gridLineColor.opacity(0.7)),
+                    lineWidth: 1.0
+                )
+            }
+            
+            // Draw beat lines if we're not extremely zoomed out
+            // Remove the useSimplifiedRendering condition to ensure beat lines are drawn during playback
+            if !isExtremelyZoomedOut {
+                // Calculate the beat range
+                let startBeat = Double(startBar) * Double(projectViewModel.timeSignatureBeats)
+                let endBeat = Double(endBar) * Double(projectViewModel.timeSignatureBeats)
+                
+                // Draw beat lines (only if we have enough space between them)
+                if pixelsPerBeat >= minPixelsBetweenLines {
+                    for beatIndex in stride(from: Int(startBeat), to: Int(endBeat), by: 1) {
+                        // Skip if this is a bar line (already drawn)
+                        if beatIndex % projectViewModel.timeSignatureBeats == 0 {
+                            continue
+                        }
+                        
+                        let xPosition = CGFloat(Double(beatIndex) * pixelsPerBeat)
+                        
+                        // Skip if the beat is outside the viewport
+                        if xPosition < startX || xPosition > endX {
+                            continue
+                        }
+                        
+                        // Draw the beat line
+                        var path = Path()
+                        path.move(to: CGPoint(x: xPosition, y: 0))
+                        path.addLine(to: CGPoint(x: xPosition, y: size.height))
+                        
+                        // Use a less prominent color for beat lines
+                        context.stroke(
+                            path,
+                            with: .color(themeManager.gridLineColor.opacity(0.4)),
+                            lineWidth: 0.5
+                        )
                     }
                 }
                 
-                // Eighth notes (weak)
-                if state.showEighthNotes {
-                    for beat in 0..<(projectViewModel.timeSignatureBeats * 2) {
-                        let eighthX = xPosition + CGFloat(Double(beat) * pixelsPerBeat / 2)
-                        if eighthX.truncatingRemainder(dividingBy: CGFloat(pixelsPerBeat)) != 0 {
-                            var eighthPath = Path()
-                            eighthPath.move(to: CGPoint(x: eighthX, y: 0))
-                            eighthPath.addLine(to: CGPoint(x: eighthX, y: size.height))
-                            context.stroke(eighthPath, with: .color(themeManager.tertiaryGridColor), lineWidth: 0.5)
-                        }
+                // Only draw subdivision lines if we're zoomed in enough and not in simplified rendering mode
+                if !isZoomedOut && pixelsPerBeat >= minPixelsBetweenLines * 2 {
+                    // Determine the subdivision based on zoom level
+                    if state.showSixteenthNotes {
+                        // Sixteenth notes (0.25 beat)
+                        let subdivision = 0.25
+                        drawSubdivisionLines(from: startBeat, to: endBeat, by: subdivision, startX: startX, endX: endX, pixelsPerBeat: pixelsPerBeat, context: context, size: size)
+                    } else if state.showEighthNotes {
+                        // Eighth notes (0.5 beat)
+                        let subdivision = 0.5
+                        drawSubdivisionLines(from: startBeat, to: endBeat, by: subdivision, startX: startX, endX: endX, pixelsPerBeat: pixelsPerBeat, context: context, size: size)
+                    } else if state.showHalfNotes {
+                        // Half notes (2 beats)
+                        drawHalfNoteLines(from: startBar, to: endBar, startX: startX, endX: endX, pixelsPerBeat: pixelsPerBeat, context: context, size: size)
+                    } else {
+                        // Default to quarter notes (1 beat)
+                        let subdivision = 1.0
+                        drawSubdivisionLines(from: startBeat, to: endBeat, by: subdivision, startX: startX, endX: endX, pixelsPerBeat: pixelsPerBeat, context: context, size: size)
                     }
                 }
             }
+        }
+        .drawingGroup(opaque: false) // Use Metal acceleration for better performance
+    }
+    
+    // Helper method to draw half note lines
+    private func drawHalfNoteLines(from startBar: Int, to endBar: Int, startX: CGFloat, endX: CGFloat, pixelsPerBeat: Double, context: GraphicsContext, size: CGSize) {
+        for barIndex in stride(from: startBar, to: endBar, by: 1) {
+            let barStartBeat = Double(barIndex) * Double(projectViewModel.timeSignatureBeats)
+            
+            // For each bar, add half-note markers
+            for offset in stride(from: 2.0, to: Double(projectViewModel.timeSignatureBeats), by: 2.0) {
+                let beatPosition = barStartBeat + offset
+                let xPosition = CGFloat(beatPosition * pixelsPerBeat)
+                
+                // Skip if outside viewport
+                if xPosition < startX || xPosition > endX {
+                    continue
+                }
+                
+                // Draw the half note line
+                var path = Path()
+                path.move(to: CGPoint(x: xPosition, y: 0))
+                path.addLine(to: CGPoint(x: xPosition, y: size.height))
+                
+                context.stroke(
+                    path,
+                    with: .color(themeManager.gridLineColor.opacity(0.3)),
+                    lineWidth: 0.5
+                )
+            }
+        }
+    }
+    
+    // Helper method to draw subdivision lines (16th, 8th, or quarter notes)
+    private func drawSubdivisionLines(from startBeat: Double, to endBeat: Double, by subdivision: Double, startX: CGFloat, endX: CGFloat, pixelsPerBeat: Double, context: GraphicsContext, size: CGSize) {
+        for beatIndex in stride(from: startBeat, to: endBeat, by: subdivision) {
+            // Skip if this is a beat or bar line (already drawn)
+            if beatIndex.truncatingRemainder(dividingBy: 1.0) == 0 {
+                continue
+            }
+            
+            let xPosition = CGFloat(beatIndex * pixelsPerBeat)
+            
+            // Skip if the subdivision is outside the viewport
+            if xPosition < startX || xPosition > endX {
+                continue
+            }
+            
+            // Draw the subdivision line
+            var path = Path()
+            path.move(to: CGPoint(x: xPosition, y: 0))
+            path.addLine(to: CGPoint(x: xPosition, y: size.height))
+            
+            // Use an even less prominent color for subdivision lines
+            context.stroke(
+                path,
+                with: .color(themeManager.gridLineColor.opacity(0.2)),
+                lineWidth: 0.5
+            )
         }
     }
 }
