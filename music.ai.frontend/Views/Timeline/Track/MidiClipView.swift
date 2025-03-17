@@ -109,52 +109,64 @@ struct MidiClipView: View {
             .highPriorityGesture(
                 DragGesture(minimumDistance: 5) // Require a minimum drag distance to start
                     .onChanged { value in
-                        // print("🔍 HIGH PRIORITY MIDI DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
+                        print("🎹 MIDI DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // If the clip isn't selected yet, select it first
                         if !isSelected {
-                            // print("🔍 HIGH PRIORITY MIDI DRAG: Clip not selected, selecting now")
+                            print("🎹 MIDI DRAG: Clip not selected, selecting now")
                             selectThisClip()
+                        }
+                        
+                        // Check if we can start a clip drag
+                        if !isDragging && !projectViewModel.interactionManager.canStartClipDrag() {
+                            print("🎹 MIDI DRAG: Cannot start drag - interaction manager denied request")
+                            return
                         }
                         
                         // If this is the start of the drag, store the starting position
                         if !isDragging {
-                            dragStartBeat = clip.startBeat
-                            dragStartLocation = value.startLocation
-                            isDragging = true
-                            NSCursor.closedHand.set()
-                            // print("🔍 HIGH PRIORITY MIDI DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat) - Start location: \(dragStartLocation)")
+                            // Inform the interaction manager that we're starting a clip drag
+                            if projectViewModel.interactionManager.startClipDrag() {
+                                dragStartBeat = clip.startBeat
+                                dragStartLocation = value.startLocation
+                                isDragging = true
+                                NSCursor.closedHand.set()
+                                print("🎹 MIDI DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat)")
+                            } else {
+                                print("🎹 MIDI DRAG: Start failed - interaction manager denied request")
+                            }
                         }
                         
-                        // Calculate the drag distance in beats directly from the translation
-                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                        
-                        // Calculate the new beat position
-                        let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
-                        
-                        // Snap to grid
-                        let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
-                        
-                        // Ensure we don't go negative
-                        let finalPosition = max(0, snappedBeatPosition)
-                        
-                        // print("🔄 HIGH PRIORITY MIDI DRAG UPDATE: Clip \(clip.name) - Current position: \(clip.startBeat) - Preview position: \(finalPosition) - Translation: \(value.translation) - Distance in beats: \(dragDistanceInBeats)")
-                        
-                        // Update the selection to preview the new position
-                        // This will show where the clip will end up without moving it
-                        state.startSelection(at: finalPosition, trackId: track.id)
-                        state.updateSelection(to: finalPosition + clip.duration)
+                        // Only update if we're actively dragging
+                        if isDragging {
+                            // Calculate the drag distance in beats directly from the translation
+                            let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                            
+                            // Calculate the new beat position
+                            let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
+                            
+                            // Snap to grid
+                            let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
+                            
+                            // Ensure we don't go negative
+                            let finalPosition = max(0, snappedBeatPosition)
+                            
+                            print("🎹 MIDI DRAG UPDATE: Clip \(clip.name) - Preview position: \(finalPosition)")
+                            
+                            // Update the selection to preview the new position
+                            // This will show where the clip will end up without moving it
+                            state.startSelection(at: finalPosition, trackId: track.id)
+                            state.updateSelection(to: finalPosition + clip.duration)
+                        }
                     }
                     .onEnded { value in
-                        // print("✅ HIGH PRIORITY MIDI DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
+                        print("🎹 MIDI DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // Only process if we were actually dragging
                         guard isDragging else {
-                            // print("❌ HIGH PRIORITY MIDI DRAG END: Not dragging, ignoring")
+                            print("🎹 MIDI DRAG END: Not dragging, ignoring")
                             return
                         }
-                        
-                        // print("✅ HIGH PRIORITY MIDI DRAG ENDED: Clip \(clip.name) - Translation: \(value.translation)")
                         
                         // Calculate the final drag distance directly from the translation
                         let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
@@ -168,7 +180,7 @@ struct MidiClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
-                        // print("📊 HIGH PRIORITY MIDI DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition) - Distance in beats: \(dragDistanceInBeats)")
+                        print("🎹 MIDI DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition)")
                         
                         // Only move if the position actually changed
                         if abs(finalPosition - clip.startBeat) > 0.001 {
@@ -203,6 +215,9 @@ struct MidiClipView: View {
                             state.updateSelection(to: clip.endBeat)
                         }
                         
+                        // Inform the interaction manager that we're done with the drag
+                        projectViewModel.interactionManager.endClipDrag()
+                        
                         // Reset drag state
                         isDragging = false
                         dragStartLocation = .zero
@@ -220,15 +235,24 @@ struct MidiClipView: View {
                         }
                     }
                 , isEnabled: true)
-            // Add right-click gesture
-            .gesture(
+            // Add right-click gesture as a simultaneous gesture
+            .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
                         // Check if this is a right-click (secondary click)
                         if let event = NSApp.currentEvent, event.type == .rightMouseUp {
-                            // First select the clip
-                            // print("Right-click detected on MidiClipView")
-                            selectThisClip()
+                            // Let the interaction manager know we're processing a right-click
+                            if projectViewModel.interactionManager.startRightClick() {
+                                // First select the clip
+                                // print("Right-click detected on MidiClipView")
+                                selectThisClip()
+                                
+                                // End the right-click interaction after a short delay
+                                // This gives time for the context menu to appear before allowing other interactions
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    projectViewModel.interactionManager.endRightClick()
+                                }
+                            }
                         }
                     }
             )

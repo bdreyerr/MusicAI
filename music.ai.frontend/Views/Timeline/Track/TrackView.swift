@@ -105,13 +105,22 @@ struct TrackView: View {
         }
         .frame(width: width, height: track.height)
         .background(trackBackground)
+        .contextMenu { trackContextMenu }
         .onDrop(of: ["public.file-url"], isTargeted: $isTargeted) { providers, location in
+            // Check if we can start a drop operation
+            if !projectViewModel.interactionManager.startDrop() {
+                return false
+            }
+            
             dropLocation = location
-            return handleDrop(providers: providers, location: location)
-        }
-        .onTapGesture {
-            // Select this track when clicked
-            projectViewModel.selectTrack(id: track.id)
+            let result = handleDrop(providers: providers, location: location)
+            
+            // End the drop operation after a short delay to allow for async processing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                projectViewModel.interactionManager.endDrop()
+            }
+            
+            return result
         }
         // Apply highlight if this track is selected
         .overlay(

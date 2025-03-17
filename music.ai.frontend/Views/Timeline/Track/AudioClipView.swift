@@ -165,52 +165,64 @@ struct AudioClipView: View {
             .highPriorityGesture(
                 DragGesture(minimumDistance: 5) // Require a minimum drag distance to start
                     .onChanged { value in
-                        // print("🔍 HIGH PRIORITY DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
+                        print("🔊 AUDIO DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // If the clip isn't selected yet, select it first
                         if !isSelected {
-                            // print("🔍 HIGH PRIORITY DRAG: Clip not selected, selecting now")
+                            print("🔊 AUDIO DRAG: Clip not selected, selecting now")
                             selectThisClip()
+                        }
+                        
+                        // Check if we can start a clip drag
+                        if !isDragging && !projectViewModel.interactionManager.canStartClipDrag() {
+                            print("🔊 AUDIO DRAG: Cannot start drag - interaction manager denied request")
+                            return
                         }
                         
                         // If this is the start of the drag, store the starting position
                         if !isDragging {
-                            dragStartBeat = clip.startBeat
-                            dragStartLocation = value.startLocation
-                            isDragging = true
-                            NSCursor.closedHand.set()
-                            // print("🔍 HIGH PRIORITY DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat) - Start location: \(dragStartLocation)")
+                            // Inform the interaction manager that we're starting a clip drag
+                            if projectViewModel.interactionManager.startClipDrag() {
+                                dragStartBeat = clip.startBeat
+                                dragStartLocation = value.startLocation
+                                isDragging = true
+                                NSCursor.closedHand.set()
+                                print("🔊 AUDIO DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat)")
+                            } else {
+                                print("🔊 AUDIO DRAG: Start failed - interaction manager denied request")
+                            }
                         }
                         
-                        // Calculate the drag distance in beats directly from the translation
-                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                        
-                        // Calculate the new beat position
-                        let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
-                        
-                        // Snap to grid
-                        let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
-                        
-                        // Ensure we don't go negative
-                        let finalPosition = max(0, snappedBeatPosition)
-                        
-                        // print("🔄 HIGH PRIORITY DRAG UPDATE: Clip \(clip.name) - Current position: \(clip.startBeat) - Preview position: \(finalPosition) - Translation: \(value.translation) - Distance in beats: \(dragDistanceInBeats)")
-                        
-                        // Update the selection to preview the new position
-                        // This will show where the clip will end up without moving it
-                        state.startSelection(at: finalPosition, trackId: track.id)
-                        state.updateSelection(to: finalPosition + clip.duration)
+                        // Only update if we're actively dragging
+                        if isDragging {
+                            // Calculate the drag distance in beats directly from the translation
+                            let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                            
+                            // Calculate the new beat position
+                            let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
+                            
+                            // Snap to grid
+                            let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
+                            
+                            // Ensure we don't go negative
+                            let finalPosition = max(0, snappedBeatPosition)
+                            
+                            print("🔊 AUDIO DRAG UPDATE: Clip \(clip.name) - Preview position: \(finalPosition)")
+                            
+                            // Update the selection to preview the new position
+                            // This will show where the clip will end up without moving it
+                            state.startSelection(at: finalPosition, trackId: track.id)
+                            state.updateSelection(to: finalPosition + clip.duration)
+                        }
                     }
                     .onEnded { value in
-                        // print("✅ HIGH PRIORITY DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
+                        print("🔊 AUDIO DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // Only process if we were actually dragging
                         guard isDragging else {
-                            // print("❌ HIGH PRIORITY DRAG END: Not dragging, ignoring")
+                            print("🔊 AUDIO DRAG END: Not dragging, ignoring")
                             return
                         }
-                        
-                        // print("✅ HIGH PRIORITY DRAG ENDED: Clip \(clip.name) - Translation: \(value.translation)")
                         
                         // Calculate the final drag distance directly from the translation
                         let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
@@ -224,14 +236,11 @@ struct AudioClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
-                        // print("📊 HIGH PRIORITY DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition) - Distance in beats: \(dragDistanceInBeats)")
+                        print("🔊 AUDIO DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition)")
                         
                         // Only move if the position actually changed
                         if abs(finalPosition - clip.startBeat) > 0.001 {
-                            // print("🔄 MOVING CLIP: Clip \(clip.name) from \(clip.startBeat) to \(finalPosition)")
-                            
                             // Move the clip to the new position using the Audio view model
-                            // print("📞 CALLING AUDIO VIEW MODEL: moveAudioClip(trackId: \(track.id), clipId: \(clip.id), newStartBeat: \(finalPosition))")
                             let success = audioViewModel.moveAudioClip(
                                 trackId: track.id,
                                 clipId: clip.id,
@@ -239,25 +248,22 @@ struct AudioClipView: View {
                             )
                             
                             if success {
-                                // print("✅ MOVE SUCCESS: Clip \(clip.name) moved to \(finalPosition)")
-                                
                                 // Update the selection to match the new clip position
                                 state.startSelection(at: finalPosition, trackId: track.id)
                                 state.updateSelection(to: finalPosition + clip.duration)
                             } else {
-                                // print("❌ MOVE FAILED: Could not move clip \(clip.name) to \(finalPosition)")
-                                
                                 // Reset the selection to the original clip position
                                 state.startSelection(at: clip.startBeat, trackId: track.id)
                                 state.updateSelection(to: clip.endBeat)
                             }
                         } else {
-                            // print("ℹ️ NO MOVE NEEDED: Clip \(clip.name) position unchanged")
-                            
                             // If position didn't change, reset selection to current clip position
                             state.startSelection(at: clip.startBeat, trackId: track.id)
                             state.updateSelection(to: clip.endBeat)
                         }
+                        
+                        // Inform the interaction manager that we're done with the drag
+                        projectViewModel.interactionManager.endClipDrag()
                         
                         // Reset drag state
                         isDragging = false
@@ -268,7 +274,6 @@ struct AudioClipView: View {
                             // If still hovering over the clip after drag, show open hand if selected
                             if isSelected {
                                 NSCursor.openHand.set()
-                                // print("Drag ended, still hovering over selected clip - showing open hand cursor")
                             } else {
                                 NSCursor.pointingHand.set()
                             }
@@ -277,15 +282,24 @@ struct AudioClipView: View {
                         }
                     }
                 , isEnabled: true)
-            // Add right-click gesture
-            .gesture(
+            // Add right-click gesture as a simultaneous gesture
+            .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
                         // Check if this is a right-click (secondary click)
                         if let event = NSApp.currentEvent, event.type == .rightMouseUp {
-                            // First select the clip
-                            // print("Right-click detected on AudioClipView")
-                            selectThisClip()
+                            // Let the interaction manager know we're processing a right-click
+                            if projectViewModel.interactionManager.startRightClick() {
+                                // First select the clip
+                                // print("Right-click detected on AudioClipView")
+                                selectThisClip()
+                                
+                                // End the right-click interaction after a short delay
+                                // This gives time for the context menu to appear before allowing other interactions
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    projectViewModel.interactionManager.endRightClick()
+                                }
+                            }
                         }
                     }
             )

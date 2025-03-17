@@ -16,6 +16,9 @@ class ProjectViewModel: ObservableObject {
     // Reference to the timeline state
     var timelineState: TimelineStateViewModel? = nil
     
+    // Interaction manager for coordinating gestures and events
+    let interactionManager = InteractionManager()
+    
     // MIDI view model for handling MIDI-related operations
     lazy var midiViewModel: MidiViewModel = {
         let viewModel = MidiViewModel(projectViewModel: self, timelineState: timelineState)

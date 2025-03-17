@@ -7,6 +7,11 @@ struct TimelineSelector: View {
     @ObservedObject var state: TimelineStateViewModel
     let track: Track
     
+    // Get reference to the interaction manager
+    private var interactionManager: InteractionManager {
+        return projectViewModel.interactionManager
+    }
+    
     // Computed property to access the MIDI view model
     private var midiViewModel: MidiViewModel {
         return projectViewModel.midiViewModel
@@ -27,6 +32,42 @@ struct TimelineSelector: View {
             .gesture(
                 DragGesture(minimumDistance: 0) // Allow immediate clicks without drag
                     .onChanged { value in
+                        // Handle right clicks - show context menu
+                        if let event = NSApp.currentEvent, event.type == .rightMouseDown || event.type == .rightMouseDragged || event.type == .rightMouseUp {
+                            if event.type == .rightMouseUp {
+                                // Let the interaction manager know we're processing a right-click
+                                if interactionManager.startRightClick() {
+                                    // First select the track
+                                    projectViewModel.selectTrack(id: track.id)
+                                    
+                                    // Convert x position to beat position
+                                    let xPosition = value.location.x
+                                    let rawBeatPosition = xPosition / CGFloat(state.effectivePixelsPerBeat)
+                                    
+                                    // Check if we're clicking on a clip
+                                    if !((track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
+                                         (track.type == .audio && isPositionOnAudioClip(rawBeatPosition))) {
+                                        
+                                        // Set up selection if there's no existing selection
+                                        let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
+                                        
+                                        if !state.hasSelection(trackId: track.id) {
+                                            // If we don't have a selection, create one at the clicked position
+                                            state.startSelection(at: snappedBeatPosition, trackId: track.id)
+                                            state.updateSelection(to: snappedBeatPosition + 4.0) // Default selection of 4 beats
+                                        }
+                                    }
+                                    
+                                    // End the right-click interaction after a short delay
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                        interactionManager.endRightClick()
+                                    }
+                                }
+                            }
+                            return
+                        }
+                        
+                        // Handle left clicks - for selection and dragging
                         // Convert x position to beat position
                         let xPosition = value.location.x
                         let rawBeatPosition = xPosition / CGFloat(state.effectivePixelsPerBeat)
@@ -44,53 +85,78 @@ struct TimelineSelector: View {
                         
                         // print("✅ TIMELINE SELECTOR: Drag detected at \(rawBeatPosition), not on a clip")
                         
+                        // Check if we can start a selection with the interaction manager
+                        if !isDragging && !interactionManager.canStartSelection() {
+                            // Cannot start selection due to another active interaction
+                            return
+                        }
+                        
                         // Snap to the nearest grid marker based on zoom level
                         let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
                         
                         // If this is the start of a drag, begin a new selection
                         if !isDragging {
-                            // print("✅ TIMELINE SELECTOR: Starting new selection at \(snappedBeatPosition) on track \(track.id)")
-                            
-                            // Select the track
-                            projectViewModel.selectTrack(id: track.id)
-                            
-                            // Check if we need to deselect a clip first
-                            if state.selectionActive && isClipSelected() {
-                                state.clearSelection()
-                                // print("✅ TIMELINE SELECTOR: Clearing clip selection before starting new selection")
+                            // Ask the interaction manager if we can start a selection
+                            if interactionManager.startSelection() {
+                                // print("✅ TIMELINE SELECTOR: Starting new selection at \(snappedBeatPosition) on track \(track.id)")
+                                
+                                // Select the track
+                                projectViewModel.selectTrack(id: track.id)
+                                
+                                // Check if we need to deselect a clip first
+                                if state.selectionActive && isClipSelected() {
+                                    state.clearSelection()
+                                    // print("✅ TIMELINE SELECTOR: Clearing clip selection before starting new selection")
+                                }
+                                
+                                // Start a new selection
+                                state.startSelection(at: snappedBeatPosition, trackId: track.id)
+                                
+                                // Move the playhead to the selection start
+                                projectViewModel.seekToBeat(snappedBeatPosition)
+                                
+                                isDragging = true
                             }
-                            
-                            // Start a new selection
-                            state.startSelection(at: snappedBeatPosition, trackId: track.id)
-                            
-                            // Move the playhead to the selection start
-                            projectViewModel.seekToBeat(snappedBeatPosition)
-                            
-                            isDragging = true
                         } else {
                             // Update the selection end point
                             state.updateSelection(to: snappedBeatPosition)
                             // print("✅ TIMELINE SELECTOR: Updating selection to \(snappedBeatPosition)")
                         }
                     }
-                    .onEnded { _ in
-                        isDragging = false
+                    .onEnded { value in
+                        // Ignore right clicks
+                        guard let event = NSApp.currentEvent, event.type != .rightMouseUp else {
+                            return
+                        }
                         
-                        // If the selection is too small (just a click), clear it
-                        let (start, end) = state.normalizedSelectionRange
-                        if abs(end - start) < 0.001 {
-                            state.clearSelection()
-                            // print("✅ TIMELINE SELECTOR: Selection too small, clearing")
-                        } else {
-                            // Ensure the playhead is at the leftmost point of the selection
-                            // This handles the case where the user drags from right to left
-                            projectViewModel.seekToBeat(start)
-                            // print("✅ TIMELINE SELECTOR: Selection completed: \(start) to \(end)")
+                        // Only process if we were actively dragging
+                        if isDragging {
+                            isDragging = false
+                            
+                            // Let the interaction manager know we're done with the selection
+                            interactionManager.endSelection()
+                            
+                            // If the selection is too small (just a click), clear it
+                            let (start, end) = state.normalizedSelectionRange
+                            if abs(end - start) < 0.001 {
+                                state.clearSelection()
+                                // print("✅ TIMELINE SELECTOR: Selection too small, clearing")
+                            } else {
+                                // Ensure the playhead is at the leftmost point of the selection
+                                // This handles the case where the user drags from right to left
+                                projectViewModel.seekToBeat(start)
+                                // print("✅ TIMELINE SELECTOR: Selection completed: \(start) to \(end)")
+                            }
                         }
                     }
             )
             // Handle taps to move the playhead without stopping playback
             .onTapGesture { location in
+                // Check if we can process this tap (don't process if another interaction is active)
+                if !interactionManager.canStartSelection() {
+                    return
+                }
+                
                 // Convert tap location to beat position
                 let xPosition = location.x
                 let rawBeatPosition = xPosition / CGFloat(state.effectivePixelsPerBeat)
