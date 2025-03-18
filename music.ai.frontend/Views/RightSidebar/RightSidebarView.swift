@@ -126,7 +126,7 @@ struct RightSidebarView: View {
                             }
                             .padding()
                         }
-                        .onChange(of: viewModel.messages.count) { _ in
+                        .onChange(of: viewModel.messages.count) { _, newCount in
                             if let lastMessage = viewModel.messages.last {
                                 withAnimation {
                                     scrollProxy.scrollTo(lastMessage.id, anchor: .bottom)

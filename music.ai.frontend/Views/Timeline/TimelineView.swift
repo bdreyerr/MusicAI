@@ -155,6 +155,18 @@ struct TimelineView: View {
                                         }
                                         .frame(width: calculateContentWidth(geometry: geometry))
                                         .id("timeline-content-\(timelineState.contentSizeChangeId)")
+                                        // Add magnification gesture at the highest level to ensure it works across the entire timeline
+                                        .gesture(
+                                            MagnificationGesture()
+                                                .onChanged { scale in
+                                                    // Handle the pinch zoom gesture using the state view model
+                                                    timelineState.handlePinchGesture(scale: scale)
+                                                }
+                                                .onEnded { _ in
+                                                    // Reset with scale = 1.0 to signal end of gesture
+                                                    timelineState.handlePinchGesture(scale: 1.0)
+                                                }
+                                        )
                                         // Track scroll position for the entire content
                                         .background(
                                             GeometryReader { geo in
@@ -186,9 +198,21 @@ struct TimelineView: View {
                                     }
                                     .coordinateSpace(name: scrollSyncCoordinator.id)
                                     .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                                        scrollSyncCoordinator.tracksOffset = value
-                                        // Update the timelineState's scrollOffset to ensure the grid updates correctly
-                                        timelineState.scrollOffset = value
+                                        // Create a local copy of the value to avoid capturing mutable state
+                                        let offsetX = value.x
+                                        let scrollSync = scrollSyncCoordinator
+                                        
+                                        // First update local state that's not observed
+                                        scrollSync.tracksOffset = value
+                                        
+                                        // Then update the scroll offset in the timeline state in an async context
+                                        // to prevent "modifying state during view update" errors
+                                        DispatchQueue.main.async {
+                                            // Update the timelineState's scrollOffset to ensure the grid updates correctly
+                                            timelineState.scrollOffset = value
+                                            // Track scrolling speed for performance optimizations
+                                            timelineState.updateScrollState(offset: offsetX)
+                                        }
                                     }
                                     .frame(width: geometry.size.width - controlsWidth)
                                 }
@@ -275,7 +299,7 @@ struct TimelineView: View {
                     projectViewModel.midiViewModel.setTimelineState(timelineState)
                 }
                 // Respond to zoom level changes
-                .onChange(of: timelineState.zoomLevel) { newZoomLevel in
+                .onChange(of: timelineState.zoomLevel) { _, newZoomLevel in
                     // Only adjust position if we're not playing
                     // This prevents interrupting playback when zooming
                     if !projectViewModel.isPlaying {

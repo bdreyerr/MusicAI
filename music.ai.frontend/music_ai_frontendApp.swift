@@ -40,7 +40,7 @@ struct music_ai_frontendApp: App {
                     // Apply theme to window
                     setupAppearance()
                 }
-                .onChange(of: themeManager.currentTheme) { _ in
+                .onChange(of: themeManager.currentTheme) { _, newTheme in
                     // Update window appearance when theme changes
                     setupAppearance()
                 }

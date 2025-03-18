@@ -23,7 +23,7 @@ struct PositionDisplayView: View {
                 updateTimer?.invalidate()
                 updateTimer = nil
             }
-            .onChange(of: projectViewModel.isPlaying) { isPlaying in
+            .onChange(of: projectViewModel.isPlaying) { _, isPlaying in
                 if isPlaying {
                     // When playback starts, use a slower update rate
                     startUpdateTimer()

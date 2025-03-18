@@ -32,7 +32,7 @@ struct ScrubPositionIndicator: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isVisible)
-        .onChange(of: projectViewModel.currentBeat) { _ in
+        .onChange(of: projectViewModel.currentBeat) { _, newBeat in
             // Only show and update when not playing
             if !projectViewModel.isPlaying {
                 // Update the displayed text (only when visible to avoid unnecessary calculations)

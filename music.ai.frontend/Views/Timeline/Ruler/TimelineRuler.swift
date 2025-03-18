@@ -1,5 +1,21 @@
 import SwiftUI
 
+// Add a computed property extension for ProjectViewModel to handle durationInBeats
+extension ProjectViewModel {
+    // Fallback implementation for durationInBeats
+    var durationInBeats: Double {
+        // Calculate based on existing tracks or return a default minimum value
+        let totalBeats = tracks.flatMap { track -> [Double] in
+            let midiEndBeats = track.midiClips.map { $0.startBeat + $0.duration }
+            let audioEndBeats = track.audioClips.map { $0.startBeat + $0.duration }
+            return midiEndBeats + audioEndBeats
+        }.max() ?? 0.0
+        
+        // Provide a minimum of 16 bars (assuming 4/4 time signature)
+        return max(totalBeats, Double(timeSignatureBeats * 16))
+    }
+}
+
 /// Ruler component that displays bar and beat markers at the top of the timeline
 struct TimelineRuler: View {
     @ObservedObject var state: TimelineStateViewModel
@@ -19,8 +35,29 @@ struct TimelineRuler: View {
     private let halfBarDotRadius: CGFloat = 1.2 // Radius for half-bar dots
     private let barDotRadius: CGFloat = 1.5 // Radius for bar dots
     
+    // Performance optimization constants
+    private let viewportMargin: CGFloat = 20 // Extra margin around viewport to prevent pop-in
+    private let maxSubdivisionElements = 300 // Maximum subdivision elements to draw
+    
+    // State to track last render position for scroll optimization
+    @State private var lastRenderScrollX: CGFloat = 0
+    @State private var scrollRenderThreshold: CGFloat = 10 // Minimum scroll distance to trigger re-render
+    
     // Add a state variable to track the start of the drag
     @State private var dragStartZoomLevel: Int? = nil
+    
+    // Constants for ruler appearance
+    private let barNumberHeight: CGFloat = 20
+    private let beatTickHeight: CGFloat = 14
+    private let eighthTickHeight: CGFloat = 8
+    private let sixteenthTickHeight: CGFloat = 5
+    
+    // Color definitions to fix 'Cannot find X in scope' errors
+    private var barLineColor: Color { themeManager.gridLineColor }
+    private var beatLineColor: Color { themeManager.secondaryGridColor }
+    private var eighthLineColor: Color { themeManager.tertiaryGridColor }
+    private var sixteenthLineColor: Color { themeManager.tertiaryGridColor.opacity(0.5) }
+    private var barNumberColor: Color { themeManager.primaryTextColor }
     
     var body: some View {
         Canvas { context, size in
@@ -29,10 +66,10 @@ struct TimelineRuler: View {
             let beatsPerBar = Double(projectViewModel.timeSignatureBeats)
             let pixelsPerBar = pixelsPerBeat * beatsPerBar
             
-            // Calculate visible range based on scroll offset
+            // Calculate visible range based on scroll offset with margin
             let scrollX = state.scrollOffset.x
-            let startX = scrollX
-            let endX = startX + size.width
+            let startX = max(0, scrollX - viewportMargin)
+            let endX = min(width, startX + size.width + viewportMargin * 2)
             
             // Calculate the visible bar range
             let startBar = max(0, Int(floor(startX / CGFloat(pixelsPerBar))))
@@ -40,6 +77,13 @@ struct TimelineRuler: View {
             // Calculate the maximum bar index based on content width
             let maxBarIndex = Int(ceil(width / CGFloat(pixelsPerBar)))
             let endBar = min(maxBarIndex, Int(ceil(endX / CGFloat(pixelsPerBar))) + 1)
+            
+            // Calculate the visible width in bars
+            let visibleBarWidth = endBar - startBar
+            
+            // Draw ruler background for improved visibility
+            let backgroundRect = CGRect(x: 0, y: 0, width: size.width, height: size.height)
+            context.fill(Path(backgroundRect), with: .color(themeManager.rulerBackgroundColor))
             
             // Draw ruler marks based on zoom level
             switch state.rulerDivision {
@@ -83,14 +127,7 @@ struct TimelineRuler: View {
                                   endX: endX)
             case .quarter, .eighth, .sixteenth:
                 // Show lines every quarter bar (every beat in 4/4)
-                drawQuarterBarRuler(context: context, 
-                                     size: size, 
-                                     startBar: startBar, 
-                                     endBar: endBar, 
-                                     pixelsPerBar: pixelsPerBar, 
-                                     pixelsPerBeat: pixelsPerBeat,
-                                     scrollX: scrollX, 
-                                     endX: endX)
+                drawQuarterBarRuler(context: context, size: size)
             }
             
             // Draw the playhead position indicator
@@ -98,7 +135,7 @@ struct TimelineRuler: View {
                 let playheadX = CGFloat(projectViewModel.currentBeat * pixelsPerBeat)
                 
                 // Only draw if visible in the viewport
-                if playheadX >= scrollX && playheadX <= scrollX + size.width {
+                if playheadX >= scrollX - viewportMargin && playheadX <= scrollX + size.width + viewportMargin {
                     var playheadPath = Path()
                     playheadPath.move(to: CGPoint(x: playheadX, y: 0))
                     playheadPath.addLine(to: CGPoint(x: playheadX, y: size.height))
@@ -110,10 +147,23 @@ struct TimelineRuler: View {
                     )
                 }
             }
+            
+            // Don't modify state during rendering - this will be handled in the shouldTriggerRedraw method
+            // lastRenderScrollX = scrollX
         }
         .frame(height: height)
         .background(themeManager.rulerBackgroundColor)
         .drawingGroup(opaque: false) // Use Metal acceleration for better performance
+        // Replace the direct shouldTriggerRedraw with a more reliable approach
+        // that won't cause "Modifying state during view update" errors
+        .id("ruler-zoom-\(state.zoomLevel)-scrolling-\(state.isScrolling ? "yes" : "no")")
+        // We'll use onChange to safely update our tracking state
+        .onChange(of: state.scrollOffset) { _, newValue in
+            // Safely update lastRenderScrollX using async to avoid "modifying state during view update" errors
+            DispatchQueue.main.async {
+                self.lastRenderScrollX = newValue.x
+            }
+        }
         // Add a tap gesture to clear the selection and move the playhead
         .contentShape(Rectangle())
         .onTapGesture { location in
@@ -174,6 +224,51 @@ struct TimelineRuler: View {
                 NSCursor.pop()
             }
         }
+    }
+    
+    // Determine if a redraw should be triggered based on performance criteria
+    private func shouldTriggerRedraw() -> String {
+        // Safely access state properties without modifying them
+        let currentZoomLevel = state.zoomLevel
+        let isCurrentlyScrolling = state.isScrolling
+        let currentScrollX = state.scrollOffset.x
+        let currentScrollingSpeed = state.scrollingSpeed
+        
+        // Always redraw on zoom level changes
+        let zoomIdentifier = "zoom-\(currentZoomLevel)"
+        
+        // If we're scrolling very fast, limit redraw frequency
+        if isCurrentlyScrolling {
+            let distanceMoved = abs(currentScrollX - lastRenderScrollX)
+            
+            // Higher scroll speeds means we require more distance before redrawing
+            let adaptiveThreshold = min(
+                max(10, currentScrollingSpeed / 5), // Scale threshold with speed
+                50 // Maximum threshold cap
+            )
+            
+            // Only trigger redraw if we've moved sufficiently or zoom changed
+            if distanceMoved > adaptiveThreshold {
+                // Update the last rendered scroll position in an async context to avoid state modification during view update
+                DispatchQueue.main.async {
+                    self.lastRenderScrollX = currentScrollX
+                }
+                // Return a unique identifier
+                return "\(zoomIdentifier)-\(UUID().uuidString)"
+            }
+        }
+        
+        // Always provide a unique id when not scrolling to ensure proper renders
+        if !isCurrentlyScrolling {
+            // Update the last rendered scroll position in an async context
+            DispatchQueue.main.async {
+                self.lastRenderScrollX = currentScrollX
+            }
+            return "\(zoomIdentifier)-\(UUID().uuidString)"
+        }
+        
+        // Default identifier that changes with zoom level but not constantly during scrolling
+        return zoomIdentifier
     }
     
     // MARK: - Ruler Drawing Methods
@@ -272,8 +367,9 @@ struct TimelineRuler: View {
                     lineWidth: barTickWidth
                 )
                 
-                // Draw bar number if at a 2-bar interval
-                if state.shouldShowBarNumber(for: barIndex) {
+                // Always show bar 1, and then every 2 bars as defined by rulerNumberInterval
+                // This ensures bar numbers are displayed correctly at zoom level 5
+                if barIndex == 0 || barIndex % state.rulerNumberInterval == 0 {
                     let text = Text("\(barIndex + 1)")
                         .font(.system(size: 10, weight: .regular))
                         .foregroundColor(themeManager.primaryTextColor)
@@ -334,10 +430,15 @@ struct TimelineRuler: View {
             // For zoom levels 1-3, draw dots at intervals within the bar
             // Check the zoom level to determine dot spacing
             if state.zoomLevel == 1 {
-                // For zoom level 1, draw dots at quarter bar positions (beats)
+                // For zoom level 1, draw dots at quarter AND eighth bar positions (beats and 8th notes)
                 drawBarSubdivisionDots(context: context, size: size, barStartBeat: barStartBeat, 
                                       pixelsPerBeat: pixelsPerBeat, timeSignature: timeSignature,
                                       scrollX: scrollX, endX: endX, divisionCount: 4)
+                
+                // Additionally add eighth note subdivisions (the "and" of each beat)
+                drawEighthNoteSubdivisions(context: context, size: size, barStartBeat: barStartBeat,
+                                          pixelsPerBeat: pixelsPerBeat, timeSignature: timeSignature,
+                                          scrollX: scrollX, endX: endX)
             } else if state.zoomLevel == 2 || state.zoomLevel == 3 {
                 // For zoom levels 2-3, draw dots at half bar positions
                 drawBarSubdivisionDots(context: context, size: size, barStartBeat: barStartBeat, 
@@ -400,9 +501,19 @@ struct TimelineRuler: View {
                 )
             }
             
-            // For zoom level 0, also draw quarter-bar dots
+            // For zoom level 0, also draw quarter and eighth note markers
             if state.zoomLevel == 0 {
-                // Draw dots at 1/4 and 3/4 positions
+                // First, draw lines at eighth note positions (1.2.5, 1.4.5, etc.)
+                drawEighthNoteTicks(context: context, size: size, barStartBeat: barStartBeat,
+                                   pixelsPerBeat: pixelsPerBeat, timeSignature: timeSignature,
+                                   scrollX: scrollX, endX: endX)
+                
+                // Next, draw dots at sixteenth note positions (1.2.25, 1.2.75, etc.)
+                drawSixteenthNoteDots(context: context, size: size, barStartBeat: barStartBeat,
+                                     pixelsPerBeat: pixelsPerBeat, timeSignature: timeSignature,
+                                     scrollX: scrollX, endX: endX)
+                
+                // Also draw dots at quarter positions for consistency
                 for i in 0..<timeSignature {
                     if i == 0 || i == timeSignature / 2 {
                         // Skip main positions (already have lines)
@@ -432,116 +543,287 @@ struct TimelineRuler: View {
     }
     
     // Draw ruler with lines every quarter bar (every beat in 4/4)
-    private func drawQuarterBarRuler(context: GraphicsContext, size: CGSize, startBar: Int, endBar: Int, 
-                                     pixelsPerBar: Double, pixelsPerBeat: Double, scrollX: CGFloat, endX: CGFloat) {
-        let timeSignature = projectViewModel.timeSignatureBeats
+    private func drawQuarterBarRuler(context: GraphicsContext, size: CGSize) {
+        let scrollX = state.scrollOffset.x
+        let projectDuration = Double(projectViewModel.durationInBeats)
+        let viewportWidth = size.width
         
-        for barIndex in stride(from: startBar, to: endBar, by: 1) {
-            let barStartBeat = Double(barIndex * timeSignature)
-            
-            // Draw lines at each beat
-            for beatOffset in 0..<timeSignature {
-                let beatPosition = barStartBeat + Double(beatOffset)
-                let beatX = CGFloat(beatPosition * pixelsPerBeat)
-                
-                // Skip if outside the viewport
-                if beatX < scrollX || beatX > scrollX + size.width {
-                    continue
-                }
-                
-                // Determine if this is the start of a bar
-                let isBarStart = beatOffset == 0
-                
-                // Draw tick line
-                var path = Path()
-                path.move(to: CGPoint(x: beatX, y: size.height - (isBarStart ? barTickHeight : quarterBarTickHeight)))
-                path.addLine(to: CGPoint(x: beatX, y: size.height))
-                
-                context.stroke(
-                    path,
-                    with: .color(isBarStart ? themeManager.primaryTextColor : themeManager.primaryTextColor.opacity(0.7)),
-                    lineWidth: barTickWidth
-                )
-                
-                // Draw bar numbers at bar start and special beat markings
-                if isBarStart {
-                    if state.shouldShowBarNumber(for: barIndex) {
-                        let text = Text("\(barIndex + 1)")
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundColor(themeManager.primaryTextColor)
-                        
-                        context.draw(text, at: CGPoint(x: beatX + 4, y: 4))
-                    }
-                } else if state.zoomLevel == 0 {
-                    // For zoom level 0, show beat numbers within the bar
-                    let text = Text("\(barIndex + 1).\(beatOffset + 1)")
-                        .font(.system(size: 8, weight: .light))
-                        .foregroundColor(themeManager.secondaryTextColor)
-                    
-                    context.draw(text, at: CGPoint(x: beatX + 3, y: 5))
-                }
-                
-                // Draw eighth note markers at exact 0.5 positions between beats (for zoom level 0 and 1)
-                if state.zoomLevel <= 1 {
-                    // Draw exactly at the halfway point (0.5) between beats
-                    let eighthPosition = beatPosition + 0.5
-                    let eighthX = CGFloat(eighthPosition * pixelsPerBeat)
-                    
-                    // Check if position is visible
-                    if eighthX >= scrollX && eighthX <= scrollX + size.width {
-                        if state.zoomLevel == 0 {
-                            // For zoom level 0, draw a small tick line
-                            var eighthPath = Path()
-                            eighthPath.move(to: CGPoint(x: eighthX, y: size.height - eighthBarTickHeight))
-                            eighthPath.addLine(to: CGPoint(x: eighthX, y: size.height))
-                            
-                            context.stroke(
-                                eighthPath,
-                                with: .color(themeManager.primaryTextColor.opacity(0.5)),
-                                lineWidth: 0.5
-                            )
-                        } else {
-                            // For zoom level 1, draw a dot
-                            let dotPath = Path(ellipseIn: CGRect(
-                                x: eighthX - dotRadius,
-                                y: size.height - eighthBarTickHeight,
-                                width: dotRadius * 2,
-                                height: dotRadius * 2
-                            ))
-                            
-                            context.fill(
-                                dotPath,
-                                with: .color(themeManager.secondaryTextColor.opacity(0.6))
-                            )
-                        }
-                    }
-                    
-                    // For zoom level 0, also draw sixteenth note dots at 0.25 and 0.75 positions
-                    if state.zoomLevel == 0 {
-                        let sixteenthPositions = [beatPosition + 0.25, beatPosition + 0.75]
-                        
-                        for sixteenthPosition in sixteenthPositions {
-                            let sixteenthX = CGFloat(sixteenthPosition * pixelsPerBeat)
-                            
-                            // Check if position is visible
-                            if sixteenthX >= scrollX && sixteenthX <= scrollX + size.width {
-                                let dotPath = Path(ellipseIn: CGRect(
-                                    x: sixteenthX - dotRadius * 0.8,
-                                    y: size.height - eighthBarTickHeight + 1,
-                                    width: dotRadius * 1.6,
-                                    height: dotRadius * 1.6
-                                ))
-                                
-                                context.fill(
-                                    dotPath,
-                                    with: .color(themeManager.secondaryTextColor.opacity(0.5))
-                                )
-                            }
-                        }
-                    }
-                }
+        // Cache state values locally to avoid accessing published properties during rendering
+        let currentZoomLevel = state.zoomLevel
+        let isCurrentlyScrolling = state.isScrolling
+        let currentScrollingSpeed = state.scrollingSpeed
+        let pixelsPerBeat = state.pixelsPerBeat
+        
+        // Calculate the visible range - with margin for smooth scrolling
+        let startX = max(0, scrollX - viewportMargin)
+        let endX = min(projectDuration * pixelsPerBeat, scrollX + viewportWidth + viewportMargin)
+        
+        // Adaptive stepping based on zoom level and scrolling speed
+        let (barSkipFactor, eighthSkipFactor, sixteenthSkipFactor) = getAdaptiveStepFactors(
+            zoomLevel: currentZoomLevel,
+            isScrolling: isCurrentlyScrolling,
+            scrollingSpeed: currentScrollingSpeed
+        )
+        
+        // Draw with combined paths for efficiency
+        drawBarsAndNumbers(
+            context: context, 
+            size: size, 
+            startX: startX, 
+            endX: endX, 
+            scrollX: scrollX, 
+            viewportWidth: viewportWidth,
+            pixelsPerBeat: pixelsPerBeat,
+            zoomLevel: currentZoomLevel,
+            skipFactor: barSkipFactor
+        )
+        
+        // Draw beats (quarter notes)
+        drawBeats(
+            context: context, 
+            size: size, 
+            startX: startX, 
+            endX: endX, 
+            scrollX: scrollX, 
+            viewportWidth: viewportWidth,
+            pixelsPerBeat: pixelsPerBeat
+        )
+        
+        // Draw eighth notes if we're at an appropriate zoom level
+        if currentZoomLevel <= 1 || (currentZoomLevel >= 3 && eighthSkipFactor < 2) {
+            drawEighthNotes(
+                context: context, 
+                size: size, 
+                startX: startX, 
+                endX: endX, 
+                scrollX: scrollX, 
+                viewportWidth: viewportWidth,
+                pixelsPerBeat: pixelsPerBeat,
+                skipFactor: eighthSkipFactor
+            )
+        }
+        
+        // Draw sixteenth notes at high zoom levels and for zoom level 0
+        if currentZoomLevel == 0 || (currentZoomLevel >= 4 && sixteenthSkipFactor < 2) {
+            drawSixteenthNotes(
+                context: context, 
+                size: size, 
+                startX: startX, 
+                endX: endX, 
+                scrollX: scrollX, 
+                viewportWidth: viewportWidth,
+                pixelsPerBeat: pixelsPerBeat,
+                skipFactor: sixteenthSkipFactor
+            )
+        }
+    }
+    
+    // Helper function to determine rendering detail based on zoom and scrolling
+    private func getAdaptiveStepFactors(zoomLevel: Int, isScrolling: Bool, scrollingSpeed: CGFloat) -> (Int, Int, Int) {
+        // Default: show everything
+        var barSkipFactor = 0
+        var eighthSkipFactor = 0
+        var sixteenthSkipFactor = 0
+        
+        // Adjust based on scrolling speed
+        if isScrolling {
+            if scrollingSpeed > 2000 {
+                // Very fast scrolling - minimal detail
+                barSkipFactor = 0  // Still show all bars
+                eighthSkipFactor = 2  // Skip eighth notes
+                sixteenthSkipFactor = 2  // Skip sixteenth notes
+            } else if scrollingSpeed > 1000 {
+                // Fast scrolling - reduced detail
+                barSkipFactor = 0  // Show all bars
+                eighthSkipFactor = 1  // Show some eighth notes
+                sixteenthSkipFactor = 2  // Skip sixteenth notes
+            } else if scrollingSpeed > 500 {
+                // Medium speed - moderate detail
+                barSkipFactor = 0  // Show all bars
+                eighthSkipFactor = 0  // Show all eighth notes
+                sixteenthSkipFactor = 1  // Show some sixteenth notes
             }
         }
+        
+        // Further adjust based on zoom level - modified to allow eighth notes at zoom level 1
+        if zoomLevel > 1 && zoomLevel < 3 {
+            eighthSkipFactor = max(eighthSkipFactor, 1)
+            sixteenthSkipFactor = 2
+        }
+        
+        // Modified to only prevent sixteenth notes at specific levels
+        if zoomLevel > 0 && zoomLevel < 4 {
+            sixteenthSkipFactor = 2
+        }
+        
+        return (barSkipFactor, eighthSkipFactor, sixteenthSkipFactor)
+    }
+    
+    // Draw bars and bar numbers
+    private func drawBarsAndNumbers(context: GraphicsContext, size: CGSize, startX: CGFloat, endX: CGFloat, scrollX: CGFloat, viewportWidth: CGFloat, pixelsPerBeat: CGFloat, zoomLevel: Int, skipFactor: Int) {
+        // Create a path for the bars
+        let barPath = Path { path in
+            var barNumber = Int(startX / (4 * pixelsPerBeat))
+            
+            while CGFloat(barNumber * 4) * pixelsPerBeat <= endX {
+                let x = CGFloat(barNumber * 4) * pixelsPerBeat - scrollX
+                
+                if x >= -1 && x <= viewportWidth + 1 {
+                    // Draw the bar line
+                    path.move(to: CGPoint(x: x, y: barNumberHeight))
+                    path.addLine(to: CGPoint(x: x, y: size.height))
+                    
+                    // Draw bar numbers (only for visible bars)
+                    if x >= 0 && x <= viewportWidth && shouldShowBarNumber(barNumber: barNumber, zoomLevel: zoomLevel) {
+                        // Draw text in context instead of in path
+                        let text = Text("\(barNumber + 1)")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(barNumberColor)
+                        
+                        // Position the text centered above the bar
+                        context.draw(text, at: CGPoint(x: x, y: 1))
+                    }
+                }
+                
+                barNumber += 1
+            }
+        }
+        
+        // Draw the bar lines
+        context.stroke(barPath, with: .color(barLineColor), lineWidth: 1)
+    }
+    
+    // Helper function to determine if a bar number should be displayed based on zoom level
+    private func shouldShowBarNumber(barNumber: Int, zoomLevel: Int) -> Bool {
+        // Always show the first bar
+        if barNumber == 0 {
+            return true
+        }
+        
+        // For zoom levels 0-3, show numbers for every bar
+        if zoomLevel <= 3 {
+            return true
+        }
+        
+        // For zoom level 4-5, show odd-numbered bars only
+        if zoomLevel == 4 || zoomLevel == 5 {
+            return (barNumber + 1) % 2 == 1
+        }
+        
+        // For zoom level 6, show every 4th bar
+        if zoomLevel == 6 {
+            return (barNumber + 1) % 4 == 0
+        }
+        
+        return false
+    }
+    
+    // Draw beat lines (quarter notes)
+    private func drawBeats(context: GraphicsContext, size: CGSize, startX: CGFloat, endX: CGFloat, scrollX: CGFloat, viewportWidth: CGFloat, pixelsPerBeat: CGFloat) {
+        let beatPath = Path { path in
+            var beat = Int(startX / pixelsPerBeat)
+            
+            while CGFloat(beat) * pixelsPerBeat <= endX {
+                // Only draw beats that aren't bar lines
+                if beat % 4 != 0 {
+                    let x = CGFloat(beat) * pixelsPerBeat - scrollX
+                    
+                    if x >= -1 && x <= viewportWidth + 1 {
+                        path.move(to: CGPoint(x: x, y: beatTickHeight))
+                        path.addLine(to: CGPoint(x: x, y: size.height))
+                    }
+                }
+                
+                beat += 1
+            }
+        }
+        
+        context.stroke(beatPath, with: .color(beatLineColor), lineWidth: 0.5)
+    }
+    
+    // Draw eighth notes
+    private func drawEighthNotes(context: GraphicsContext, size: CGSize, startX: CGFloat, endX: CGFloat, scrollX: CGFloat, viewportWidth: CGFloat, pixelsPerBeat: CGFloat, skipFactor: Int) {
+        let eighthPath = Path { path in
+            var eighth = Int(startX / (pixelsPerBeat / 2))
+            
+            while CGFloat(eighth) * (pixelsPerBeat / 2) <= endX {
+                let isEven = eighth % 2 == 0
+                
+                // Special handling for zoom level 1 - ensure all eighth notes appear
+                let shouldDrawForZoom1 = state.zoomLevel == 1 && !isEven
+                
+                // Skip even eighth notes when using skip factor (except for zoom level 1)
+                if shouldDrawForZoom1 || (skipFactor == 0 || !isEven) {
+                    // Only draw if it's not a beat line (every 2nd eighth)
+                    if !isEven {
+                        let x = CGFloat(eighth) * (pixelsPerBeat / 2) - scrollX
+                        
+                        if x >= -1 && x <= viewportWidth + 1 {
+                            // Use a different tick height for zoom level 1
+                            let tickHeight = state.zoomLevel == 1 ? 
+                                eighthTickHeight + 1 : eighthTickHeight
+                                
+                            path.move(to: CGPoint(x: x, y: tickHeight))
+                            path.addLine(to: CGPoint(x: x, y: size.height))
+                        }
+                    }
+                }
+                
+                eighth += 1
+            }
+        }
+        
+        // Use a more appropriate color and line width for eighth notes at zoom level 1
+        let lineWidth: CGFloat = state.zoomLevel == 1 ? 0.5 : 0.4
+        let lineColor = state.zoomLevel == 1 ? 
+            eighthLineColor.opacity(0.9) : eighthLineColor
+        
+        context.stroke(eighthPath, with: .color(lineColor), lineWidth: lineWidth)
+    }
+    
+    // Draw sixteenth notes
+    private func drawSixteenthNotes(context: GraphicsContext, size: CGSize, startX: CGFloat, endX: CGFloat, scrollX: CGFloat, viewportWidth: CGFloat, pixelsPerBeat: CGFloat, skipFactor: Int) {
+        let sixteenthPath = Path { path in
+            var sixteenth = Int(startX / (pixelsPerBeat / 4))
+            
+            while CGFloat(sixteenth) * (pixelsPerBeat / 4) <= endX {
+                let isFourthSixteenth = sixteenth % 4 == 0
+                let isSecondSixteenth = sixteenth % 2 == 0
+                
+                // Logic for which sixteenth notes to draw based on skip factor and zoom level
+                var shouldDraw = false
+                
+                if state.zoomLevel == 0 {
+                    // For zoom level 0, we want to show all sixteenth notes
+                    // But avoid ones that coincide with quarter or eighth notes
+                    shouldDraw = !isSecondSixteenth && !isFourthSixteenth
+                } else if skipFactor == 0 {
+                    // Draw all sixteenth notes that aren't on eighth or quarter lines
+                    shouldDraw = !isSecondSixteenth
+                } else if skipFactor == 1 {
+                    // Draw only odd sixteenth notes after odd eighths (reduced density)
+                    shouldDraw = !isSecondSixteenth && !isFourthSixteenth && (sixteenth % 4 == 1)
+                }
+                
+                if shouldDraw {
+                    let x = CGFloat(sixteenth) * (pixelsPerBeat / 4) - scrollX
+                    
+                    if x >= -1 && x <= viewportWidth + 1 {
+                        path.move(to: CGPoint(x: x, y: sixteenthTickHeight))
+                        path.addLine(to: CGPoint(x: x, y: size.height))
+                    }
+                }
+                
+                sixteenth += 1
+            }
+        }
+        
+        // Use a more appropriate color and line width for sixteenth notes based on zoom level
+        let lineWidth: CGFloat = state.zoomLevel == 0 ? 0.4 : 0.3
+        let lineColor = state.zoomLevel == 0 ? 
+            sixteenthLineColor.opacity(0.7) : sixteenthLineColor
+        
+        context.stroke(sixteenthPath, with: .color(lineColor), lineWidth: lineWidth)
     }
     
     // Helper method to draw subdivision dots within a bar
@@ -572,6 +854,99 @@ struct TimelineRuler: View {
                 dotPath,
                 with: .color(themeManager.secondaryTextColor)
             )
+        }
+    }
+    
+    // Helper method to draw eighth note subdivisions (the "and" of each beat)
+    private func drawEighthNoteSubdivisions(context: GraphicsContext, size: CGSize, barStartBeat: Double,
+                                           pixelsPerBeat: Double, timeSignature: Int, scrollX: CGFloat, endX: CGFloat) {
+        // For each beat in the bar
+        for beatIndex in 0..<timeSignature {
+            // Calculate the position of the 8th note (the "and" of the beat)
+            let eighthBeat = barStartBeat + Double(beatIndex) + 0.5 // Add 0.5 for the eighth note position
+            let eighthX = CGFloat(eighthBeat * pixelsPerBeat)
+            
+            // Skip if outside the viewport
+            if eighthX < scrollX || eighthX > scrollX + size.width {
+                continue
+            }
+            
+            // Draw a dot at this eighth note position
+            let dotPath = Path(ellipseIn: CGRect(
+                x: eighthX - dotRadius,
+                y: size.height - eighthBarTickHeight,
+                width: dotRadius * 2,
+                height: dotRadius * 2
+            ))
+            
+            context.fill(
+                dotPath,
+                with: .color(themeManager.secondaryTextColor.opacity(0.7))
+            )
+        }
+    }
+    
+    // Helper method to draw eighth note tick lines for zoom level 0
+    private func drawEighthNoteTicks(context: GraphicsContext, size: CGSize, barStartBeat: Double,
+                                    pixelsPerBeat: Double, timeSignature: Int, scrollX: CGFloat, endX: CGFloat) {
+        // For each beat in the bar
+        for beatIndex in 0..<timeSignature {
+            // Calculate the eighth note position (halfway between beats)
+            let eighthBeat = barStartBeat + Double(beatIndex) + 0.5 // Add 0.5 for the eighth note position
+            let eighthX = CGFloat(eighthBeat * pixelsPerBeat)
+            
+            // Skip if outside the viewport
+            if eighthX < scrollX || eighthX > scrollX + size.width {
+                continue
+            }
+            
+            // Draw a tick line at this eighth note position
+            var eighthPath = Path()
+            eighthPath.move(to: CGPoint(x: eighthX, y: size.height - eighthBarTickHeight))
+            eighthPath.addLine(to: CGPoint(x: eighthX, y: size.height))
+            
+            context.stroke(
+                eighthPath,
+                with: .color(themeManager.tertiaryGridColor),
+                lineWidth: 0.5
+            )
+        }
+    }
+    
+    // Helper method to draw sixteenth note dots for zoom level 0
+    private func drawSixteenthNoteDots(context: GraphicsContext, size: CGSize, barStartBeat: Double,
+                                      pixelsPerBeat: Double, timeSignature: Int, scrollX: CGFloat, endX: CGFloat) {
+        // For each beat in the bar
+        for beatIndex in 0..<timeSignature {
+            // Calculate the base beat position
+            let baseBeat = barStartBeat + Double(beatIndex)
+            
+            // Draw dots at 16th note positions (x.x.25 and x.x.75)
+            let sixteenthPositions: [Double] = [0.25, 0.75] // 16th note offsets within a beat
+            
+            for sixteenthOffset in sixteenthPositions {
+                let sixteenthBeat = baseBeat + sixteenthOffset
+                let sixteenthX = CGFloat(sixteenthBeat * pixelsPerBeat)
+                
+                // Skip if outside the viewport
+                if sixteenthX < scrollX || sixteenthX > scrollX + size.width {
+                    continue
+                }
+                
+                // Draw a smaller dot at this sixteenth note position
+                let sixteenthDotRadius = dotRadius * 0.8 // Slightly smaller than standard dots
+                let dotPath = Path(ellipseIn: CGRect(
+                    x: sixteenthX - sixteenthDotRadius,
+                    y: size.height - eighthBarTickHeight,
+                    width: sixteenthDotRadius * 2,
+                    height: sixteenthDotRadius * 2
+                ))
+                
+                context.fill(
+                    dotPath,
+                    with: .color(themeManager.tertiaryGridColor.opacity(0.6))
+                )
+            }
         }
     }
     

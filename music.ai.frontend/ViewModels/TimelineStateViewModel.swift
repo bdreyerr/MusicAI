@@ -32,22 +32,57 @@ class TimelineStateViewModel: ObservableObject {
         didSet {
             // If the scroll position changed significantly, mark as scrolling
             if abs(oldValue.x - scrollOffset.x) > 0.5 || abs(oldValue.y - scrollOffset.y) > 0.5 {
-                isScrolling = true
+                // Calculate values outside of the async block
+                let currentTime = Date()
+                let timeDelta = currentTime.timeIntervalSince(lastScrollTime)
+                let horizontalDistance = abs(scrollOffset.x - lastScrollPosition.x)
+                let verticalDistance = abs(scrollOffset.y - lastScrollPosition.y)
+                let shouldCalculateSpeed = timeDelta > 0 && horizontalDistance > verticalDistance
                 
-                // Reset the scrolling flag after a very short delay
-                cancelScrollingReset()
-                scrollingResetWorkItem = DispatchWorkItem {
-                    self.isScrolling = false
-                    self.scrollingResetWorkItem = nil
+                // Immediately update tracking variables (not published properties)
+                lastScrollPosition = scrollOffset
+                lastScrollTime = currentTime
+                
+                // Use DispatchQueue.main.async to batch our state updates
+                DispatchQueue.main.async {
+                    self.isScrolling = true
+                    
+                    // Calculate scrolling speed if we have valid data
+                    if shouldCalculateSpeed {
+                        // Calculate pixels per second (mainly focusing on horizontal)
+                        // Use exponential moving average to smooth the speed
+                        let newSpeed = horizontalDistance / CGFloat(timeDelta)
+                        self.scrollingSpeed = self.scrollingSpeed * 0.7 + newSpeed * 0.3
+                    }
+                    
+                    // Reset the scrolling flag after a very short delay
+                    self.cancelScrollingReset()
+                    self.scrollingResetWorkItem = DispatchWorkItem {
+                        DispatchQueue.main.async {
+                            self.isScrolling = false
+                            self.scrollingResetWorkItem = nil
+                            
+                            // Gradually reset scrolling speed to zero
+                            self.resetScrollingSpeed()
+                        }
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: self.scrollingResetWorkItem!)
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: scrollingResetWorkItem!)
             }
         }
     }
     
-    // Scrolling state
+    // Scrolling state tracking
     @Published var isScrolling: Bool = false
+    @Published var scrollingSpeed: CGFloat = 0
+    
+    // Private tracking variables for scrolling
+    private var lastScrollPosition: CGPoint = .zero
+    private var lastScrollTime: Date = Date()
+    private var lastContentOffset: CGFloat = 0
     private var scrollingResetWorkItem: DispatchWorkItem?
+    private var scrollingSpeedResetWorkItem: DispatchWorkItem?
+    private var scrollTimer: Timer?
     
     // Selection state
     @Published var selectionActive: Bool = false
@@ -70,10 +105,82 @@ class TimelineStateViewModel: ObservableObject {
     // Base pixels per beat at default zoom level
     private let basePixelsPerBeat: Double = 30.0
     
+    // Helper to gradually reset scrolling speed to zero
+    func resetScrollingSpeed() {
+        // Only proceed if we have a non-zero scrolling speed
+        if scrollingSpeed > 0.1 {
+            // Reduce speed by 25% every call
+            let newSpeed = scrollingSpeed * 0.75
+            
+            // Use DispatchQueue.main.async to avoid state modification issues
+            DispatchQueue.main.async {
+                self.scrollingSpeed = newSpeed
+            }
+            
+            // Schedule another reduction after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.resetScrollingSpeed()
+            }
+        } else {
+            // Once speed is very low, just set it to zero
+            DispatchQueue.main.async {
+                self.scrollingSpeed = 0
+            }
+        }
+    }
+    
     // Cancel any pending scrolling reset
     private func cancelScrollingReset() {
         scrollingResetWorkItem?.cancel()
         scrollingResetWorkItem = nil
+    }
+    
+    // Cancel any pending scrolling speed reset
+    private func cancelScrollingSpeedReset() {
+        scrollingSpeedResetWorkItem?.cancel()
+        scrollingSpeedResetWorkItem = nil
+    }
+    
+    // Update scrolling state based on direct scroll offset changes
+    // This is used by scroll views to track scrolling performance
+    func updateScrollState(offset: CGFloat) {
+        // Calculate values outside of the async block
+        let currentTime = Date()
+        let timeDelta = currentTime.timeIntervalSince(lastScrollTime)
+        let offsetDelta = abs(offset - lastContentOffset)
+        let hasMovedEnough = offsetDelta > 0.5
+        
+        // Immediately update tracking variables (not published properties)
+        lastContentOffset = offset
+        lastScrollTime = currentTime
+        
+        // Only proceed if we have meaningful movement
+        if hasMovedEnough && timeDelta > 0.01 {
+            // Calculate the new speed value
+            let newSpeed = offsetDelta / CGFloat(timeDelta)
+            
+            // Use DispatchQueue.main.async to batch our state updates
+            DispatchQueue.main.async {
+                // Calculate scrolling speed using the stored data
+                self.scrollingSpeed = self.scrollingSpeed * 0.5 + newSpeed * 0.5
+                
+                // Set scrolling state to true
+                if !self.isScrolling {
+                    self.isScrolling = true
+                }
+                
+                // Reset the timer
+                self.scrollTimer?.invalidate()
+                
+                // Set timer to mark scrolling as ended after a delay
+                self.scrollTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+                    DispatchQueue.main.async {
+                        self?.isScrolling = false
+                        self?.scrollingSpeed = 0
+                    }
+                }
+            }
+        }
     }
     
     // Notify that content size has changed (without manipulating zoom level)
@@ -116,6 +223,14 @@ class TimelineStateViewModel: ObservableObject {
         if zoomLevel == 0 {
             // Show numbers at every quarter bar (1, 1.2, 1.3, 1.4, 2, etc.)
             return true
+        }
+        
+        // Special handling for zoom levels 4 and 5 to show odd-numbered bars
+        if zoomLevel == 4 || zoomLevel == 5 {
+            // Show odd-numbered bar numbers only (1, 3, 5, 7...)
+            // barIndex is 0-based, so displayed bar number is barIndex + 1
+            // We check if this is odd (modulo 2 equals 1)
+            return (barIndex + 1) % 2 == 1
         }
         
         // For other zoom levels, check against the interval
@@ -331,8 +446,60 @@ class TimelineStateViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Zoom Gestures
+    
+    // Track the last pinch gesture timestamp to prevent too frequent zoom changes
+    private var lastPinchGestureTime: Date? = nil
+    private let pinchGestureCooldown: TimeInterval = 0.25 // Seconds between allowed zoom changes
+    
+    // Track the cumulative scale to handle partial zoom changes
+    private var cumulativeScale: CGFloat = 1.0
+    
+    // Handle pinch gestures from trackpad for zooming
+    func handlePinchGesture(scale: CGFloat) {
+        // Scale factor determines zoom direction
+        // scale > 1 means pinch out (zoom in - decrease zoom level)
+        // scale < 1 means pinch in (zoom out - increase zoom level)
+        
+        // Check if we need to enforce cooldown
+        let now = Date()
+        if let lastTime = lastPinchGestureTime, 
+           now.timeIntervalSince(lastTime) < pinchGestureCooldown {
+            // Not enough time has passed since the last zoom change
+            return
+        }
+        
+        // Set thresholds for pinch gesture to make it more sensitive
+        let zoomInThreshold: CGFloat = 1.10  // Require 10% increase to zoom in (was 15%)
+        let zoomOutThreshold: CGFloat = 0.90 // Require 10% decrease to zoom out (was 85%)
+        
+        // Update cumulative scale with this pinch value
+        cumulativeScale *= scale
+        
+        // Check if we've reached a threshold for zooming
+        if cumulativeScale >= zoomInThreshold && zoomLevel > 0 {
+            // Pinch out - zoom IN (decrease zoom level)
+            zoomLevel = max(0, zoomLevel - 1)
+            lastPinchGestureTime = now
+            // Reset cumulative scale but maintain direction tendency for smoother multi-level zooms
+            cumulativeScale = 1.02 // Slightly above 1 to maintain zoom-in direction
+        } else if cumulativeScale <= zoomOutThreshold && zoomLevel < 6 {
+            // Pinch in - zoom OUT (increase zoom level)
+            zoomLevel = min(6, zoomLevel + 1)
+            lastPinchGestureTime = now
+            // Reset cumulative scale but maintain direction tendency for smoother multi-level zooms
+            cumulativeScale = 0.98 // Slightly below 1 to maintain zoom-out direction
+        }
+        
+        // Reset cumulative scale completely when pinch ends
+        if scale == 1.0 {
+            cumulativeScale = 1.0
+        }
+    }
+    
     // Clean up when the view model is deallocated
     deinit {
         cancelScrollingReset()
+        scrollTimer?.invalidate()
     }
 } 

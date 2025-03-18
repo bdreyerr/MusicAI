@@ -8,17 +8,27 @@ struct SharedTracksGridContainer: View {
     @EnvironmentObject var themeManager: ThemeManager
     let width: CGFloat
     
+    // Performance optimization state
+    @State private var lastGridRefreshTime = Date()
+    @State private var shouldRenderDetailedGrid = true
+    
     var body: some View {
         ZStack(alignment: .topLeading) {
+            // Update grid visibility based on scrolling performance optimization
+            let shouldShowDetailedGrid = updateGridVisibility()
+            
             // Shared grid rendered once for all tracks
-            SharedGridView(
-                state: state,
-                projectViewModel: projectViewModel,
-                width: width,
-                height: calculateTotalTracksHeight()
-            )
-            .environmentObject(themeManager)
-            .id("shared-grid-\(themeManager.themeChangeIdentifier)-\(state.zoomChanged)-\(state.contentSizeChangeId)") // Force redraw when theme, zoom, or content size changes
+            if shouldShowDetailedGrid {
+                SharedGridView(
+                    state: state,
+                    projectViewModel: projectViewModel,
+                    width: width,
+                    height: calculateTotalTracksHeight()
+                )
+                .environmentObject(themeManager)
+                .id("shared-grid-\(themeManager.themeChangeIdentifier)-\(state.zoomChanged)-\(state.contentSizeChangeId)")
+                .transition(.opacity)
+            }
             
             // Stack of track views without their individual grids
             VStack(spacing: 0) {
@@ -83,6 +93,73 @@ struct SharedTracksGridContainer: View {
             .environmentObject(themeManager)
             .zIndex(1000) // Higher zIndex to ensure playhead is on top
         }
+        // Add magnification gesture for trackpad pinch zooming to the entire container
+        .gesture(
+            MagnificationGesture()
+                .onChanged { scale in
+                    // Handle the pinch zoom gesture using the state view model
+                    state.handlePinchGesture(scale: scale)
+                }
+                .onEnded { _ in
+                    // Reset with scale = 1.0 to signal end of gesture
+                    state.handlePinchGesture(scale: 1.0)
+                }
+        )
+        .onChange(of: state.isScrolling) { _, newValue in
+            // When scrolling stops, ensure detailed grid is visible again
+            if !newValue {
+                withAnimation(.easeIn(duration: 0.2)) {
+                    shouldRenderDetailedGrid = true
+                }
+            }
+        }
+    }
+    
+    // Update the grid visibility based on scrolling performance
+    private func updateGridVisibility() -> Bool {
+        // Capture current state values to avoid repeated access
+        let isCurrentlyScrolling = state.isScrolling
+        let currentZoomLevel = state.zoomLevel
+        let currentScrollingSpeed = state.scrollingSpeed
+        let currentShouldRenderGrid = shouldRenderDetailedGrid
+        
+        // Always show grid when not scrolling
+        if !isCurrentlyScrolling {
+            return true
+        }
+        
+        // For higher zoom levels (zoomed out), always show grid
+        if currentZoomLevel >= 4 {
+            return true
+        }
+        
+        // Check scrolling speed to determine grid visibility
+        if currentScrollingSpeed > 40 {
+            // At extreme scroll speeds, hide detailed grid temporarily
+            if currentShouldRenderGrid {
+                // Schedule the animation to happen after the current view update is complete
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.1)) {
+                        self.shouldRenderDetailedGrid = false
+                    }
+                }
+            }
+            return false
+        } else if currentScrollingSpeed < 30 {
+            // At moderate scroll speeds, show grid
+            if !currentShouldRenderGrid {
+                // Schedule the animation to happen after the current view update is complete
+                DispatchQueue.main.async {
+                    withAnimation(.easeIn(duration: 0.2)) {
+                        self.shouldRenderDetailedGrid = true
+                    }
+                }
+            }
+            return true
+        }
+        
+        // Otherwise, maintain current state
+        return currentShouldRenderGrid
     }
     
     // Calculate the total height of all tracks
