@@ -54,7 +54,7 @@ struct TimelineView: View {
     
     // Constants
     let rulerHeight: CGFloat = 25
-    let defaultTrackHeight: CGFloat = 70 // Default height for new tracks
+    let defaultTrackHeight: CGFloat = 100 // Default height for new tracks
     let controlsWidth: CGFloat = 200 // Must match TrackView.controlsWidth
     
     // Initialize with project view model
@@ -122,48 +122,6 @@ struct TimelineView: View {
                                                 height: rulerHeight
                                             )
                                             .environmentObject(themeManager)
-                                            .gesture(
-                                                DragGesture(minimumDistance: 0)
-                                                    .onChanged { value in
-                                                        if !isDragging {
-                                                            startDragY = value.location.y
-                                                            isDragging = true
-                                                            NSCursor.openHand.set()
-                                                        }
-                                                        
-                                                        let dragDelta = value.location.y - startDragY
-                                                        let zoomDelta = dragDelta / 200.0
-                                                        let newZoom = timelineState.zoomLevel + zoomDelta
-                                                        
-                                                        // Store the current beat position before zooming
-                                                        let currentBeat = projectViewModel.currentBeat
-                                                        
-                                                        // Update the zoom level
-                                                        timelineState.zoomLevel = max(0.146, min(2.0, newZoom))
-                                                        
-                                                        // Ensure the playhead stays at the correct beat position
-                                                        projectViewModel.seekToBeat(currentBeat)
-                                                        
-                                                        if dragDelta < 0 {
-                                                            NSCursor.closedHand.set()
-                                                        } else {
-                                                            NSCursor.closedHand.set()
-                                                        }
-                                                        
-                                                        startDragY = value.location.y
-                                                    }
-                                                    .onEnded { _ in
-                                                        isDragging = false
-                                                        NSCursor.arrow.set()
-                                                    }
-                                            )
-                                            .onHover { hovering in
-                                                if hovering {
-                                                    NSCursor.openHand.set()
-                                                } else {
-                                                    NSCursor.arrow.set()
-                                                }
-                                            }
                                             .overlay(
                                                 // Add the ruler selection indicator
                                                 TimelineRulerSelectionIndicator(
@@ -186,48 +144,17 @@ struct TimelineView: View {
                                             .frame(height: rulerHeight)
                                             .background(themeManager.rulerBackgroundColor)
                                             
-                                            // All track content
-                                            ZStack(alignment: .topLeading) {
-                                                // Track content first (lower z-index)
-                                                VStack(spacing: 0) {
-                                                    ForEach(projectViewModel.tracks) { track in
-                                                        TrackView(
-                                                            track: track,
-                                                            state: timelineState,
-                                                            projectViewModel: projectViewModel,
-                                                            width: calculateContentWidth(geometry: geometry)
-                                                        )
-                                                        .environmentObject(themeManager)
-                                                        .id("track-\(track.id)") // Add an ID to help with debugging
-                                                        .onAppear {
-                                                            // Debug print to help diagnose playhead visibility
-                                                            print("Track view appeared: \(track.name), isSelected: \(projectViewModel.isTrackSelected(track))")
-                                                        }
-                                                    }
-                                                    
-                                                    // Empty space for the add track button area
-                                                    Rectangle()
-                                                        .fill(Color.clear)
-                                                        .frame(height: 40)
-                                                        .padding(.top, 4)
-                                                        // Clear selection when clicking on empty space
-                                                        .onTapGesture {
-                                                            timelineState.clearSelection()
-                                                        }
-                                                }
-                                                
-                                                // Shared playhead on top (higher z-index)
-                                                SharedPlayheadView(
-                                                    projectViewModel: projectViewModel,
-                                                    state: timelineState
-                                                )
-                                                .environmentObject(themeManager)
-                                                .zIndex(1000) // Higher zIndex to ensure playhead is on top
-                                            }
-                                            
-                                            Spacer()
+                                            // Replace individual track views with the shared grid container
+                                            SharedTracksGridContainer(
+                                                projectViewModel: projectViewModel,
+                                                state: timelineState,
+                                                width: calculateContentWidth(geometry: geometry)
+                                            )
+                                            .environmentObject(themeManager)
+                                            .id("shared-tracks-container-\(themeManager.themeChangeIdentifier)-\(timelineState.contentSizeChangeId)")
                                         }
                                         .frame(width: calculateContentWidth(geometry: geometry))
+                                        .id("timeline-content-\(timelineState.contentSizeChangeId)")
                                         // Track scroll position for the entire content
                                         .background(
                                             GeometryReader { geo in
@@ -260,6 +187,8 @@ struct TimelineView: View {
                                     .coordinateSpace(name: scrollSyncCoordinator.id)
                                     .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
                                         scrollSyncCoordinator.tracksOffset = value
+                                        // Update the timelineState's scrollOffset to ensure the grid updates correctly
+                                        timelineState.scrollOffset = value
                                     }
                                     .frame(width: geometry.size.width - controlsWidth)
                                 }
@@ -274,6 +203,67 @@ struct TimelineView: View {
                     }
                 }
                 .background(themeManager.backgroundColor)
+                
+                // Zoom controls in the top right corner
+                VStack(spacing: 8) {
+                    HStack(spacing: 4) {
+                        Text("Zoom")
+                            .font(.caption)
+                            .foregroundColor(themeManager.primaryTextColor)
+                        
+                        Text("\(timelineState.zoomLevel)")
+                            .font(.caption)
+                            .foregroundColor(themeManager.primaryTextColor)
+                            .frame(width: 16, alignment: .center)
+                    }
+                    
+                    // Zoom In button
+                    Button(action: {
+                        zoomIn()
+                    }) {
+                        Image(systemName: "plus.magnifyingglass")
+                            .font(.system(size: 14))
+                            .foregroundColor(themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .padding(6)
+                    .background(themeManager.secondaryBackgroundColor)
+                    .cornerRadius(4)
+                    .help("Zoom In")
+                    .disabled(timelineState.zoomLevel <= 0)
+                    
+                    // Zoom Out button
+                    Button(action: {
+                        zoomOut()
+                    }) {
+                        Image(systemName: "minus.magnifyingglass")
+                            .font(.system(size: 14))
+                            .foregroundColor(themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .padding(6)
+                    .background(themeManager.secondaryBackgroundColor)
+                    .cornerRadius(4)
+                    .help("Zoom Out")
+                    .disabled(timelineState.zoomLevel >= 6)
+                    
+                    // Reset Zoom button (to level 3)
+                    Button(action: {
+                        resetZoom()
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 14))
+                            .foregroundColor(themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .padding(6)
+                    .background(themeManager.secondaryBackgroundColor)
+                    .cornerRadius(4)
+                    .help("Reset Zoom")
+                    .disabled(timelineState.zoomLevel == 3)
+                }
+                .padding(8)
+                
                 .onAppear {
                     // Connect the coordinator to our view model
                     menuCoordinator.projectViewModel = projectViewModel
@@ -286,10 +276,14 @@ struct TimelineView: View {
                 }
                 // Respond to zoom level changes
                 .onChange(of: timelineState.zoomLevel) { newZoomLevel in
-                    // Ensure the playhead stays at the correct beat position after zoom changes
-                    let currentBeat = projectViewModel.currentBeat
-                    // This is redundant but ensures the position is updated
-                    projectViewModel.seekToBeat(currentBeat)
+                    // Only adjust position if we're not playing
+                    // This prevents interrupting playback when zooming
+                    if !projectViewModel.isPlaying {
+                        // Ensure the playhead stays at the correct beat position after zoom changes
+                        let currentBeat = projectViewModel.currentBeat
+                        // This is redundant but ensures the position is updated
+                        projectViewModel.seekToBeat(currentBeat)
+                    }
                 }
                 // Clear selection when clicking on the background
                 .contentShape(Rectangle())
@@ -298,6 +292,54 @@ struct TimelineView: View {
                     print("Clicked on TimelineView background, cleared selection")
                 }
             }
+        }
+    }
+    
+    // MARK: - Zoom Controls
+    
+    // Zoom in one level
+    private func zoomIn() {
+        // Store the current beat position
+        let currentBeat = projectViewModel.currentBeat
+        
+        // Decrease zoom level (lower number means more zoomed in)
+        if timelineState.zoomLevel > 0 {
+            timelineState.zoomLevel -= 1
+        }
+        
+        // Ensure the playhead stays at the correct position
+        if !projectViewModel.isPlaying {
+            projectViewModel.seekToBeat(currentBeat)
+        }
+    }
+    
+    // Zoom out one level
+    private func zoomOut() {
+        // Store the current beat position
+        let currentBeat = projectViewModel.currentBeat
+        
+        // Increase zoom level (higher number means more zoomed out)
+        if timelineState.zoomLevel < 6 {
+            timelineState.zoomLevel += 1
+        }
+        
+        // Ensure the playhead stays at the correct position
+        if !projectViewModel.isPlaying {
+            projectViewModel.seekToBeat(currentBeat)
+        }
+    }
+    
+    // Reset zoom to default level (3)
+    private func resetZoom() {
+        // Store the current beat position
+        let currentBeat = projectViewModel.currentBeat
+        
+        // Reset to default zoom level
+        timelineState.zoomLevel = 3
+        
+        // Ensure the playhead stays at the correct position
+        if !projectViewModel.isPlaying {
+            projectViewModel.seekToBeat(currentBeat)
         }
     }
     

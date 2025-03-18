@@ -46,37 +46,50 @@ struct TimelineScrubber: View {
     /// Snaps a raw beat position to the nearest visible grid marker based on the current zoom level
     private func snapToNearestGridMarker(_ rawBeatPosition: Double) -> Double {
         // Determine the smallest visible grid division based on zoom level
-        let gridDivision: Double
+        let timeSignature = projectViewModel.timeSignatureBeats
         
-        if state.showSixteenthNotes {
-            // Snap to sixteenth notes (0.25 beat)
-            gridDivision = 0.25
-        } else if state.showEighthNotes {
-            // Snap to eighth notes (0.5 beat)
-            gridDivision = 0.5
-        } else if state.showQuarterNotes {
-            // Snap to quarter notes (1 beat)
-            gridDivision = 1.0
-        } else {
-            // When zoomed out all the way, snap to bars
-            // For bars, we need to handle differently to ensure we snap to the start of a bar
-            let beatsPerBar = Double(projectViewModel.timeSignatureBeats)
-            let barIndex = round(rawBeatPosition / beatsPerBar)
-            return max(0, barIndex * beatsPerBar) // Ensure we don't go negative
+        switch state.gridDivision {
+        case .sixteenth, .eighth:
+            // Snap to eighth notes (0.125 beat)
+            return round(rawBeatPosition * 8.0) / 8.0
+            
+        case .quarter:
+            // Snap to quarter notes (0.25 beat)
+            return round(rawBeatPosition * 4.0) / 4.0
+            
+        case .half:
+            // For half-bar markers (assuming 4/4 time, this would be beat 2)
+            let beatsPerBar = Double(timeSignature)
+            
+            // Calculate the bar index and position within the bar
+            let barIndex = floor(rawBeatPosition / beatsPerBar)
+            let positionInBar = rawBeatPosition - (barIndex * beatsPerBar)
+            
+            // Check if we're closer to the start of the bar, middle of the bar, or end of the bar
+            if positionInBar < beatsPerBar / 4.0 {
+                // Snap to start of bar
+                return barIndex * beatsPerBar
+            } else if positionInBar > (beatsPerBar * 3.0) / 4.0 {
+                // Snap to start of next bar
+                return (barIndex + 1) * beatsPerBar
+            } else {
+                // Snap to half-bar
+                return barIndex * beatsPerBar + beatsPerBar / 2.0
+            }
+            
+        case .bar, .twoBar, .fourBar:
+            // When zoomed out, snap to bars
+            let beatsPerBar = Double(timeSignature)
+            return round(rawBeatPosition / beatsPerBar) * beatsPerBar
         }
-        
-        // Calculate the nearest grid marker for beats and smaller divisions
-        let nearestGridMarker = round(rawBeatPosition / gridDivision) * gridDivision
-        
-        return max(0, nearestGridMarker) // Ensure we don't go negative
     }
 }
 
-#Preview {
-    TimelineScrubber(
-        projectViewModel: ProjectViewModel(),
-        state: TimelineStateViewModel(),
-        track: Track.samples[0]
-    )
-    .frame(width: 800, height: 100)
-} 
+//#Preview {
+//    TimelineScrubber(
+//        projectViewModel: ProjectViewModel(),
+//        state: TimelineStateViewModel(),
+//        track: Track.samples[0]
+//    )
+//    .frame(width: 800, height: 100)
+//} 

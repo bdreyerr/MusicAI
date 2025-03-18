@@ -81,6 +81,16 @@ class ThemeManager: ObservableObject {
         }
     }
     
+    // Background color specifically for controls like text fields
+    var controlBackgroundColor: Color {
+        switch currentTheme {
+        case .light:
+            return Color(white: 1.0) // White in light mode
+        case .dark:
+            return Color(white: 0.15) // Darker in dark mode
+        }
+    }
+    
     // Border colors
     var borderColor: Color {
         switch currentTheme {

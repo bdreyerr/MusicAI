@@ -165,17 +165,17 @@ struct AudioClipView: View {
             .highPriorityGesture(
                 DragGesture(minimumDistance: 5) // Require a minimum drag distance to start
                     .onChanged { value in
-                        print("🔊 AUDIO DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
+//                        print("🔊 AUDIO DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // If the clip isn't selected yet, select it first
                         if !isSelected {
-                            print("🔊 AUDIO DRAG: Clip not selected, selecting now")
+//                            print("🔊 AUDIO DRAG: Clip not selected, selecting now")
                             selectThisClip()
                         }
                         
                         // Check if we can start a clip drag
                         if !isDragging && !projectViewModel.interactionManager.canStartClipDrag() {
-                            print("🔊 AUDIO DRAG: Cannot start drag - interaction manager denied request")
+//                            print("🔊 AUDIO DRAG: Cannot start drag - interaction manager denied request")
                             return
                         }
                         
@@ -187,9 +187,9 @@ struct AudioClipView: View {
                                 dragStartLocation = value.startLocation
                                 isDragging = true
                                 NSCursor.closedHand.set()
-                                print("🔊 AUDIO DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat)")
+//                                print("🔊 AUDIO DRAG START: Clip \(clip.name) (id: \(clip.id)) - Starting position: \(dragStartBeat)")
                             } else {
-                                print("🔊 AUDIO DRAG: Start failed - interaction manager denied request")
+//                                print("🔊 AUDIO DRAG: Start failed - interaction manager denied request")
                             }
                         }
                         
@@ -207,7 +207,7 @@ struct AudioClipView: View {
                             // Ensure we don't go negative
                             let finalPosition = max(0, snappedBeatPosition)
                             
-                            print("🔊 AUDIO DRAG UPDATE: Clip \(clip.name) - Preview position: \(finalPosition)")
+//                            print("🔊 AUDIO DRAG UPDATE: Clip \(clip.name) - Preview position: \(finalPosition)")
                             
                             // Update the selection to preview the new position
                             // This will show where the clip will end up without moving it
@@ -216,11 +216,11 @@ struct AudioClipView: View {
                         }
                     }
                     .onEnded { value in
-                        print("🔊 AUDIO DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
+//                        print("🔊 AUDIO DRAG END DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // Only process if we were actually dragging
                         guard isDragging else {
-                            print("🔊 AUDIO DRAG END: Not dragging, ignoring")
+//                            print("🔊 AUDIO DRAG END: Not dragging, ignoring")
                             return
                         }
                         
@@ -236,7 +236,7 @@ struct AudioClipView: View {
                         // Ensure we don't go negative
                         let finalPosition = max(0, snappedBeatPosition)
                         
-                        print("🔊 AUDIO DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition)")
+//                        print("🔊 AUDIO DRAG CALCULATION: Clip \(clip.name) - Start beat: \(dragStartBeat) - Final position: \(finalPosition)")
                         
                         // Only move if the position actually changed
                         if abs(finalPosition - clip.startBeat) > 0.001 {
@@ -365,30 +365,55 @@ struct AudioClipView: View {
     
     /// Snaps a raw beat position to the nearest visible grid marker based on the current zoom level
     private func snapToNearestGridMarker(_ rawBeatPosition: Double) -> Double {
-        // Determine the smallest visible grid division based on zoom level
-        let gridDivision: Double
+        let timeSignature = projectViewModel.timeSignatureBeats
         
-        if state.showSixteenthNotes {
+        // Use the new gridDivision property to determine snap behavior
+        switch state.gridDivision {
+        case .sixteenth: // 1/16 note
             // Snap to sixteenth notes (0.25 beat)
-            gridDivision = 0.25
-        } else if state.showEighthNotes {
+            return round(rawBeatPosition * 4.0) / 4.0
+            
+        case .eighth: // 1/8 note
             // Snap to eighth notes (0.5 beat)
-            gridDivision = 0.5
-        } else if state.showQuarterNotes {
+            return round(rawBeatPosition * 2.0) / 2.0
+            
+        case .quarter: // 1/4 note
             // Snap to quarter notes (1 beat)
-            gridDivision = 1.0
-        } else {
-            // When zoomed out all the way, snap to bars
-            // For bars, we need to handle differently to ensure we snap to the start of a bar
-            let beatsPerBar = Double(projectViewModel.timeSignatureBeats)
-            let barIndex = round(rawBeatPosition / beatsPerBar)
-            return max(0, barIndex * beatsPerBar) // Ensure we don't go negative
+            return round(rawBeatPosition)
+            
+        case .half: // 1/2 note
+            // Snap to half notes (2 beats in 4/4)
+            let beatsPerBar = Double(timeSignature)
+            let barIndex = floor(rawBeatPosition / beatsPerBar)
+            let positionInBar = rawBeatPosition - (barIndex * beatsPerBar)
+            
+            // Check which marker we're closest to
+            if positionInBar < beatsPerBar / 4.0 {
+                // Snap to start of bar
+                return barIndex * beatsPerBar
+            } else if positionInBar > (beatsPerBar * 3.0) / 4.0 {
+                // Snap to start of next bar
+                return (barIndex + 1) * beatsPerBar
+            } else {
+                // Snap to half-bar
+                return barIndex * beatsPerBar + beatsPerBar / 2.0
+            }
+            
+        case .bar, .twoBar, .fourBar: // Full bar or multi-bar
+            // Snap to bar boundaries
+            let beatsPerBar = Double(timeSignature)
+            let barIndex = floor(rawBeatPosition / beatsPerBar)
+            let positionInBar = rawBeatPosition - (barIndex * beatsPerBar)
+            
+            // Check if we're closer to the start of the bar or the next bar
+            if positionInBar < beatsPerBar / 2.0 {
+                // Snap to start of bar
+                return barIndex * beatsPerBar
+            } else {
+                // Snap to start of next bar
+                return (barIndex + 1) * beatsPerBar
+            }
         }
-        
-        // Calculate the nearest grid marker for beats and smaller divisions
-        let nearestGridMarker = round(rawBeatPosition / gridDivision) * gridDivision
-        
-        return max(0, nearestGridMarker) // Ensure we don't go negative
     }
 }
 

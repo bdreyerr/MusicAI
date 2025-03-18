@@ -51,7 +51,7 @@ struct Track: Identifiable, Equatable {
     var isEnabled: Bool = true // Whether the track is enabled for playback
     var volume: Double = 0.8 // 0.0 to 1.0
     var pan: Double = 0.5 // 0.0 (left) to 1.0 (right), 0.5 is center
-    var height: CGFloat = 70 // Default track height
+    var height: CGFloat = 100 // Default track height
     var customColor: Color? = nil // Custom color for the track, overrides the default type color
     var effects: [Effect] = [] // List of effects applied to this track
     var instrument: Effect? = nil // Optional instrument for MIDI tracks

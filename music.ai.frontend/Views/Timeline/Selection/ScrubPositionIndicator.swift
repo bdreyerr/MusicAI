@@ -64,7 +64,9 @@ struct ScrubPositionIndicator: View {
         let beat = projectViewModel.currentBeat
         let beatFraction = beat.truncatingRemainder(dividingBy: 1.0)
         
-        if state.showSixteenthNotes {
+        // Use the new gridDivision property
+        switch state.gridDivision {
+        case .sixteenth:
             // Show sixteenth note precision
             if beatFraction == 0.0 {
                 return "Beat"
@@ -75,17 +77,20 @@ struct ScrubPositionIndicator: View {
             } else if beatFraction == 0.75 {
                 return "16th Note"
             }
-        } else if state.showEighthNotes {
+            
+        case .eighth:
             // Show eighth note precision
             if beatFraction == 0.0 {
                 return "Beat"
             } else if beatFraction == 0.5 {
                 return "8th Note"
             }
-        } else if state.showQuarterNotes {
+            
+        case .quarter:
             // Show quarter note precision
             return "Beat"
-        } else {
+            
+        case .half, .bar, .twoBar, .fourBar:
             // Show bar precision
             return "Bar"
         }

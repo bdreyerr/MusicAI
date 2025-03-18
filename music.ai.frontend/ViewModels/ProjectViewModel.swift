@@ -177,25 +177,34 @@ class ProjectViewModel: ObservableObject {
         // Store the current playback state
         let wasPlaying = isPlaying
         
-        // If currently playing, stop the playback timer temporarily
+        // Only stop the playback timer if we are NOT already playing
+        // This ensures we don't interrupt audio playback unnecessarily
         if wasPlaying {
-            stopPlaybackTimer()
+            // Instead of stopping and restarting, just update position variables
+            // Don't call stopPlaybackTimer() here - it would stop playback
+            
+            // Ensure beat is not negative
+            let targetBeat = max(0, beat)
+            
+            // Update both the visible position and the internal position tracker
+            currentBeat = targetBeat
+            internalBeatPosition = targetBeat
+            
+            // In a real app, you would also update the audio engine's playback position here
+            // For example: audioEngine.seekToPosition(currentBeat)
+        } else {
+            // If not playing, just update the position directly
+            
+            // Ensure beat is not negative
+            let targetBeat = max(0, beat)
+            
+            // Update both the visible position and the internal position tracker
+            currentBeat = targetBeat
+            internalBeatPosition = targetBeat
+            
+            // In a real app, you would also update the audio engine's playback position here
+            // For example: audioEngine.seekToPosition(currentBeat)
         }
-        
-        // Ensure beat is not negative
-        let targetBeat = max(0, beat)
-        
-        // Update both the visible position and the internal position tracker
-        currentBeat = targetBeat
-        internalBeatPosition = targetBeat
-        
-        // If it was playing before, restart playback from the new position
-        if wasPlaying {
-            startPlaybackTimer()
-        }
-        
-        // In a real app, you would also update the audio engine's playback position here
-        // For example: audioEngine.seekToPosition(currentBeat)
     }
     
     // Select a track
@@ -209,18 +218,23 @@ class ProjectViewModel: ObservableObject {
     }
     
     // Add a new track
-    func addTrack(name: String, type: TrackType, height: CGFloat = 70) {
+    func addTrack(name: String, type: TrackType, height: CGFloat = 100) {
         var newTrack = Track(name: name, type: type)
         newTrack.height = height
-        tracks.append(newTrack)
+        
+        // Use withAnimation to make the track addition smoother
+        withAnimation(.easeInOut(duration: 0.2)) {
+            tracks.append(newTrack)
+        }
         
         // If this is the first track, select it automatically
         if tracks.count == 1 {
             selectedTrackId = newTrack.id
         }
         
-        // Update the timeline content width
-        updateTimelineContentWidth()
+        // Track was just added - update the timeline content width
+        // This is done to ensure there's enough space for the new track
+        updateTimelineContentWidth(reason: "track_addition")
     }
     
     // Remove a track
@@ -228,7 +242,11 @@ class ProjectViewModel: ObservableObject {
         guard index >= 0 && index < tracks.count else { return }
         
         let trackToRemove = tracks[index]
-        tracks.remove(at: index)
+        
+        // Use withAnimation for smoother track removal
+        withAnimation(.easeInOut(duration: 0.2)) {
+            tracks.remove(at: index)
+        }
         
         // If we removed the selected track, select another one if available
         if trackToRemove.id == selectedTrackId {
@@ -242,7 +260,7 @@ class ProjectViewModel: ObservableObject {
         }
         
         // Update the timeline content width
-        updateTimelineContentWidth()
+        updateTimelineContentWidth(reason: "track_removal")
     }
     
     // Update a track
@@ -315,7 +333,110 @@ class ProjectViewModel: ObservableObject {
         print("📢 PROJECT VM: Observers notified")
         
         // Update the timeline content width if needed
-        updateTimelineContentWidth()
+        updateTimelineContentWidth(reason: "track_update")
+    }
+    
+    // Update just the pan value for a track without recalculating timeline content width
+    func updateTrackPanOnly(at index: Int, pan: Double) {
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track pan - index \(index) out of bounds")
+            return
+        }
+        
+        // Update just the pan value directly 
+        tracks[index].pan = pan
+        
+        // Still notify observers but skip the timeline content width update
+        // since pan changes don't affect the layout of the timeline
+        objectWillChange.send()
+    }
+    
+    // Update just the volume value for a track without recalculating timeline content width
+    func updateTrackVolumeOnly(at index: Int, volume: Double) {
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track volume - index \(index) out of bounds")
+            return
+        }
+        
+        // Update just the volume value directly 
+        tracks[index].volume = volume
+        
+        // Still notify observers but skip the timeline content width update
+        // since volume changes don't affect the layout of the timeline
+        objectWillChange.send()
+    }
+    
+    // Update track controls without recalculating timeline content width
+    func updateTrackControlsOnly(at index: Int, isMuted: Bool? = nil, isSolo: Bool? = nil, 
+                               isArmed: Bool? = nil, isEnabled: Bool? = nil) {
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track controls - index \(index) out of bounds")
+            return
+        }
+        
+        // Only update the properties that were passed in (not nil)
+        if let muted = isMuted {
+            tracks[index].isMuted = muted
+        }
+        
+        if let solo = isSolo {
+            tracks[index].isSolo = solo
+        }
+        
+        if let armed = isArmed {
+            tracks[index].isArmed = armed
+        }
+        
+        if let enabled = isEnabled {
+            tracks[index].isEnabled = enabled
+        }
+        
+        // Still notify observers but skip the timeline content width update
+        // since control changes don't affect the layout of the timeline
+        objectWillChange.send()
+    }
+    
+    // Update just the track height without recalculating timeline content width
+    func updateTrackHeightOnly(at index: Int, height: CGFloat) {
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track height - index \(index) out of bounds")
+            return
+        }
+        
+        // Update just the height value directly 
+        tracks[index].height = height
+        
+        // Still notify observers but skip the timeline content width update
+        // since height changes don't affect the horizontal layout of the timeline
+        objectWillChange.send()
+    }
+    
+    // Update just the track name without recalculating timeline content width
+    func updateTrackNameOnly(at index: Int, name: String) {
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track name - index \(index) out of bounds")
+            return
+        }
+        
+        // Update just the name directly
+        tracks[index].name = name
+        
+        // Still notify observers but skip the timeline content width update
+        objectWillChange.send()
+    }
+    
+    // Update just the track color without recalculating timeline content width
+    func updateTrackColorOnly(at index: Int, color: Color?) {
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track color - index \(index) out of bounds")
+            return
+        }
+        
+        // Update just the color directly
+        tracks[index].customColor = color
+        
+        // Still notify observers but skip the timeline content width update
+        objectWillChange.send()
     }
     
     // MARK: - Private
@@ -390,28 +511,31 @@ class ProjectViewModel: ObservableObject {
     }
     
     // Update the timeline content width based on current tracks and clips
-    private func updateTimelineContentWidth() {
+    private func updateTimelineContentWidth(reason: String? = nil) {
         // Only update if we have a reference to the timeline state
         guard let timelineState = findTimelineState() else { 
             print("⚠️ PROJECT VM: Cannot update timeline width - no timeline state reference")
             return 
         }
         
-        print("📏 PROJECT VM: Updating timeline content width based on current tracks and clips")
+        // Create a less noisy log - only print when in debug mode
+        #if DEBUG
+        if let reason = reason {
+            print("📏 Updating timeline width - reason: \(reason)")
+        } else {
+            print("📏 Updating timeline width")
+        }
+        #endif
         
-        // Force a UI update by triggering a small change in the zoom level
-        // This will cause the timeline to recalculate its content width
-        let currentZoom = timelineState.zoomLevel
-        
-        // Apply a small change to trigger recalculation
+        // Instead of manipulating zoom level twice, use contentSizeChanged to trigger a recalculation
         DispatchQueue.main.async {
-            timelineState.zoomLevel = currentZoom + 0.001
+            // Notify that the content size has changed
+            timelineState.contentSizeChanged()
             
-            // Reset to original zoom level after a short delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                timelineState.zoomLevel = currentZoom
-                print("📏 PROJECT VM: Timeline content width updated")
-            }
+            // Only log in debug mode to reduce console noise
+            #if DEBUG
+            // No need for a second log message - reduces noise
+            #endif
         }
     }
 } 
