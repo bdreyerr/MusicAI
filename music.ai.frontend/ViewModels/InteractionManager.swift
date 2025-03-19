@@ -7,16 +7,16 @@ class InteractionManager: ObservableObject {
     // Interaction state
     @Published var isSelecting: Bool = false // Active selection in progress
     @Published var isDraggingClip: Bool = false // Currently dragging a clip
+    @Published var isResizingClip: Bool = false // Currently resizing a clip
     @Published var isHandlingRightClick: Bool = false // Currently processing a right-click
     @Published var isHandlingDrop: Bool = false // Currently handling a drop
-    @Published var isResizingClip: Bool = false // Currently resizing a clip
     
     // Interaction locks
     private var selectionLock = false
     private var clipDragLock = false
+    private var clipResizeLock = false
     private var rightClickLock = false
     private var dropLock = false
-    private var clipResizeLock = false
     
     // Debug settings
     private let loggingEnabled = false // Set to true to enable detailed logging
@@ -51,12 +51,12 @@ class InteractionManager: ObservableObject {
     /// Start a selection interaction
     func startSelection() -> Bool {
         log("⚪️ REQUEST: Start selection")
-        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
+        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), clipResize: \(isResizingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
         log("⚪️ \(currentState)")
         
-        guard !selectionLock && !clipDragLock && !rightClickLock && !dropLock else {
+        guard !selectionLock && !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock else {
             log("❌ DENIED: Cannot start selection - another interaction is active")
-            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
             return false
         }
         
@@ -80,12 +80,12 @@ class InteractionManager: ObservableObject {
     /// Start a clip drag interaction
     func startClipDrag() -> Bool {
         log("⚪️ REQUEST: Start clip drag")
-        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
+        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), clipResize: \(isResizingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
         log("⚪️ \(currentState)")
         
-        guard !clipDragLock && !rightClickLock && !dropLock else {
+        guard !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock else {
             log("❌ DENIED: Cannot start clip drag - another interaction is active")
-            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
             return false
         }
         
@@ -109,68 +109,15 @@ class InteractionManager: ObservableObject {
         log("🏁 Clip drag ended")
     }
     
-    /// Start a right-click interaction
-    func startRightClick() -> Bool {
-        log("⚪️ REQUEST: Start right-click")
-        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
-        log("⚪️ \(currentState)")
-        
-        // Right click has highest priority and can interrupt other interactions
-        rightClickLock = true
-        isHandlingRightClick = true
-        lastInteractionTime = Date()
-        lastInteractionDescription = "Right-click started"
-        log("✅ GRANTED: Right-click started (high priority)")
-        return true
-    }
-    
-    /// End a right-click interaction
-    func endRightClick() {
-        isHandlingRightClick = false
-        rightClickLock = false
-        lastInteractionTime = Date()
-        lastInteractionDescription = "Right-click ended"
-        log("🏁 Right-click ended")
-    }
-    
-    /// Start a drop interaction
-    func startDrop() -> Bool {
-        log("⚪️ REQUEST: Start drop")
-        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
-        log("⚪️ \(currentState)")
-        
-        guard !selectionLock && !clipDragLock && !rightClickLock && !dropLock else {
-            log("❌ DENIED: Cannot start drop - another interaction is active")
-            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), rightClick: \(rightClickLock), drop: \(dropLock)")
-            return false
-        }
-        
-        isHandlingDrop = true
-        dropLock = true
-        lastInteractionTime = Date()
-        lastInteractionDescription = "Drop started"
-        log("✅ GRANTED: Drop started")
-        return true
-    }
-    
-    /// End a drop interaction
-    func endDrop() {
-        isHandlingDrop = false
-        dropLock = false
-        lastInteractionTime = Date()
-        lastInteractionDescription = "Drop ended"
-        log("🏁 Drop ended")
-    }
-    
     /// Start a clip resize interaction
     func startClipResize() -> Bool {
         log("⚪️ REQUEST: Start clip resize")
-        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop), resize: \(isResizingClip)"
+        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), clipResize: \(isResizingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
         log("⚪️ \(currentState)")
         
-        guard !clipDragLock && !rightClickLock && !dropLock && !clipResizeLock else {
+        guard !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock else {
             log("❌ DENIED: Cannot start clip resize - another interaction is active")
-            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), rightClick: \(rightClickLock), drop: \(dropLock), resize: \(clipResizeLock)")
+            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
             return false
         }
         
@@ -194,22 +141,85 @@ class InteractionManager: ObservableObject {
         log("🏁 Clip resize ended")
     }
     
+    /// Start a right-click interaction
+    func startRightClick() -> Bool {
+        log("⚪️ REQUEST: Start right-click")
+        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), clipResize: \(isResizingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
+        log("⚪️ \(currentState)")
+        
+        // Right click has highest priority and can interrupt other interactions
+        rightClickLock = true
+        isHandlingRightClick = true
+        lastInteractionTime = Date()
+        lastInteractionDescription = "Right-click started"
+        log("✅ GRANTED: Right-click started (high priority)")
+        return true
+    }
+    
+    /// End a right-click interaction
+    func endRightClick() {
+        isHandlingRightClick = false
+        rightClickLock = false
+        lastInteractionTime = Date()
+        lastInteractionDescription = "Right-click ended"
+        log("🏁 Right-click ended")
+    }
+    
+    /// Start a drop interaction
+    func startDrop() -> Bool {
+        log("⚪️ REQUEST: Start drop")
+        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), clipResize: \(isResizingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
+        log("⚪️ \(currentState)")
+        
+        guard !selectionLock && !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock else {
+            log("❌ DENIED: Cannot start drop - another interaction is active")
+            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+            return false
+        }
+        
+        isHandlingDrop = true
+        dropLock = true
+        lastInteractionTime = Date()
+        lastInteractionDescription = "Drop started"
+        log("✅ GRANTED: Drop started")
+        return true
+    }
+    
+    /// End a drop interaction
+    func endDrop() {
+        isHandlingDrop = false
+        dropLock = false
+        lastInteractionTime = Date()
+        lastInteractionDescription = "Drop ended"
+        log("🏁 Drop ended")
+    }
+    
     /// Check if we can start a new selection
     func canStartSelection() -> Bool {
-        let result = !selectionLock && !clipDragLock && !rightClickLock && !dropLock
+        let result = !selectionLock && !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock
         log("🔍 canStartSelection check: \(result)")
         if !result {
-            log("🔍 Blocked by locks - selection: \(selectionLock), clipDrag: \(clipDragLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+            log("🔍 Blocked by locks - selection: \(selectionLock), clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
         }
         return result
     }
     
     /// Check if we can start a new clip drag
     func canStartClipDrag() -> Bool {
-        let result = !clipDragLock && !rightClickLock && !dropLock
+        let result = !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock
         log("🔍 canStartClipDrag check: \(result)")
         if !result {
-            log("🔍 Blocked by locks - clipDrag: \(clipDragLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+            log("🔍 Blocked by locks - clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+        }
+        return result
+    }
+    
+    /// Check if we can start a new clip resize
+    func canStartClipResize() -> Bool {
+        let result = !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock
+        log("🔍 canStartClipResize check: \(result)")
+        if !result {
+            log("🔍 Blocked by locks - clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
         }
         return result
     }
@@ -221,23 +231,13 @@ class InteractionManager: ObservableObject {
         return true
     }
     
-    /// Check if we can start a new clip resize
-    func canStartClipResize() -> Bool {
-        let result = !clipDragLock && !rightClickLock && !dropLock && !clipResizeLock
-        log("🔍 canStartClipResize check: \(result)")
-        if !result {
-            log("🔍 Blocked by locks - clipDrag: \(clipDragLock), rightClick: \(rightClickLock), drop: \(dropLock), resize: \(clipResizeLock)")
-        }
-        return result
-    }
-    
     /// Reset all interaction states and locks
     func resetAll() {
         isSelecting = false
         isDraggingClip = false
+        isResizingClip = false
         isHandlingRightClick = false
         isHandlingDrop = false
-        isResizingClip = false
         resetLocks()
         lastInteractionDescription = "All interactions reset"
         log("🔄 All interactions and locks reset")
@@ -246,12 +246,12 @@ class InteractionManager: ObservableObject {
     // MARK: - Private Methods
     
     private func resetLocks() {
-        let hadActiveLocks = selectionLock || clipDragLock || rightClickLock || dropLock || clipResizeLock
+        let hadActiveLocks = selectionLock || clipDragLock || clipResizeLock || rightClickLock || dropLock
         selectionLock = false
         clipDragLock = false
+        clipResizeLock = false
         rightClickLock = false
         dropLock = false
-        clipResizeLock = false
         
         if hadActiveLocks {
             log("🔓 All locks cleared")

@@ -274,6 +274,66 @@ class AudioViewModel: ObservableObject {
         return true
     }
     
+    /// Resize an audio clip by changing its duration
+    func resizeAudioClip(trackId: UUID, clipId: UUID, newDuration: Double) -> Bool {
+        guard newDuration > 0, // Ensure positive duration
+              let projectViewModel = projectViewModel,
+              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+            return false
+        }
+        
+        var track = projectViewModel.tracks[trackIndex]
+        
+        // Ensure this is an audio track
+        guard track.type == .audio else {
+            return false
+        }
+        
+        // Find the clip in the track
+        guard let clipIndex = track.audioClips.firstIndex(where: { $0.id == clipId }) else {
+            return false
+        }
+        
+        // Get the clip we're resizing
+        var clipToResize = track.audioClips[clipIndex]
+        let startBeat = clipToResize.startBeat
+        let newEndBeat = startBeat + newDuration
+        
+        // Check for overlaps with other clips
+        let overlappingClips = track.audioClips.filter { clip in
+            clip.id != clipId && // Not the clip we're resizing
+            (startBeat < clip.endBeat && newEndBeat > clip.startBeat) // Overlaps
+        }
+        
+        // Remove any overlapping clips
+        for overlappingClip in overlappingClips {
+            track.removeAudioClip(id: overlappingClip.id)
+        }
+        
+        // Update the clip's duration
+        clipToResize.duration = newDuration
+        
+        // Remove the old clip and add the updated one
+        track.removeAudioClip(id: clipId)
+        _ = track.addAudioClip(clipToResize)
+        
+        // Update the track in the project view model
+        projectViewModel.updateTrack(at: trackIndex, with: track)
+        
+        // Update the selection to match the new clip size
+        if let timelineState = findTimelineState(),
+           timelineState.selectionActive,
+           timelineState.selectionTrackId == trackId {
+            timelineState.startSelection(at: startBeat, trackId: trackId)
+            timelineState.updateSelection(to: newEndBeat)
+        }
+        
+        // Force UI update by triggering objectWillChange
+        projectViewModel.objectWillChange.send()
+        
+        return true
+    }
+    
     /// Check if an audio clip is currently selected on a specific track
     func isAudioClipSelected(trackId: UUID) -> Bool {
         guard let timelineState = findTimelineState(),
@@ -325,144 +385,6 @@ class AudioViewModel: ObservableObject {
     /// Set the timeline state reference
     func setTimelineState(_ timelineState: TimelineStateViewModel) {
         self.timelineState = timelineState
-    }
-    
-    /// Resize an audio clip by changing its duration
-    func resizeAudioClipEnd(trackId: UUID, clipId: UUID, newDuration: Double) -> Bool {
-        // Validate the minimum allowed duration (1/4 beat)
-        let minimumDuration = 0.25
-        guard newDuration >= minimumDuration else {
-            return false
-        }
-        
-        guard let projectViewModel = projectViewModel,
-              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
-            return false
-        }
-        
-        var track = projectViewModel.tracks[trackIndex]
-        
-        // Ensure this is an audio track
-        guard track.type == .audio else {
-            return false
-        }
-        
-        // Find the clip in the track
-        guard let clipIndex = track.audioClips.firstIndex(where: { $0.id == clipId }) else {
-            return false
-        }
-        
-        // Get the clip we're resizing
-        var clipToResize = track.audioClips[clipIndex]
-        let originalStartBeat = clipToResize.startBeat
-        let newEndBeat = originalStartBeat + newDuration
-        
-        // Check for overlaps with other clips
-        let overlappingClips = track.audioClips.filter { clip in
-            clip.id != clipId && // Not the clip we're resizing
-            (originalStartBeat < clip.endBeat && newEndBeat > clip.startBeat) && // Overlaps
-            clip.startBeat > originalStartBeat // Only consider clips to the right
-        }
-        
-        // Remove any overlapping clips
-        for overlappingClip in overlappingClips {
-            track.removeAudioClip(id: overlappingClip.id)
-        }
-        
-        // Update the clip's duration
-        clipToResize.duration = newDuration
-        
-        // Remove the old clip and add the updated one
-        track.removeAudioClip(id: clipId)
-        _ = track.addAudioClip(clipToResize)
-        
-        // Update the track in the project view model
-        projectViewModel.updateTrack(at: trackIndex, with: track)
-        
-        // Update the selection to match the new clip bounds
-        if let timelineState = findTimelineState(),
-           timelineState.selectionActive,
-           timelineState.selectionTrackId == trackId {
-            timelineState.startSelection(at: originalStartBeat, trackId: trackId)
-            timelineState.updateSelection(to: newEndBeat)
-        }
-        
-        // Force UI update by triggering objectWillChange
-        projectViewModel.objectWillChange.send()
-        
-        return true
-    }
-    
-    /// Resize an audio clip by changing its start position and duration
-    func resizeAudioClipStart(trackId: UUID, clipId: UUID, newStartBeat: Double) -> Bool {
-        guard let projectViewModel = projectViewModel,
-              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
-            return false
-        }
-        
-        var track = projectViewModel.tracks[trackIndex]
-        
-        // Ensure this is an audio track
-        guard track.type == .audio else {
-            return false
-        }
-        
-        // Find the clip in the track
-        guard let clipIndex = track.audioClips.firstIndex(where: { $0.id == clipId }) else {
-            return false
-        }
-        
-        // Get the clip we're resizing
-        var clipToResize = track.audioClips[clipIndex]
-        let originalEndBeat = clipToResize.endBeat
-        
-        // Ensure we maintain a minimum duration (1/4 beat)
-        let minimumDuration = 0.25
-        let maxStartBeat = originalEndBeat - minimumDuration
-        
-        // If the new start position would make the clip too short, limit it
-        if newStartBeat > maxStartBeat {
-            return false
-        }
-        
-        // Calculate new duration
-        let newDuration = originalEndBeat - newStartBeat
-        
-        // Check for overlaps with other clips
-        let overlappingClips = track.audioClips.filter { clip in
-            clip.id != clipId && // Not the clip we're resizing
-            (newStartBeat < clip.endBeat && originalEndBeat > clip.startBeat) && // Overlaps
-            clip.endBeat < originalEndBeat // Only consider clips to the left
-        }
-        
-        // Remove any overlapping clips
-        for overlappingClip in overlappingClips {
-            track.removeAudioClip(id: overlappingClip.id)
-        }
-        
-        // Update the clip's position and duration
-        clipToResize.startBeat = newStartBeat
-        clipToResize.duration = newDuration
-        
-        // Remove the old clip and add the updated one
-        track.removeAudioClip(id: clipId)
-        _ = track.addAudioClip(clipToResize)
-        
-        // Update the track in the project view model
-        projectViewModel.updateTrack(at: trackIndex, with: track)
-        
-        // Update the selection to match the new clip bounds
-        if let timelineState = findTimelineState(),
-           timelineState.selectionActive,
-           timelineState.selectionTrackId == trackId {
-            timelineState.startSelection(at: newStartBeat, trackId: trackId)
-            timelineState.updateSelection(to: originalEndBeat)
-        }
-        
-        // Force UI update by triggering objectWillChange
-        projectViewModel.objectWillChange.send()
-        
-        return true
     }
     
     // MARK: - Private Helpers
