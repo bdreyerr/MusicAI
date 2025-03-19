@@ -44,7 +44,7 @@ class ScrollSyncCoordinator: ObservableObject {
 
 /// Main timeline view for the DAW application
 struct TimelineView: View {
-    @StateObject private var timelineState = TimelineStateViewModel()
+    @StateObject private var timelineState: TimelineStateViewModel
     @State private var startDragY: CGFloat = 0
     @State private var isDragging: Bool = false
     @StateObject private var menuCoordinator = MenuCoordinator()
@@ -57,10 +57,16 @@ struct TimelineView: View {
     let defaultTrackHeight: CGFloat = 100 // Default height for new tracks
     let controlsWidth: CGFloat = 200 // Must match TrackView.controlsWidth
     
+    // Track grid refresh timing for synchronization
+    @State private var lastGridRefreshTime: Date = Date()
+    @State private var needsRulerGridSync: Bool = false
+    
     // Initialize with project view model
     init(projectViewModel: ProjectViewModel) {
         self.projectViewModel = projectViewModel
-        // We'll connect the timeline state in onAppear instead of here
+        // Initialize the timeline state with _StateObject wrapper
+        // This prevents potential didSet triggers during view initialization
+        _timelineState = StateObject(wrappedValue: TimelineStateViewModel())
     }
     
     var body: some View {
@@ -160,11 +166,17 @@ struct TimelineView: View {
                                             MagnificationGesture()
                                                 .onChanged { scale in
                                                     // Handle the pinch zoom gesture using the state view model
-                                                    timelineState.handlePinchGesture(scale: scale)
+                                                    // Use DispatchQueue.main.async to prevent state updates during view update
+                                                    DispatchQueue.main.async {
+                                                        timelineState.handlePinchGesture(scale: scale)
+                                                    }
                                                 }
                                                 .onEnded { _ in
                                                     // Reset with scale = 1.0 to signal end of gesture
-                                                    timelineState.handlePinchGesture(scale: 1.0)
+                                                    // Use DispatchQueue.main.async to prevent state updates during view update
+                                                    DispatchQueue.main.async {
+                                                        timelineState.handlePinchGesture(scale: 1.0)
+                                                    }
                                                 }
                                         )
                                         // Track scroll position for the entire content
@@ -289,14 +301,17 @@ struct TimelineView: View {
                 .padding(8)
                 
                 .onAppear {
-                    // Connect the coordinator to our view model
-                    menuCoordinator.projectViewModel = projectViewModel
-                    // Set the default track height
-                    menuCoordinator.defaultTrackHeight = defaultTrackHeight
-                    // Connect the timeline state to the project view model
-                    projectViewModel.timelineState = timelineState
-                    // Connect the timeline state to the MIDI view model
-                    projectViewModel.midiViewModel.setTimelineState(timelineState)
+                    // Use DispatchQueue.main.async to prevent state updates during view update
+                    DispatchQueue.main.async {
+                        // Connect the coordinator to our view model
+                        menuCoordinator.projectViewModel = projectViewModel
+                        // Set the default track height
+                        menuCoordinator.defaultTrackHeight = defaultTrackHeight
+                        // Connect the timeline state to the project view model
+                        projectViewModel.timelineState = timelineState
+                        // Connect the timeline state to the MIDI view model
+                        projectViewModel.midiViewModel.setTimelineState(timelineState)
+                    }
                 }
                 // Respond to zoom level changes
                 .onChange(of: timelineState.zoomLevel) { _, newZoomLevel in
@@ -306,14 +321,31 @@ struct TimelineView: View {
                         // Ensure the playhead stays at the correct beat position after zoom changes
                         let currentBeat = projectViewModel.currentBeat
                         // This is redundant but ensures the position is updated
-                        projectViewModel.seekToBeat(currentBeat)
+                        DispatchQueue.main.async {
+                            projectViewModel.seekToBeat(currentBeat)
+                        }
+                    }
+                    
+                    // Track grid refresh for synchronization - use async updates
+                    DispatchQueue.main.async {
+                        self.lastGridRefreshTime = Date()
+                        self.needsRulerGridSync = true
+                        
+                        // Force a redraw of both the grid and ruler with a short delay
+                        // to ensure they are in sync after zoom level changes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self.timelineState.contentSizeChanged()
+                            self.needsRulerGridSync = false
+                        }
                     }
                 }
                 // Clear selection when clicking on the background
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    timelineState.clearSelection()
-                    print("Clicked on TimelineView background, cleared selection")
+                    DispatchQueue.main.async {
+                        timelineState.clearSelection()
+                        print("Clicked on TimelineView background, cleared selection")
+                    }
                 }
             }
         }
@@ -328,7 +360,10 @@ struct TimelineView: View {
         
         // Decrease zoom level (lower number means more zoomed in)
         if timelineState.zoomLevel > 0 {
-            timelineState.zoomLevel -= 1
+            // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+            DispatchQueue.main.async {
+                self.timelineState.zoomLevel -= 1
+            }
         }
         
         // Ensure the playhead stays at the correct position
@@ -344,7 +379,10 @@ struct TimelineView: View {
         
         // Increase zoom level (higher number means more zoomed out)
         if timelineState.zoomLevel < 6 {
-            timelineState.zoomLevel += 1
+            // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+            DispatchQueue.main.async {
+                self.timelineState.zoomLevel += 1
+            }
         }
         
         // Ensure the playhead stays at the correct position
@@ -359,7 +397,10 @@ struct TimelineView: View {
         let currentBeat = projectViewModel.currentBeat
         
         // Reset to default zoom level
-        timelineState.zoomLevel = 3
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async {
+            self.timelineState.zoomLevel = 3
+        }
         
         // Ensure the playhead stays at the correct position
         if !projectViewModel.isPlaying {

@@ -1,6 +1,199 @@
 import SwiftUI
 import AppKit
 
+// New component for the waveform visualization
+struct SimpleWaveformView: View {
+    @EnvironmentObject var themeManager: ThemeManager
+    @ObservedObject var projectViewModel: ProjectViewModel
+    
+    // Store the bar heights for animation (increased count)
+    @State private var barHeights: [CGFloat] = Array(repeating: 0.5, count: 14)
+    @State private var updateTimer: Timer? = nil
+    
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<barHeights.count, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.white.opacity(0.9)) // Slightly transparent white for softer look
+                    .frame(width: 3, height: barHeights[index] * 16) // Slightly smaller height
+            }
+        }
+        .frame(width: 72, height: 20) // Wider to fit more bars
+        .onAppear {
+            startWaveformAnimation()
+        }
+        .onDisappear {
+            updateTimer?.invalidate()
+            updateTimer = nil
+        }
+        .onChange(of: projectViewModel.isPlaying) { _, isPlaying in
+            if isPlaying {
+                startWaveformAnimation()
+            } else {
+                // When stopped, set all bars to a minimal height
+                withAnimation(.easeOut(duration: 0.3)) {
+                    for i in 0..<barHeights.count {
+                        barHeights[i] = 0.2
+                    }
+                }
+            }
+        }
+    }
+    
+    private func startWaveformAnimation() {
+        // Cancel any existing timer
+        updateTimer?.invalidate()
+        
+        // Create a new timer that updates the waveform
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            if projectViewModel.isPlaying {
+                // Only animate when playing
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    for i in 0..<barHeights.count {
+                        // Generate random heights with a more realistic audio pattern
+                        // Center bars tend to be taller (mid frequencies prominent in most music)
+                        let centerIndex = barHeights.count / 2
+                        let distanceFromCenter = abs(i - centerIndex)
+                        
+                        if distanceFromCenter <= 2 {
+                            // Center bars (mids) - taller on average
+                            barHeights[i] = CGFloat.random(in: 0.5...1.0)
+                        } else if distanceFromCenter >= 5 {
+                            // Outer bars (extreme lows and highs) - shorter on average
+                            barHeights[i] = CGFloat.random(in: 0.1...0.6)
+                        } else {
+                            // Transition bars - medium height
+                            barHeights[i] = CGFloat.random(in: 0.3...0.8)
+                        }
+                        
+                        // Add some correlation between adjacent bars for a more natural look
+                        if i > 0 {
+                            // Slightly influence each bar by its neighbor (30% influence)
+                            barHeights[i] = barHeights[i] * 0.7 + barHeights[i-1] * 0.3
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// New component that mimics the iPhone 16 notch design
+struct NotchDisplayView: View {
+    @ObservedObject var projectViewModel: ProjectViewModel
+    @EnvironmentObject var themeManager: ThemeManager
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Left side - App logo (larger)
+            Image("logo")
+                .resizable()
+                .interpolation(.high) // Use high quality interpolation
+                .antialiased(true) // Enable antialiasing
+                .renderingMode(.original) // Preserve original colors
+                .scaledToFit()
+                .frame(width: 30, height: 30)
+//                .colorInvert() // Ensure logo is visible on black background
+            
+            // Position displays (side by side with divider)
+            HStack(spacing: 10) {
+                // Bar.Beat format with larger font
+                NotchPositionDisplayWrapper(projectViewModel: projectViewModel)
+                
+                // Small divider between position and time
+                Rectangle()
+                    .fill(Color.white.opacity(0.4))
+                    .frame(width: 1, height: 14)
+                
+                // Time format (minutes:seconds)
+                NotchTimeDisplayWrapper(projectViewModel: projectViewModel)
+            }
+            .frame(width: 120, alignment: .center) // Fix width to ensure consistent sizing
+            
+            // Right side - Waveform visualization
+            SimpleWaveformView(projectViewModel: projectViewModel)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 5) // Further reduced height
+        .background(
+            Capsule()
+                .fill(Color.black) // Always black in both themes
+        )
+        .frame(width: 280, height: 32) // Wider and shorter
+        // Add a subtle shadow for depth
+        .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 1)
+    }
+}
+
+// Custom wrapper for position display in the notch
+struct NotchPositionDisplayWrapper: View {
+    @ObservedObject var projectViewModel: ProjectViewModel
+    
+    var body: some View {
+        Text(projectViewModel.formattedPosition())
+            .font(.system(.callout, design: .monospaced).weight(.bold))
+            .foregroundColor(.white)
+    }
+}
+
+// Custom wrapper for time display in the notch
+struct NotchTimeDisplayWrapper: View {
+    @ObservedObject var projectViewModel: ProjectViewModel
+    @State private var displayedTimePosition: String = "0:00"
+    @State private var updateTimer: Timer? = nil
+    
+    var body: some View {
+        Text(displayedTimePosition)
+            .font(.system(.callout, design: .monospaced).weight(.medium))
+            .foregroundColor(.white.opacity(0.9))
+            .onAppear {
+                // Initialize with current position
+                displayedTimePosition = formatTimePosition(projectViewModel.currentBeat, tempo: projectViewModel.tempo)
+                
+                // Start a timer that updates the display
+                startUpdateTimer()
+            }
+            .onDisappear {
+                // Clean up timer when view disappears
+                updateTimer?.invalidate()
+                updateTimer = nil
+            }
+            .onChange(of: projectViewModel.isPlaying) { _, isPlaying in
+                if isPlaying {
+                    // When playback starts, use a slower update rate
+                    startUpdateTimer()
+                } else {
+                    // When playback stops, update immediately
+                    displayedTimePosition = formatTimePosition(projectViewModel.currentBeat, tempo: projectViewModel.tempo)
+                    startUpdateTimer(frequency: 10) // 10 Hz when not playing
+                }
+            }
+    }
+    
+    private func startUpdateTimer(frequency: Double = 5) {
+        // Cancel any existing timer
+        updateTimer?.invalidate()
+        
+        // Create a new timer that updates at the specified frequency
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0/frequency, repeats: true) { _ in
+            // Update the displayed position
+            displayedTimePosition = formatTimePosition(projectViewModel.currentBeat, tempo: projectViewModel.tempo)
+        }
+    }
+    
+    // Convert beats to minutes:seconds.milliseconds format
+    private func formatTimePosition(_ beats: Double, tempo: Double) -> String {
+        // Convert beats to seconds based on tempo
+        let secondsPerBeat = 60.0 / tempo
+        let totalSeconds = beats * secondsPerBeat
+        
+        let minutes = Int(totalSeconds) / 60
+        let seconds = Int(totalSeconds) % 60
+        
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
 struct TopControlBarView: View {
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
@@ -22,238 +215,228 @@ struct TopControlBarView: View {
     
     var body: some View {
         HStack(spacing: 0) {
-            // BPM control with tap button
-            HStack(spacing: 8) {
-                // Tap tempo button
-                Button(action: {
-                    // TODO: Implement tap tempo
-                }) {
-                    Text("Tap")
+            // Notch display (moved to left side)
+            NotchDisplayView(projectViewModel: projectViewModel)
+                .padding(.vertical, 1)
+                .padding(.leading, 14)
+                .padding(.trailing, 20)
+            
+            // Left group with controls
+            HStack(spacing: 0) {
+                // BPM control with tap button
+                HStack(spacing: 8) {
+                    // Tap tempo button
+                    Button(action: {
+                        // TODO: Implement tap tempo
+                    }) {
+                        Text("Tap")
+                            .font(.subheadline)
+                            .foregroundColor(themeManager.primaryTextColor)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(themeManager.tertiaryBackgroundColor.opacity(0.3))
+                            )
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .help("Tap to set BPM")
+                    
+                    // Tempo editor with direct NSTextField implementation
+                    ZStack(alignment: .center) {
+                        if isEditingTempo {
+                            // Using our custom NSTextField wrapper
+                            TempoFieldWrapper(
+                                initialValue: tempTempoValue,
+                                themeManager: themeManager,
+                                controller: tempoFieldController,
+                                minValue: Int(minBPM),
+                                maxValue: Int(maxBPM),
+                                onCommit: { newValue in
+                                    if let newTempo = Double(newValue), newTempo >= minBPM && newTempo <= maxBPM {
+                                        projectViewModel.tempo = newTempo
+                                    }
+                                    isEditingTempo = false
+                                }
+                            )
+                            .frame(width: 62, height: 30)
+                        } else {
+                            Text("\(Int(projectViewModel.tempo))")
+                                .font(.system(.title3, design: .monospaced))
+                                .foregroundColor(themeManager.primaryTextColor)
+                                .frame(width: 50, height: 24, alignment: .center)
+                                .padding(.horizontal, 6)
+                                .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
+                                .cornerRadius(4)
+                                .onTapGesture {
+                                    tempTempoValue = "\(Int(projectViewModel.tempo))"
+                                    isEditingTempo = true
+                                    isEditingTimeSignatureBeats = false
+                                    isEditingTimeSignatureUnit = false
+                                }
+                        }
+                    }
+                    .frame(width: 62, height: 30) // Fixed size for both states
+                    
+                    Text("BPM")
                         .font(.subheadline)
                         .foregroundColor(themeManager.primaryTextColor)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(themeManager.tertiaryBackgroundColor.opacity(0.3))
-                        )
+                    
+                    // Metronome toggle
+                    Button(action: {
+                        isMetronomeEnabled.toggle()
+                    }) {
+                        Image(systemName: isMetronomeEnabled ? "metronome.fill" : "metronome")
+                            .font(.subheadline)
+                            .foregroundColor(isMetronomeEnabled ? .blue : themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .padding(.leading, 4)
+                    .help("Metronome")
                 }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Tap to set BPM")
+                .padding(.horizontal, 10)
                 
-                // Tempo editor with direct NSTextField implementation
-                ZStack(alignment: .center) {
-                    if isEditingTempo {
-                        // Using our custom NSTextField wrapper
-                        TempoFieldWrapper(
-                            initialValue: tempTempoValue,
-                            themeManager: themeManager,
-                            controller: tempoFieldController,
-                            minValue: Int(minBPM),
-                            maxValue: Int(maxBPM),
-                            onCommit: { newValue in
-                                if let newTempo = Double(newValue), newTempo >= minBPM && newTempo <= maxBPM {
-                                    projectViewModel.tempo = newTempo
-                                }
-                                isEditingTempo = false
-                            }
-                        )
-                        .frame(width: 62, height: 30)
-                    } else {
-                        Text("\(Int(projectViewModel.tempo))")
-                            .font(.system(.title3, design: .monospaced))
+                Divider()
+                    .frame(height: 24)
+                    .background(themeManager.secondaryBorderColor)
+                
+                // Time signature controls
+                HStack(spacing: 8) {
+                    Text("Time:")
+                        .font(.subheadline)
+                        .foregroundColor(themeManager.primaryTextColor)
+                    
+                    // Beats (numerator) button
+                    Button(action: {
+                        isEditingTimeSignatureBeats = true
+                        isEditingTimeSignatureUnit = false
+                    }) {
+                        Text("\(projectViewModel.timeSignatureBeats)")
+                            .font(.system(.subheadline, design: .monospaced))
                             .foregroundColor(themeManager.primaryTextColor)
-                            .frame(width: 50, height: 24, alignment: .center)
-                            .padding(.horizontal, 6)
+                            .frame(width: 30, height: 24)
                             .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
                             .cornerRadius(4)
-                            .onTapGesture {
-                                tempTempoValue = "\(Int(projectViewModel.tempo))"
-                                isEditingTempo = true
-                                isEditingTimeSignatureBeats = false
-                                isEditingTimeSignatureUnit = false
-                            }
                     }
-                }
-                .frame(width: 62, height: 30) // Fixed size for both states
-                
-                Text("BPM")
-                    .font(.subheadline)
-                    .foregroundColor(themeManager.primaryTextColor)
-                
-                // Metronome toggle
-                Button(action: {
-                    isMetronomeEnabled.toggle()
-                }) {
-                    Image(systemName: isMetronomeEnabled ? "metronome.fill" : "metronome")
-                        .font(.subheadline)
-                        .foregroundColor(isMetronomeEnabled ? .blue : themeManager.primaryTextColor)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .padding(.leading, 4)
-                .help("Metronome")
-            }
-            .padding(.horizontal, 16)
-            
-            Divider()
-                .frame(height: 24)
-                .background(themeManager.secondaryBorderColor)
-            
-            // Time signature as separate controls
-            HStack(spacing: 8) {
-                Text("Time:")
-                    .font(.subheadline)
-                    .foregroundColor(themeManager.primaryTextColor)
-                
-                // Beats (numerator) button
-                Button(action: {
-                    isEditingTimeSignatureBeats = true
-                    isEditingTimeSignatureUnit = false
-                }) {
-                    Text("\(projectViewModel.timeSignatureBeats)")
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundColor(themeManager.primaryTextColor)
-                        .frame(width: 30, height: 24)
-                        .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
-                        .cornerRadius(4)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .popover(isPresented: $isEditingTimeSignatureBeats, arrowEdge: .bottom) {
-                    VStack(spacing: 0) {
-                        ForEach(2...12, id: \.self) { beats in
-                            Button(action: {
-                                projectViewModel.timeSignatureBeats = beats
-                                isEditingTimeSignatureBeats = false
-                            }) {
-                                Text("\(beats)")
-                                    .frame(width: 100, height: 30)
-                                    .foregroundColor(themeManager.primaryTextColor)
-                                    .background(projectViewModel.timeSignatureBeats == beats ? 
-                                              themeManager.accentColor.opacity(0.2) : 
-                                              Color.clear)
+                    .buttonStyle(BorderlessButtonStyle())
+                    .popover(isPresented: $isEditingTimeSignatureBeats, arrowEdge: .bottom) {
+                        VStack(spacing: 0) {
+                            ForEach(2...12, id: \.self) { beats in
+                                Button(action: {
+                                    projectViewModel.timeSignatureBeats = beats
+                                    isEditingTimeSignatureBeats = false
+                                }) {
+                                    Text("\(beats)")
+                                        .frame(width: 100, height: 30)
+                                        .foregroundColor(themeManager.primaryTextColor)
+                                        .background(projectViewModel.timeSignatureBeats == beats ? 
+                                                  themeManager.accentColor.opacity(0.2) : 
+                                                  Color.clear)
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
-                            .buttonStyle(PlainButtonStyle())
                         }
+                        .padding(.vertical, 5)
+                        .background(themeManager.secondaryBackgroundColor)
                     }
-                    .padding(.vertical, 5)
-                    .background(themeManager.secondaryBackgroundColor)
-                }
-                
-                Text("/")
-                    .font(.title3)
-                    .foregroundColor(themeManager.primaryTextColor)
-                    .padding(.horizontal, 2)
-                
-                // Unit (denominator) button
-                Button(action: {
-                    isEditingTimeSignatureUnit = true
-                    isEditingTimeSignatureBeats = false
-                }) {
-                    Text("\(projectViewModel.timeSignatureUnit)")
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundColor(themeManager.primaryTextColor)
-                        .frame(width: 30, height: 24)
-                        .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
-                        .cornerRadius(4)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .popover(isPresented: $isEditingTimeSignatureUnit, arrowEdge: .bottom) {
-                    VStack(spacing: 0) {
-                        ForEach([2, 4, 8, 16], id: \.self) { unit in
-                            Button(action: {
-                                projectViewModel.timeSignatureUnit = unit
-                                isEditingTimeSignatureUnit = false
-                            }) {
-                                Text("\(unit)")
-                                    .frame(width: 100, height: 30)
-                                    .foregroundColor(themeManager.primaryTextColor)
-                                    .background(projectViewModel.timeSignatureUnit == unit ? 
-                                              themeManager.accentColor.opacity(0.2) : 
-                                              Color.clear)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    .padding(.vertical, 5)
-                    .background(themeManager.secondaryBackgroundColor)
-                }
-            }
-            .padding(.horizontal, 16)
-            
-            Divider()
-                .frame(height: 24)
-                .background(themeManager.secondaryBorderColor)
-            
-            // Transport controls - now positioned after time signature
-            HStack(spacing: 16) {
-                // Rewind button
-                Button(action: {
-                    projectViewModel.rewind()
-                }) {
-                    Image(systemName: "backward.fill")
-                        .font(.title2)
-                        .foregroundColor(themeManager.primaryTextColor)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Rewind to beginning")
-                
-                // Play/Pause button
-                Button(action: {
-                    projectViewModel.togglePlayback()
-                }) {
-                    Image(systemName: projectViewModel.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title)
-                        .foregroundColor(themeManager.primaryTextColor)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Play/Pause")
-                
-                // Record button
-                Button(action: {
-                    // Record action (UI only)
-                }) {
-                    Image(systemName: "record.circle")
-                        .font(.title2)
-                        .foregroundColor(.red)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Record")
-                
-                // Loop button
-                Button(action: {
-                    isLoopEnabled.toggle()
-                }) {
-                    Image(systemName: "repeat")
-                        .font(.subheadline)
-                        .foregroundColor(isLoopEnabled ? .blue : themeManager.primaryTextColor)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Loop playback")
-            }
-            .padding(.horizontal, 16)
-            
-            // Position indicator (with background)
-            HStack(spacing: 8) {
-                // Position display with slightly highlighted background
-                VStack(alignment: .center, spacing: 2) {
-                    // Bar.Beat format
-                    PositionDisplayView(projectViewModel: projectViewModel)
-                        .frame(width: 70, alignment: .center)
                     
-                    // Time format (minutes:seconds)
-                    TimePositionDisplayView(projectViewModel: projectViewModel)
-                        .frame(width: 70, alignment: .center)
+                    Text("/")
+                        .font(.title3)
+                        .foregroundColor(themeManager.primaryTextColor)
+                        .padding(.horizontal, 2)
+                    
+                    // Unit (denominator) button
+                    Button(action: {
+                        isEditingTimeSignatureUnit = true
+                        isEditingTimeSignatureBeats = false
+                    }) {
+                        Text("\(projectViewModel.timeSignatureUnit)")
+                            .font(.system(.subheadline, design: .monospaced))
+                            .foregroundColor(themeManager.primaryTextColor)
+                            .frame(width: 30, height: 24)
+                            .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .popover(isPresented: $isEditingTimeSignatureUnit, arrowEdge: .bottom) {
+                        VStack(spacing: 0) {
+                            ForEach([2, 4, 8, 16], id: \.self) { unit in
+                                Button(action: {
+                                    projectViewModel.timeSignatureUnit = unit
+                                    isEditingTimeSignatureUnit = false
+                                }) {
+                                    Text("\(unit)")
+                                        .frame(width: 100, height: 30)
+                                        .foregroundColor(themeManager.primaryTextColor)
+                                        .background(projectViewModel.timeSignatureUnit == unit ? 
+                                                  themeManager.accentColor.opacity(0.2) : 
+                                                  Color.clear)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(.vertical, 5)
+                        .background(themeManager.secondaryBackgroundColor)
+                    }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
-                .cornerRadius(4)
+                .padding(.horizontal, 10)
+                
+                Divider()
+                    .frame(height: 24)
+                    .background(themeManager.secondaryBorderColor)
+                
+                // Transport controls
+                HStack(spacing: 16) {
+                    // Rewind button
+                    Button(action: {
+                        projectViewModel.rewind()
+                    }) {
+                        Image(systemName: "backward.fill")
+                            .font(.title2)
+                            .foregroundColor(themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .help("Rewind to beginning")
+                    
+                    // Play/Pause button
+                    Button(action: {
+                        projectViewModel.togglePlayback()
+                    }) {
+                        Image(systemName: projectViewModel.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.title)
+                            .foregroundColor(themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .help("Play/Pause")
+                    
+                    // Record button
+                    Button(action: {
+                        // Record action (UI only)
+                    }) {
+                        Image(systemName: "record.circle")
+                            .font(.title2)
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .help("Record")
+                    
+                    // Loop button
+                    Button(action: {
+                        isLoopEnabled.toggle()
+                    }) {
+                        Image(systemName: "repeat")
+                            .font(.subheadline)
+                            .foregroundColor(isLoopEnabled ? .blue : themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .help("Loop playback")
+                }
+                .padding(.horizontal, 10)
             }
-            .padding(.horizontal, 16)
             
             Spacer()
             
-            // Right section - CPU/RAM usage and performance
+            // Right group with system monitors
             HStack(spacing: 16) {
                 // CPU usage indicator
                 HStack(spacing: 4) {
@@ -312,10 +495,10 @@ struct TopControlBarView: View {
                 .buttonStyle(BorderlessButtonStyle())
                 .help("Toggle between light and dark theme")
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 10)
         }
-        .padding(.vertical, 8)
-        .frame(height: 40) // Slightly taller to accommodate the dual time display
+        .padding(.vertical, 6)
+        .frame(height: 44) // Further reduced height to match the new notch
         .background(themeManager.secondaryBackgroundColor)
         .border(themeManager.borderColor, width: 0.3)
         .environmentObject(ClickObserver.shared)

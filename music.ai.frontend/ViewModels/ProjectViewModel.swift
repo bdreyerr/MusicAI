@@ -174,36 +174,41 @@ class ProjectViewModel: ObservableObject {
     
     // Seek to a specific beat position
     func seekToBeat(_ beat: Double) {
-        // Store the current playback state
-        let wasPlaying = isPlaying
-        
-        // Only stop the playback timer if we are NOT already playing
-        // This ensures we don't interrupt audio playback unnecessarily
-        if wasPlaying {
-            // Instead of stopping and restarting, just update position variables
-            // Don't call stopPlaybackTimer() here - it would stop playback
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             
-            // Ensure beat is not negative
-            let targetBeat = max(0, beat)
+            // Store the current playback state
+            let wasPlaying = self.isPlaying
             
-            // Update both the visible position and the internal position tracker
-            currentBeat = targetBeat
-            internalBeatPosition = targetBeat
-            
-            // In a real app, you would also update the audio engine's playback position here
-            // For example: audioEngine.seekToPosition(currentBeat)
-        } else {
-            // If not playing, just update the position directly
-            
-            // Ensure beat is not negative
-            let targetBeat = max(0, beat)
-            
-            // Update both the visible position and the internal position tracker
-            currentBeat = targetBeat
-            internalBeatPosition = targetBeat
-            
-            // In a real app, you would also update the audio engine's playback position here
-            // For example: audioEngine.seekToPosition(currentBeat)
+            // Only stop the playback timer if we are NOT already playing
+            // This ensures we don't interrupt audio playback unnecessarily
+            if wasPlaying {
+                // Instead of stopping and restarting, just update position variables
+                // Don't call stopPlaybackTimer() here - it would stop playback
+                
+                // Ensure beat is not negative
+                let targetBeat = max(0, beat)
+                
+                // Update both the visible position and the internal position tracker
+                self.currentBeat = targetBeat
+                self.internalBeatPosition = targetBeat
+                
+                // In a real app, you would also update the audio engine's playback position here
+                // For example: audioEngine.seekToPosition(currentBeat)
+            } else {
+                // If not playing, just update the position directly
+                
+                // Ensure beat is not negative
+                let targetBeat = max(0, beat)
+                
+                // Update both the visible position and the internal position tracker
+                self.currentBeat = targetBeat
+                self.internalBeatPosition = targetBeat
+                
+                // In a real app, you would also update the audio engine's playback position here
+                // For example: audioEngine.seekToPosition(currentBeat)
+            }
         }
     }
     

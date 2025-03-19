@@ -22,10 +22,11 @@ struct ScrubPositionIndicator: View {
                     Text(displayedDivision)
                         .font(.system(size: 12, design: .monospaced))
                 }
-                .padding(8)
+                .padding(10)
                 .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.black.opacity(0.7))
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.black.opacity(0.8))
+                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
                 )
                 .foregroundColor(.white)
                 .transition(.opacity)
@@ -64,7 +65,7 @@ struct ScrubPositionIndicator: View {
         let beat = projectViewModel.currentBeat
         let beatFraction = beat.truncatingRemainder(dividingBy: 1.0)
         
-        // Use the new gridDivision property
+        // Use the gridDivision property to determine what to display
         switch state.gridDivision {
         case .sixteenth:
             // Show sixteenth note precision
@@ -90,12 +91,20 @@ struct ScrubPositionIndicator: View {
             // Show quarter note precision
             return "Beat"
             
-        case .half, .bar, .twoBar, .fourBar:
+        case .half:
+            // Show half-bar precision
+            if Int(beat * 2) % 2 == 0 {
+                return "Bar"
+            } else {
+                return "Half-Bar"
+            }
+            
+        case .bar, .twoBar, .fourBar:
             // Show bar precision
             return "Bar"
         }
         
-        return ""
+        return "Beat"
     }
 }
 

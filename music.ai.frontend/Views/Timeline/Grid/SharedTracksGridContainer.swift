@@ -8,27 +8,22 @@ struct SharedTracksGridContainer: View {
     @EnvironmentObject var themeManager: ThemeManager
     let width: CGFloat
     
-    // Performance optimization state
-    @State private var lastGridRefreshTime = Date()
-    @State private var shouldRenderDetailedGrid = true
+    // Cache the track height calculation to avoid recalculating every render
+    @State private var cachedTrackHeight: CGFloat = 0
+    @State private var lastTrackCountForCache: Int = 0
     
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // Update grid visibility based on scrolling performance optimization
-            let shouldShowDetailedGrid = updateGridVisibility()
-            
             // Shared grid rendered once for all tracks
-            if shouldShowDetailedGrid {
-                SharedGridView(
-                    state: state,
-                    projectViewModel: projectViewModel,
-                    width: width,
-                    height: calculateTotalTracksHeight()
-                )
-                .environmentObject(themeManager)
-                .id("shared-grid-\(themeManager.themeChangeIdentifier)-\(state.zoomChanged)-\(state.contentSizeChangeId)")
-                .transition(.opacity)
-            }
+            TimelineGridView(
+                state: state,
+                projectViewModel: projectViewModel,
+                width: width,
+                height: calculateTotalTracksHeight()
+            )
+            .environmentObject(themeManager)
+            .id("grid-\(state.zoomLevel)-\(state.isScrolling ? "scrolling" : "static")-\(Int(state.scrollOffset.x/100))")
+            .padding(.top, 0) // Ensure no top padding
             
             // Stack of track views without their individual grids
             VStack(spacing: 0) {
@@ -40,7 +35,7 @@ struct SharedTracksGridContainer: View {
                         width: width
                     )
                     .environmentObject(themeManager)
-                    .id("track-\(track.id)") // Add an ID to help with debugging
+                    .id("track-\(track.id)")
                 }
                 
                 // Empty space for the add track button area
@@ -53,10 +48,10 @@ struct SharedTracksGridContainer: View {
                         state.clearSelection()
                     }
             }
+            .padding(.top, 0) // Ensure no top padding
             
             // Add "Add More Bars" button at the end of the timeline
             VStack {
-                // Position the button vertically centered
                 Spacer()
                 
                 // Add More Bars button
@@ -93,77 +88,42 @@ struct SharedTracksGridContainer: View {
             .environmentObject(themeManager)
             .zIndex(1000) // Higher zIndex to ensure playhead is on top
         }
+        .clipped() // Clip any content that exceeds bounds
         // Add magnification gesture for trackpad pinch zooming to the entire container
         .gesture(
             MagnificationGesture()
                 .onChanged { scale in
                     // Handle the pinch zoom gesture using the state view model
-                    state.handlePinchGesture(scale: scale)
+                    // Use DispatchQueue.main.async to prevent state updates during view update
+                    DispatchQueue.main.async {
+                        state.handlePinchGesture(scale: scale)
+                    }
                 }
                 .onEnded { _ in
                     // Reset with scale = 1.0 to signal end of gesture
-                    state.handlePinchGesture(scale: 1.0)
+                    // Use DispatchQueue.main.async to prevent state updates during view update
+                    DispatchQueue.main.async {
+                        state.handlePinchGesture(scale: 1.0)
+                    }
                 }
         )
-        .onChange(of: state.isScrolling) { _, newValue in
-            // When scrolling stops, ensure detailed grid is visible again
-            if !newValue {
-                withAnimation(.easeIn(duration: 0.2)) {
-                    shouldRenderDetailedGrid = true
-                }
+        // Track content changes that should force a grid refresh
+        .onChange(of: projectViewModel.tracks.count) { _, _ in
+            // Reset cached height when track count changes
+            // Use DispatchQueue.main.async to prevent state updates during view update
+            DispatchQueue.main.async {
+                self.lastTrackCountForCache = 0
             }
         }
     }
     
-    // Update the grid visibility based on scrolling performance
-    private func updateGridVisibility() -> Bool {
-        // Capture current state values to avoid repeated access
-        let isCurrentlyScrolling = state.isScrolling
-        let currentZoomLevel = state.zoomLevel
-        let currentScrollingSpeed = state.scrollingSpeed
-        let currentShouldRenderGrid = shouldRenderDetailedGrid
-        
-        // Always show grid when not scrolling
-        if !isCurrentlyScrolling {
-            return true
-        }
-        
-        // For higher zoom levels (zoomed out), always show grid
-        if currentZoomLevel >= 4 {
-            return true
-        }
-        
-        // Check scrolling speed to determine grid visibility
-        if currentScrollingSpeed > 40 {
-            // At extreme scroll speeds, hide detailed grid temporarily
-            if currentShouldRenderGrid {
-                // Schedule the animation to happen after the current view update is complete
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.1)) {
-                        self.shouldRenderDetailedGrid = false
-                    }
-                }
-            }
-            return false
-        } else if currentScrollingSpeed < 30 {
-            // At moderate scroll speeds, show grid
-            if !currentShouldRenderGrid {
-                // Schedule the animation to happen after the current view update is complete
-                DispatchQueue.main.async {
-                    withAnimation(.easeIn(duration: 0.2)) {
-                        self.shouldRenderDetailedGrid = true
-                    }
-                }
-            }
-            return true
-        }
-        
-        // Otherwise, maintain current state
-        return currentShouldRenderGrid
-    }
-    
-    // Calculate the total height of all tracks
+    // Calculate the total height of all tracks with caching for performance
     private func calculateTotalTracksHeight() -> CGFloat {
+        // Use cached value if track count hasn't changed
+        if projectViewModel.tracks.count == lastTrackCountForCache && cachedTrackHeight > 0 {
+            return cachedTrackHeight
+        }
+        
         var totalHeight: CGFloat = 0
         
         // Sum up the height of all tracks
@@ -171,24 +131,37 @@ struct SharedTracksGridContainer: View {
             totalHeight += track.height
         }
         
-        // Add some padding for the add track button area
+        // Add padding for the add track button area
         totalHeight += 44
         
-        return totalHeight
+        // Store the computed height for this render cycle
+        let computedHeight = totalHeight
+        
+        // Capture values locally before the async block
+        let trackCount = projectViewModel.tracks.count
+        
+        // Update cache asynchronously to avoid "modifying state during view update" warning
+        DispatchQueue.main.async {
+            // In a struct, 'self' is immutable and can't cause reference cycles
+            self.cachedTrackHeight = computedHeight
+            self.lastTrackCountForCache = trackCount
+        }
+        
+        return computedHeight
     }
     
-    // Calculate the position for the "Add More Bars" button
+    // Calculate the offset for the "Add More Bars" button
     private func calculateBarButtonOffset() -> CGFloat {
-        // Position the button at the end of the current timeline minus button width
+        // Place button at the end of the content with some margin
         let pixelsPerBeat = state.effectivePixelsPerBeat
-        let timeSignatureBeats = projectViewModel.timeSignatureBeats
+        let beatsPerBar = Double(projectViewModel.timeSignatureBeats)
+        let barsToShow = state.totalBars
         
-        // Calculate the total timeline width in pixels
-        let totalTimelineWidth = CGFloat(state.totalBars * timeSignatureBeats) * CGFloat(pixelsPerBeat)
+        // Calculate button position in pixels
+        let contentEndPosition = CGFloat(barsToShow) * CGFloat(beatsPerBar) * CGFloat(pixelsPerBeat)
         
-        // Position the button just before the end of the timeline
-        // Subtract approximately half the button width (70 pixels) to center it at the end
-        return totalTimelineWidth - 70
+        // Add a small margin for better appearance
+        return contentEndPosition + 16.0 - state.scrollOffset.x
     }
 }
 

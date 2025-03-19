@@ -67,19 +67,6 @@ struct TimelineSelectionView: View {
             .allowsHitTesting(false) // Don't interfere with other gestures
         }
     }
-    
-    // Format the duration of the selection
-    private func formattedDuration() -> String {
-        let duration = selectionRange.end - selectionRange.start
-        let bars = Int(duration) / projectViewModel.timeSignatureBeats
-        let beats = duration.truncatingRemainder(dividingBy: Double(projectViewModel.timeSignatureBeats))
-        
-        if bars > 0 {
-            return "\(bars)b \(String(format: "%.2f", beats))bt"
-        } else {
-            return "\(String(format: "%.2f", beats))bt"
-        }
-    }
 }
 
 #Preview {

@@ -49,7 +49,11 @@ struct TimelineScrubber: View {
         let timeSignature = projectViewModel.timeSignatureBeats
         
         switch state.gridDivision {
-        case .sixteenth, .eighth:
+        case .sixteenth:
+            // Snap to sixteenth notes (0.0625 beat)
+            return round(rawBeatPosition * 16.0) / 16.0
+            
+        case .eighth:
             // Snap to eighth notes (0.125 beat)
             return round(rawBeatPosition * 8.0) / 8.0
             
@@ -77,10 +81,20 @@ struct TimelineScrubber: View {
                 return barIndex * beatsPerBar + beatsPerBar / 2.0
             }
             
-        case .bar, .twoBar, .fourBar:
+        case .bar:
             // When zoomed out, snap to bars
             let beatsPerBar = Double(timeSignature)
             return round(rawBeatPosition / beatsPerBar) * beatsPerBar
+            
+        case .twoBar:
+            // When zoomed way out, snap to every two bars
+            let beatsPerTwoBars = Double(timeSignature) * 2.0
+            return round(rawBeatPosition / beatsPerTwoBars) * beatsPerTwoBars
+            
+        case .fourBar:
+            // When zoomed way out, snap to every four bars
+            let beatsPerFourBars = Double(timeSignature) * 4.0
+            return round(rawBeatPosition / beatsPerFourBars) * beatsPerFourBars
         }
     }
 }

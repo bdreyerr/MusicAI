@@ -45,6 +45,7 @@ struct music_ai_frontendApp: App {
                     setupAppearance()
                 }
         }
+        .windowStyle(.hiddenTitleBar)
     }
     
     // Configure the app's appearance based on the current theme

@@ -172,7 +172,7 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             // Darker than tertiaryBackgroundColor in light mode
-            return Color(white: 0.8)
+            return Color(white: 0.7)
         case .dark:
             // Lighter than tertiaryBackgroundColor in dark mode
             return Color(white: 0.35)
@@ -183,11 +183,16 @@ class ThemeManager: ObservableObject {
     var alternatingGridSectionColor: Color {
         switch currentTheme {
         case .light:
-            // Use a darker gray for more contrast in light mode, no blue tint
-            return Color(white: 0.75).opacity(0.9)
+            // Reduced contrast in light mode (was 0.75 opacity 0.9)
+            return Color(white: 0.80).opacity(0.8)
         case .dark:
-            // Slightly lighter than background in dark mode
-            return Color(white: 0.23).opacity(0.6)
+            // Reduced contrast in dark mode (was 0.23 opacity 0.6)
+            return Color(white: 0.30).opacity(0.3)
         }
+    }
+    
+    // Determine if current theme is dark mode
+    var isDarkMode: Bool {
+        return currentTheme == .dark
     }
 } 

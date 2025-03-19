@@ -4,21 +4,29 @@ import Combine
 /// TimelineState manages the visual representation and zoom behavior of the timeline.
 /// This is separate from ProjectViewModel which manages the actual music project data.
 class TimelineStateViewModel: ObservableObject {
-    @Published var zoomLevel: Int = 3 { // Default to middle zoom level
-        didSet {
+    @Published private var _zoomLevel: Int
+    var zoomLevel: Int {
+        get { return _zoomLevel }
+        set {
             // Ensure zoom level is within bounds
-            if zoomLevel < 0 {
-                zoomLevel = 0
-            } else if zoomLevel > 6 {
-                zoomLevel = 6
-            }
+            let boundedZoomLevel = max(0, min(newValue, 6))
             
-            // Notify that zoom level has changed
-            zoomChanged = true
-            
-            // Reset the flag after a short delay to allow for multiple zoom changes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.zoomChanged = false
+            // Only update if value actually changes
+            if boundedZoomLevel != _zoomLevel {
+                // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self._zoomLevel = boundedZoomLevel
+                    
+                    // Notify that zoom level has changed
+                    self.zoomChanged = true
+                    
+                    // Reset the flag after a short delay to allow for multiple zoom changes
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                        guard let self = self else { return }
+                        self.zoomChanged = false
+                    }
+                }
             }
         }
     }
@@ -185,14 +193,22 @@ class TimelineStateViewModel: ObservableObject {
     
     // Notify that content size has changed (without manipulating zoom level)
     func contentSizeChanged() {
-        // Update the ID to force views to redraw
-        contentSizeChangeId = UUID()
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Update the ID to force views to redraw
+            self.contentSizeChangeId = UUID()
+        }
     }
     
     // Add more bars to the timeline
     func extendTimeline() {
-        totalBars += barsToAddIncrement
-        contentSizeChanged()
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.totalBars += self.barsToAddIncrement
+            self.contentSizeChanged()
+        }
     }
     
     // Computed properties based on zoom level
@@ -219,22 +235,29 @@ class TimelineStateViewModel: ObservableObject {
             return true
         }
         
-        // For zoom level 0, we show quarter-bar numbers
-        if zoomLevel == 0 {
-            // Show numbers at every quarter bar (1, 1.2, 1.3, 1.4, 2, etc.)
+        // Determine which bar numbers to show based on zoom level
+        switch zoomLevel {
+        case 0:
+            // Zoom level 0: Show numbers for every quarter bar
+            // This is handled separately in the ruler drawing code
             return true
-        }
-        
-        // Special handling for zoom levels 4 and 5 to show odd-numbered bars
-        if zoomLevel == 4 || zoomLevel == 5 {
-            // Show odd-numbered bar numbers only (1, 3, 5, 7...)
+            
+        case 1, 2, 3:
+            // Zoom levels 1-3: Show numbers for every bar
+            return true
+            
+        case 4, 5:
+            // Zoom levels 4-5: Show odd-numbered bars (1, 3, 5, 7...)
             // barIndex is 0-based, so displayed bar number is barIndex + 1
-            // We check if this is odd (modulo 2 equals 1)
             return (barIndex + 1) % 2 == 1
+            
+        case 6:
+            // Zoom level 6: Show every 4th bar (1, 5, 9, 13...)
+            return (barIndex + 1) % 4 == 1
+            
+        default:
+            return (barIndex + 1) % rulerNumberInterval == 0
         }
-        
-        // For other zoom levels, check against the interval
-        return (barIndex + 1) % rulerNumberInterval == 0
     }
     
     // Calculate the width of the timeline content based on zoom level, project settings, and content
@@ -267,11 +290,16 @@ class TimelineStateViewModel: ObservableObject {
             Int(ceil(furthestBeat / Double(timeSignatureBeats))) + contentPaddingBars : 0
         
         // Use the maximum of furthest content, minimum bars required, or current total bars
+        // Ensure we always show at least minimumBarsToShow bars (81)
         let barsToShow = max(max(furthestContentBar, minimumBarsToShow), totalBars)
         
         // Update total bars if content extends beyond current total
         if barsToShow > totalBars {
-            totalBars = barsToShow
+            // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.totalBars = barsToShow
+            }
         }
         
         // Calculate beats based on bars
@@ -285,28 +313,40 @@ class TimelineStateViewModel: ObservableObject {
     
     // Start a new selection
     func startSelection(at beat: Double, trackId: UUID) {
-        selectionStartBeat = beat
-        selectionEndBeat = beat
-        selectionTrackId = trackId
-        selectionActive = true
-        // print("🔍 SELECTION: Started selection at beat \(beat) on track \(trackId)")
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.selectionStartBeat = beat
+            self.selectionEndBeat = beat
+            self.selectionTrackId = trackId
+            self.selectionActive = true
+            // print("🔍 SELECTION: Started selection at beat \(beat) on track \(trackId)")
+        }
     }
     
     // Update the end point of the selection
     func updateSelection(to beat: Double) {
-        selectionEndBeat = beat
-        // print("🔍 SELECTION: Updated selection to beat \(beat), range: \(selectionStartBeat) to \(selectionEndBeat)")
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.selectionEndBeat = beat
+            // print("🔍 SELECTION: Updated selection to beat \(beat), range: \(selectionStartBeat) to \(selectionEndBeat)")
+        }
     }
     
     // Clear the current selection
     func clearSelection() {
-        // if selectionActive {
-        //     print("🔍 SELECTION: Cleared selection")
-        // }
-        selectionActive = false
-        selectionStartBeat = 0.0
-        selectionEndBeat = 0.0
-        selectionTrackId = nil
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // if selectionActive {
+            //     print("🔍 SELECTION: Cleared selection")
+            // }
+            self.selectionActive = false
+            self.selectionStartBeat = 0.0
+            self.selectionEndBeat = 0.0
+            self.selectionTrackId = nil
+        }
     }
     
     // Get the normalized selection range (start always less than end)
@@ -330,25 +370,40 @@ class TimelineStateViewModel: ObservableObject {
     // MARK: - Timeline Grid Properties
     
     // Return the appropriate grid division based on zoom level
-    enum GridDivision {
-        case sixteenth         // Show sixteenth note grid lines
-        case eighth            // Show eighth note grid lines
-        case quarter           // Show quarter note (beat) grid lines
-        case half              // Show half note (half-bar) grid lines
-        case bar               // Show only bar lines
-        case twoBar            // Show two-bar lines
-        case fourBar           // Show four-bar lines
+    enum GridDivision: CaseIterable, CustomStringConvertible {
+        case sixteenth   // Show sixteenth note grid lines
+        case eighth      // Show eighth note grid lines (zoom level 0)
+        case quarter     // Show quarter note grid lines (zoom level 1-2)
+        case half        // Show half note grid lines (zoom level 3-4)
+        case bar         // Show bar lines (zoom level 5-6)
+        case twoBar      // Show two-bar lines
+        case fourBar     // Show four-bar lines
+        
+        // For display in UI
+        var description: String {
+            switch self {
+            case .sixteenth: return "1/16 Note"
+            case .eighth: return "1/8 Note"
+            case .quarter: return "1/4 Note" 
+            case .half: return "1/2 Note"
+            case .bar: return "Bar"
+            case .twoBar: return "2 Bars"
+            case .fourBar: return "4 Bars"
+            }
+        }
+        
+        // All cases for the popover menu
+        static var allCases: [GridDivision] {
+            return [.sixteenth, .eighth, .quarter, .half, .bar, .twoBar, .fourBar]
+        }
     }
     
     var gridDivision: GridDivision {
         switch zoomLevel {
-        case 0: return .sixteenth   // Closest zoom - show sixteenth notes
-        case 1: return .eighth      // Show eighth notes
-        case 2: return .quarter     // Show quarter notes (beats)
-        case 3: return .half        // Show half notes (half-bars)
-        case 4: return .bar         // Show bar lines
-        case 5: return .twoBar      // Show two-bar grid lines
-        case 6: return .fourBar     // Furthest zoom - show four-bar grid lines
+        case 0: return .eighth     // Closest zoom - show eighth notes
+        case 1, 2: return .quarter // Show quarter notes (beats)
+        case 3, 4: return .half    // Show half notes (half-bars)
+        case 5, 6: return .bar     // Show only bar lines
         default: return .half
         }
     }
@@ -357,25 +412,21 @@ class TimelineStateViewModel: ObservableObject {
     
     // Return the appropriate ruler division based on zoom level
     enum RulerDivision {
-        case sixteenth         // Show lines at sixteenth notes
-        case eighth            // Show lines at eighth notes
-        case quarter           // Show lines at quarter notes
-        case half              // Show lines at half notes
-        case bar               // Show lines at bars
-        case twoBar            // Show lines at two bars
-        case fourBar           // Show lines at four bars
+        case eighth      // Show lines at eighth notes
+        case quarter     // Show lines at quarter notes
+        case bar         // Show lines at bars
+        case twoBar      // Show lines at two bars
+        case fourBar     // Show lines at four bars
     }
     
     var rulerDivision: RulerDivision {
         switch zoomLevel {
-        case 0: return .sixteenth
-        case 1: return .eighth
-        case 2: return .quarter
-        case 3: return .half
-        case 4: return .bar
-        case 5: return .twoBar
-        case 6: return .fourBar
-        default: return .half
+        case 0: return .quarter    // Lines at quarter bars, dots at eighth notes
+        case 1, 2: return .bar     // Lines at bars, dots at quarter/half bars
+        case 3: return .bar        // Lines at bars, dots at half bars
+        case 4, 5: return .twoBar  // Lines every 2 bars, dots at bar intervals
+        case 6: return .fourBar    // Lines every 4 bars, dots at 2-bar intervals
+        default: return .bar
         }
     }
     
@@ -401,43 +452,58 @@ class TimelineStateViewModel: ObservableObject {
     }
     
     // Determine what types of dots to show on the ruler
-    func rulerDotType(for barPosition: Double) -> String? {
-        let beatInBar = barPosition.truncatingRemainder(dividingBy: 1.0)
+    enum RulerDotType {
+        case eighth      // Eighth note dots
+        case quarter     // Quarter note dots
+        case half        // Half bar dots
+        case bar         // Bar dots
+        case twoBar      // Two-bar dots
+    }
+    
+    // Check if a dot should be shown at a specific position
+    func shouldShowRulerDot(at position: Double) -> RulerDotType? {
+        // Get the bar number (1-based) and position within the bar
+        let beatsPerBar = 4.0 // Assuming 4/4 time signature
+        let barNumber = Int(position / beatsPerBar) + 1
+        let beatInBar = position.truncatingRemainder(dividingBy: beatsPerBar)
         
         switch zoomLevel {
         case 0:
-            // Eighth bar dots (at 1/8, 3/8, 5/8, 7/8 positions in a beat)
-            if [0.125, 0.375, 0.625, 0.875].contains(where: { abs(beatInBar - $0) < 0.001 }) {
-                return "eighth"
+            // At zoom level 0: dots at eighth positions between quarters
+            // (grid lines are at quarter positions)
+            let eighth = beatInBar * 2
+            if eighth.truncatingRemainder(dividingBy: 1.0) == 0.5 {
+                return .eighth
             }
             return nil
             
         case 1:
-            // Quarter bar dots (at 1/4, 1/2, 3/4 positions in a bar)
-            if [0.25, 0.5, 0.75].contains(where: { abs(beatInBar - $0) < 0.001 }) {
-                return "quarter"
+            // At zoom level 1: dots at quarter positions
+            // (grid lines are at bar positions)
+            if beatInBar == 0.25 || beatInBar == 0.5 || beatInBar == 0.75 {
+                return .quarter
             }
             return nil
             
         case 2, 3:
-            // Half bar dots (at 1/2 position in a bar)
-            if abs(beatInBar - 0.5) < 0.001 {
-                return "half"
+            // At zoom levels 2-3: dots at half bar positions
+            // (grid lines are at bar positions)
+            if beatInBar == 0.5 {
+                return .half
             }
             return nil
             
         case 4, 5:
-            // One bar dots
-            if beatInBar < 0.001 {
-                return "bar"
+            // At zoom levels 4-5: dots at bar positions (between 2-bar grid lines)
+            if beatInBar == 0 && barNumber % 2 == 0 {
+                return .bar
             }
             return nil
             
         case 6:
-            // Two bar dots
-            if barPosition.truncatingRemainder(dividingBy: 2.0) < 0.001 && 
-               barPosition.truncatingRemainder(dividingBy: 4.0) >= 0.001 {
-                return "twoBar"
+            // At zoom level 6: dots at 2-bar positions (between 4-bar grid lines)
+            if beatInBar == 0 && barNumber % 4 == 2 {
+                return .twoBar
             }
             return nil
             
@@ -479,16 +545,24 @@ class TimelineStateViewModel: ObservableObject {
         // Check if we've reached a threshold for zooming
         if cumulativeScale >= zoomInThreshold && zoomLevel > 0 {
             // Pinch out - zoom IN (decrease zoom level)
-            zoomLevel = max(0, zoomLevel - 1)
-            lastPinchGestureTime = now
-            // Reset cumulative scale but maintain direction tendency for smoother multi-level zooms
-            cumulativeScale = 1.02 // Slightly above 1 to maintain zoom-in direction
+            // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.zoomLevel = max(0, self.zoomLevel - 1)
+                self.lastPinchGestureTime = now
+                // Reset cumulative scale but maintain direction tendency for smoother multi-level zooms
+                self.cumulativeScale = 1.02 // Slightly above 1 to maintain zoom-in direction
+            }
         } else if cumulativeScale <= zoomOutThreshold && zoomLevel < 6 {
             // Pinch in - zoom OUT (increase zoom level)
-            zoomLevel = min(6, zoomLevel + 1)
-            lastPinchGestureTime = now
-            // Reset cumulative scale but maintain direction tendency for smoother multi-level zooms
-            cumulativeScale = 0.98 // Slightly below 1 to maintain zoom-out direction
+            // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.zoomLevel = min(6, self.zoomLevel + 1)
+                self.lastPinchGestureTime = now
+                // Reset cumulative scale but maintain direction tendency for smoother multi-level zooms
+                self.cumulativeScale = 0.98 // Slightly below 1 to maintain zoom-out direction
+            }
         }
         
         // Reset cumulative scale completely when pinch ends
@@ -497,9 +571,65 @@ class TimelineStateViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Zoom Functions
+    
+    /// Zoom in one level (decrease zoom level number)
+    func zoomIn() {
+        if zoomLevel > 0 {
+            // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.zoomLevel -= 1
+            }
+        }
+    }
+    
+    /// Zoom out one level (increase zoom level number)
+    func zoomOut() {
+        if zoomLevel < 6 {
+            // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.zoomLevel += 1
+            }
+        }
+    }
+    
+    /// Set zoom level to show a specific grid division
+    func setZoomLevelForGridDivision(_ division: GridDivision) {
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Set the zoom level that corresponds to the requested grid division
+            switch division {
+            case .sixteenth:
+                // Custom zoom level that would show sixteenth notes
+                self.zoomLevel = 0 // Use zoom level 0 or adjust as needed
+            case .eighth:
+                self.zoomLevel = 0 // Eighth notes are visible at zoom level 0
+            case .quarter:
+                self.zoomLevel = 1 // Quarter notes are visible at zoom levels 1-2
+            case .half:
+                self.zoomLevel = 3 // Half notes are visible at zoom levels 3-4
+            case .bar:
+                self.zoomLevel = 5 // Bars are visible at zoom levels 5-6
+            case .twoBar:
+                self.zoomLevel = 5 // Use bar zoom level or adjust as needed
+            case .fourBar:
+                self.zoomLevel = 6 // Use furthest zoom level for four bars
+            }
+        }
+    }
+    
     // Clean up when the view model is deallocated
     deinit {
         cancelScrollingReset()
         scrollTimer?.invalidate()
+    }
+    
+    // Initialize with the default zoom level
+    init() {
+        _zoomLevel = 5 // Default zoom level - changed from 3 to 5 (more zoomed out)
     }
 } 

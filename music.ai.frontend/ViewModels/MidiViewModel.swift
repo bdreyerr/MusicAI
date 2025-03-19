@@ -264,6 +264,144 @@ class MidiViewModel: ObservableObject {
         self.timelineState = timelineState
     }
     
+    /// Resize a MIDI clip by changing its duration
+    func resizeMidiClipEnd(trackId: UUID, clipId: UUID, newDuration: Double) -> Bool {
+        // Validate the minimum allowed duration (1/4 beat)
+        let minimumDuration = 0.25
+        guard newDuration >= minimumDuration else {
+            return false
+        }
+        
+        guard let projectViewModel = projectViewModel,
+              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+            return false
+        }
+        
+        var track = projectViewModel.tracks[trackIndex]
+        
+        // Ensure this is a MIDI track
+        guard track.type == .midi else {
+            return false
+        }
+        
+        // Find the clip in the track
+        guard let clipIndex = track.midiClips.firstIndex(where: { $0.id == clipId }) else {
+            return false
+        }
+        
+        // Get the clip we're resizing
+        var clipToResize = track.midiClips[clipIndex]
+        let originalStartBeat = clipToResize.startBeat
+        let newEndBeat = originalStartBeat + newDuration
+        
+        // Check for overlaps with other clips
+        let overlappingClips = track.midiClips.filter { clip in
+            clip.id != clipId && // Not the clip we're resizing
+            (originalStartBeat < clip.endBeat && newEndBeat > clip.startBeat) && // Overlaps
+            clip.startBeat > originalStartBeat // Only consider clips to the right
+        }
+        
+        // Remove any overlapping clips
+        for overlappingClip in overlappingClips {
+            track.removeMidiClip(id: overlappingClip.id)
+        }
+        
+        // Update the clip's duration
+        clipToResize.duration = newDuration
+        
+        // Remove the old clip and add the updated one
+        track.removeMidiClip(id: clipId)
+        _ = track.addMidiClip(clipToResize)
+        
+        // Update the track in the project view model
+        projectViewModel.updateTrack(at: trackIndex, with: track)
+        
+        // Update the selection to match the new clip bounds
+        if let timelineState = findTimelineState(),
+           timelineState.selectionActive,
+           timelineState.selectionTrackId == trackId {
+            timelineState.startSelection(at: originalStartBeat, trackId: trackId)
+            timelineState.updateSelection(to: newEndBeat)
+        }
+        
+        // Force UI update by triggering objectWillChange
+        projectViewModel.objectWillChange.send()
+        
+        return true
+    }
+    
+    /// Resize a MIDI clip by changing its start position and duration
+    func resizeMidiClipStart(trackId: UUID, clipId: UUID, newStartBeat: Double) -> Bool {
+        guard let projectViewModel = projectViewModel,
+              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+            return false
+        }
+        
+        var track = projectViewModel.tracks[trackIndex]
+        
+        // Ensure this is a MIDI track
+        guard track.type == .midi else {
+            return false
+        }
+        
+        // Find the clip in the track
+        guard let clipIndex = track.midiClips.firstIndex(where: { $0.id == clipId }) else {
+            return false
+        }
+        
+        // Get the clip we're resizing
+        var clipToResize = track.midiClips[clipIndex]
+        let originalEndBeat = clipToResize.endBeat
+        
+        // Ensure we maintain a minimum duration (1/4 beat)
+        let minimumDuration = 0.25
+        let maxStartBeat = originalEndBeat - minimumDuration
+        
+        // If the new start position would make the clip too short, limit it
+        if newStartBeat > maxStartBeat {
+            return false
+        }
+        
+        // Calculate new duration
+        let newDuration = originalEndBeat - newStartBeat
+        
+        // Check for overlaps with other clips
+        let overlappingClips = track.midiClips.filter { clip in
+            clip.id != clipId && // Not the clip we're resizing
+            (newStartBeat < clip.endBeat && originalEndBeat > clip.startBeat) && // Overlaps
+            clip.endBeat < originalEndBeat // Only consider clips to the left
+        }
+        
+        // Remove any overlapping clips
+        for overlappingClip in overlappingClips {
+            track.removeMidiClip(id: overlappingClip.id)
+        }
+        
+        // Update the clip's position and duration
+        clipToResize.startBeat = newStartBeat
+        clipToResize.duration = newDuration
+        
+        // Remove the old clip and add the updated one
+        track.removeMidiClip(id: clipId)
+        _ = track.addMidiClip(clipToResize)
+        
+        // Update the track in the project view model
+        projectViewModel.updateTrack(at: trackIndex, with: track)
+        
+        // Update the selection to match the new clip bounds
+        if let timelineState = findTimelineState(),
+           timelineState.selectionActive,
+           timelineState.selectionTrackId == trackId {
+            timelineState.startSelection(at: newStartBeat, trackId: trackId)
+            timelineState.updateSelection(to: originalEndBeat)
+        }
+        
+        // Force UI update by triggering objectWillChange
+        projectViewModel.objectWillChange.send()
+        
+        return true
+    }
+    
     // MARK: - Private Helpers
     
     /// Helper method to find the TimelineState if it exists

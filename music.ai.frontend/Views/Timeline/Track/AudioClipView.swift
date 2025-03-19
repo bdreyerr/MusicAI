@@ -22,8 +22,20 @@ struct AudioClipView: View {
     @State private var dragStartBeat: Double = 0 // Track the starting beat position for drag
     @State private var dragStartLocation: CGPoint = .zero // Track the starting location for drag
     
+    // State for resize operations
+    @State private var isResizingLeft: Bool = false
+    @State private var isResizingRight: Bool = false
+    @State private var isHoveringLeftEdge: Bool = false
+    @State private var isHoveringRightEdge: Bool = false
+    @State private var originalStartBeat: Double = 0
+    @State private var originalDuration: Double = 0
+    @State private var isNearLeftEdge: Bool = false
+    @State private var isNearRightEdge: Bool = false
+    
     // Store generated waveform data to avoid regenerating on each redraw
     private let placeholderWaveformData: [CGFloat]
+    // Store waveform color for contrast against the clip background
+    private let waveformColor: Color
     
     // Computed property to check if this clip is selected
     private var isSelected: Bool {
@@ -45,29 +57,32 @@ struct AudioClipView: View {
         self.state = state
         self.projectViewModel = projectViewModel
         
+        // Calculate contrasting color for waveform bars
+        let baseColor = clip.color ?? track.effectiveColor
+        let isDark = baseColor.brightness < 0.6
+        // Choose a contrasting color - white for dark backgrounds, darker red for light backgrounds
+        self.waveformColor = isDark ? .white : .red.opacity(0.9)
+        
         // Generate placeholder waveform data only once during initialization
         if clip.waveformData.isEmpty {
             // Create a consistent number of data points based on clip duration
-            let pointCount = 50 // Reduced number of points for a cleaner look
-            var waveformPoints = [CGFloat]()
+            // More points for longer clips to maintain reasonable bar spacing
+            let baseBars = 40
+            let barsPerBeat = 10
+            let barCount = max(baseBars, Int(clip.duration * Double(barsPerBeat)))
+            var waveformBars = [CGFloat]()
             
-            for i in 0..<pointCount {
-                // Use a smooth sine wave pattern instead of random noise
-                // This creates a clean, simple waveform that looks good at any zoom level
-                let normalizedPosition = Double(i) / Double(pointCount - 1) // 0.0 to 1.0
-                
-                // Create a smooth sine wave with some variation based on clip ID
-                // to ensure different clips have different patterns
-                let frequency = 2.0 + Double(abs(clip.id.hashValue % 3)) * 0.5 // Varies between 2.0 and 3.5
-                let phase = Double(clip.id.hashValue % 100) / 100.0 * Double.pi // Random phase shift
-                
-                // Calculate amplitude using a sine function for smoothness
-                let amplitude = CGFloat(sin(normalizedPosition * Double.pi * frequency + phase) * 0.7) * 8.0
-                
-                waveformPoints.append(amplitude)
+            // Seed random generator based on clip id for consistency between renders
+            var generator = SeededRandomGenerator(seed: clip.id.hashValue)
+            
+            for _ in 0..<barCount {
+                // Generate a random height value for each bar
+                // Variance should be between 0.1 (small) and 1.0 (full-height)
+                let barHeight = generator.randomCGFloat(min: 0.1, max: 1.0)
+                waveformBars.append(barHeight)
             }
             
-            self.placeholderWaveformData = waveformPoints
+            self.placeholderWaveformData = waveformBars
         } else {
             // If the clip already has waveform data, convert it to CGFloat
             self.placeholderWaveformData = clip.waveformData.map { CGFloat($0) }
@@ -78,6 +93,9 @@ struct AudioClipView: View {
         // Calculate position and size based on timeline state
         let startX = CGFloat(clip.startBeat * state.effectivePixelsPerBeat)
         let width = CGFloat(clip.duration * state.effectivePixelsPerBeat)
+        
+        // Define resize handle width - increase from 8 to 12 for easier grabbing
+        let handleWidth: CGFloat = 12
         
         // Use a ZStack to position the clip correctly
         ZStack(alignment: .topLeading) {
@@ -106,6 +124,14 @@ struct AudioClipView: View {
                         .opacity(0.9)
                 }
                 
+                // Resizing indicators
+                if isResizingLeft || isResizingRight {
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                        .foregroundColor(.yellow)
+                        .opacity(0.9)
+                }
+                
                 // Clip name
                 Text(clip.name)
                     .font(.caption)
@@ -115,29 +141,251 @@ struct AudioClipView: View {
                 
                 // Waveform visualization using pre-generated data
                 if clip.waveformData.isEmpty {
-                    // Draw waveform using the pre-generated data
-                    Path { path in
-                        let height = track.height - 30
-                        let middle = height / 2
-                        
-                        // Start at the left edge, middle height
-                        path.move(to: CGPoint(x: 10, y: middle))
-                        
-                        // Calculate the step size based on available width and data points
-                        let step = (width - 20) / CGFloat(placeholderWaveformData.count - 1)
-                        
-                        // Draw the waveform using the pre-generated data with smooth curves
-                        for (index, amplitude) in placeholderWaveformData.enumerated() {
-                            let x = 10 + CGFloat(index) * step
-                            let y = middle + amplitude
-                            
-                            // Use addLine for a cleaner look
-                            path.addLine(to: CGPoint(x: x, y: y))
-                        }
-                    }
-                    .stroke(Color.white.opacity(0.8), lineWidth: 1.5)
-                    .padding(.top, 24)
+                    // Draw striped waveform pattern (vertical bars)
+                    StripedWaveformView(
+                        waveformData: placeholderWaveformData,
+                        color: waveformColor,
+                        width: width,
+                        height: track.height - 30
+                    )
+                    .padding(.top, 24) // Same padding as before for consistency
                 }
+                
+                // Left resize handle with combined visual indicator and interaction
+                ZStack {
+                    // Visual indicator - always visible but more prominent on hover
+                    Rectangle()
+                        .fill(Color.white.opacity(isHoveringLeftEdge || isResizingLeft ? 0.5 : 0.3))
+                        .frame(width: handleWidth * 0.75, height: track.height - 8)
+                    
+                    // Invisible touch target (larger than the visual indicator)
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(width: handleWidth, height: track.height - 4)
+                        .contentShape(Rectangle())
+                }
+                .position(x: handleWidth/2, y: (track.height - 4)/2)
+                .onHover { hovering in
+                    if !isDragging && !isResizingRight {
+                        isHoveringLeftEdge = hovering
+                        updateCursorForLeftEdge()
+                    }
+                }
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 1)
+                        .onChanged { value in
+                            // If this is the start of the drag, select the clip and store initial values
+                            if !isResizingLeft && !isResizingRight && !isDragging {
+                                if !isSelected {
+                                    selectThisClip()
+                                }
+                                
+                                if projectViewModel.interactionManager.startClipResize() {
+                                    isResizingLeft = true
+                                    originalStartBeat = clip.startBeat
+                                    originalDuration = clip.duration
+                                    NSCursor.resizeLeftRight.set()
+                                }
+                            }
+                            
+                            if isResizingLeft {
+                                // Calculate distance dragged in beats
+                                let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                                
+                                // Calculate the new start position
+                                let rawNewStartBeat = originalStartBeat + Double(dragDistanceInBeats)
+                                
+                                // Snap to grid
+                                let snappedStartBeat = snapToNearestGridMarker(rawNewStartBeat)
+                                
+                                // Calculate maximum allowed start position (to maintain minimum duration)
+                                let originalEndBeat = originalStartBeat + originalDuration
+                                let minimumDuration = 0.25 // Minimum 1/4 beat duration
+                                let maxStartBeat = originalEndBeat - minimumDuration
+                                
+                                // Ensure we don't go negative or make the clip too short
+                                let finalStartBeat = max(0, min(snappedStartBeat, maxStartBeat))
+                                
+                                // Preview the resize by updating the selection
+                                state.startSelection(at: finalStartBeat, trackId: track.id)
+                                state.updateSelection(to: originalEndBeat)
+                            }
+                        }
+                        .onEnded { value in
+                            guard isResizingLeft else { return }
+                            
+                            // Calculate distance dragged in beats
+                            let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                            
+                            // Calculate the new start position
+                            let rawNewStartBeat = originalStartBeat + Double(dragDistanceInBeats)
+                            
+                            // Snap to grid
+                            let snappedStartBeat = snapToNearestGridMarker(rawNewStartBeat)
+                            
+                            // Calculate maximum allowed start position (to maintain minimum duration)
+                            let originalEndBeat = originalStartBeat + originalDuration
+                            let minimumDuration = 0.25 // Minimum 1/4 beat duration
+                            let maxStartBeat = originalEndBeat - minimumDuration
+                            
+                            // Ensure we don't go negative or make the clip too short
+                            let finalStartBeat = max(0, min(snappedStartBeat, maxStartBeat))
+                            
+                            // Only resize if the position actually changed
+                            if abs(finalStartBeat - originalStartBeat) > 0.001 {
+                                // Resize the clip from the start
+                                let success = audioViewModel.resizeAudioClipStart(
+                                    trackId: track.id,
+                                    clipId: clip.id,
+                                    newStartBeat: finalStartBeat
+                                )
+                                
+                                if success {
+                                    // Update the selection to match the new clip bounds
+                                    state.startSelection(at: finalStartBeat, trackId: track.id)
+                                    state.updateSelection(to: originalEndBeat)
+                                } else {
+                                    // Reset the selection to the original clip position
+                                    state.startSelection(at: originalStartBeat, trackId: track.id)
+                                    state.updateSelection(to: originalStartBeat + originalDuration)
+                                }
+                            } else {
+                                // If position didn't change, reset selection to current clip position
+                                state.startSelection(at: originalStartBeat, trackId: track.id)
+                                state.updateSelection(to: originalEndBeat)
+                            }
+                            
+                            // Reset states
+                            isNearLeftEdge = false
+                            
+                            // Clean up
+                            projectViewModel.interactionManager.endClipResize()
+                            isResizingLeft = false
+                            updateCursorForLeftEdge()
+                        }
+                )
+                .allowsHitTesting(true)
+                .zIndex(50) // Higher z-index to ensure it's on top of other elements
+                
+                // Right resize handle with combined visual indicator and interaction
+                ZStack {
+                    // Visual indicator - always visible but more prominent on hover
+                    Rectangle()
+                        .fill(Color.white.opacity(isHoveringRightEdge || isResizingRight ? 0.5 : 0.3))
+                        .frame(width: handleWidth * 0.75, height: track.height - 8)
+                    
+                    // Invisible touch target (larger than the visual indicator)
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(width: handleWidth, height: track.height - 4)
+                        .contentShape(Rectangle())
+                }
+                .position(x: width - handleWidth/2, y: (track.height - 4)/2)
+                .onHover { hovering in
+                    if !isDragging && !isResizingLeft {
+                        isHoveringRightEdge = hovering
+                        updateCursorForRightEdge()
+                    }
+                }
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 1)
+                        .onChanged { value in
+                            // If this is the start of the drag, select the clip and store initial values
+                            if !isResizingRight && !isResizingLeft && !isDragging {
+                                if !isSelected {
+                                    selectThisClip()
+                                }
+                                
+                                if projectViewModel.interactionManager.startClipResize() {
+                                    isResizingRight = true
+                                    originalStartBeat = clip.startBeat
+                                    originalDuration = clip.duration
+                                    NSCursor.resizeLeftRight.set()
+                                }
+                            }
+                            
+                            if isResizingRight {
+                                // Calculate distance dragged in beats
+                                let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                                
+                                // Calculate the new duration
+                                let rawNewDuration = originalDuration + Double(dragDistanceInBeats)
+                                
+                                // Calculate the new end beat position
+                                let rawNewEndBeat = originalStartBeat + rawNewDuration
+                                
+                                // Snap to grid
+                                let snappedEndBeat = snapToNearestGridMarker(rawNewEndBeat)
+                                
+                                // Calculate the snapped duration
+                                let snappedDuration = snappedEndBeat - originalStartBeat
+                                
+                                // Ensure minimum duration
+                                let minimumDuration = 0.25 // Minimum 1/4 beat duration
+                                let finalDuration = max(minimumDuration, snappedDuration)
+                                
+                                // Preview the resize by updating the selection
+                                state.startSelection(at: originalStartBeat, trackId: track.id)
+                                state.updateSelection(to: originalStartBeat + finalDuration)
+                            }
+                        }
+                        .onEnded { value in
+                            guard isResizingRight else { return }
+                            
+                            // Calculate distance dragged in beats
+                            let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+                            
+                            // Calculate the new duration
+                            let rawNewDuration = originalDuration + Double(dragDistanceInBeats)
+                            
+                            // Calculate the new end beat position
+                            let rawNewEndBeat = originalStartBeat + rawNewDuration
+                            
+                            // Snap to grid
+                            let snappedEndBeat = snapToNearestGridMarker(rawNewEndBeat)
+                            
+                            // Calculate the snapped duration
+                            let snappedDuration = snappedEndBeat - originalStartBeat
+                            
+                            // Ensure minimum duration
+                            let minimumDuration = 0.25 // Minimum 1/4 beat duration
+                            let finalDuration = max(minimumDuration, snappedDuration)
+                            
+                            // Only resize if the duration actually changed
+                            if abs(finalDuration - originalDuration) > 0.001 {
+                                // Resize the clip from the end
+                                let success = audioViewModel.resizeAudioClipEnd(
+                                    trackId: track.id,
+                                    clipId: clip.id,
+                                    newDuration: finalDuration
+                                )
+                                
+                                if success {
+                                    // Update the selection to match the new clip bounds
+                                    state.startSelection(at: originalStartBeat, trackId: track.id)
+                                    state.updateSelection(to: originalStartBeat + finalDuration)
+                                } else {
+                                    // Reset the selection to the original clip position
+                                    state.startSelection(at: originalStartBeat, trackId: track.id)
+                                    state.updateSelection(to: originalStartBeat + originalDuration)
+                                }
+                            } else {
+                                // If duration didn't change, reset selection to current clip position
+                                state.startSelection(at: originalStartBeat, trackId: track.id)
+                                state.updateSelection(to: originalStartBeat + originalDuration)
+                            }
+                            
+                            // Reset states
+                            isNearRightEdge = false
+                            
+                            // Clean up
+                            projectViewModel.interactionManager.endClipResize()
+                            isResizingRight = false
+                            updateCursorForRightEdge()
+                        }
+                )
+                .allowsHitTesting(true)
+                .zIndex(50) // Higher z-index to ensure it's on top of other elements
             }
             .frame(width: width, height: track.height - 4)
             .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
@@ -148,7 +396,7 @@ struct AudioClipView: View {
             }
             .onHover { hovering in
                 isHovering = hovering
-                if hovering {
+                if hovering && !isHoveringLeftEdge && !isHoveringRightEdge {
                     // Change cursor based on whether the clip is selected
                     if isSelected {
                         NSCursor.openHand.set()
@@ -157,7 +405,7 @@ struct AudioClipView: View {
                         NSCursor.pointingHand.set()
                     }
                     // print("Hovering over clip: \(clip.name) at position \(clip.startBeat)-\(clip.endBeat)")
-                } else if !isDragging {
+                } else if !isDragging && !isResizingLeft && !isResizingRight && !isHoveringLeftEdge && !isHoveringRightEdge {
                     NSCursor.arrow.set()
                 }
             }
@@ -165,6 +413,16 @@ struct AudioClipView: View {
             .highPriorityGesture(
                 DragGesture(minimumDistance: 5) // Require a minimum drag distance to start
                     .onChanged { value in
+                        // Calculate relative position within the clip to determine if we're near an edge
+                        let relativeX = value.startLocation.x
+                        isNearLeftEdge = relativeX <= handleWidth
+                        isNearRightEdge = relativeX >= width - handleWidth
+                        
+                        // If we're near an edge, don't start a drag operation
+                        if isNearLeftEdge || isNearRightEdge {
+                            return
+                        }
+                        
 //                        print("🔊 AUDIO DRAG DETECTED: Clip \(clip.name) (id: \(clip.id))")
                         
                         // If the clip isn't selected yet, select it first
@@ -414,6 +672,129 @@ struct AudioClipView: View {
                 return (barIndex + 1) * beatsPerBar
             }
         }
+    }
+    
+    // Function to update cursor when hovering over left edge
+    private func updateCursorForLeftEdge() {
+        if isHoveringLeftEdge {
+            NSCursor.resizeLeftRight.set()
+        } else if isHovering {
+            if isSelected {
+                NSCursor.openHand.set()
+            } else {
+                NSCursor.pointingHand.set()
+            }
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+    
+    // Function to update cursor when hovering over right edge
+    private func updateCursorForRightEdge() {
+        if isHoveringRightEdge {
+            NSCursor.resizeLeftRight.set()
+        } else if isHovering {
+            if isSelected {
+                NSCursor.openHand.set()
+            } else {
+                NSCursor.pointingHand.set()
+            }
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+}
+
+// A struct to seed the random generator for consistent results
+private struct SeededRandomGenerator {
+    private var seed: Int
+    
+    init(seed: Int) {
+        // Make sure we start with a positive seed
+        self.seed = abs(seed) == 0 ? 42 : abs(seed)
+    }
+    
+    mutating func randomCGFloat(min: CGFloat, max: CGFloat) -> CGFloat {
+        // Use a simple but robust xorshift algorithm
+        // This avoids overflow issues with large multiplications
+        var x = UInt32(truncatingIfNeeded: seed)
+        x ^= x << 13
+        x ^= x >> 17
+        x ^= x << 5
+        seed = Int(x)
+        
+        // Convert to normalized float in [0,1] range
+        let normalizedValue = CGFloat(seed & 0x7FFFFFFF) / CGFloat(0x7FFFFFFF)
+        
+        // Scale to requested range
+        return min + normalizedValue * (max - min)
+    }
+}
+
+// Separate view for the striped waveform visualization
+struct StripedWaveformView: View {
+    let waveformData: [CGFloat]
+    let color: Color
+    let width: CGFloat
+    let height: CGFloat
+    
+    var body: some View {
+        Canvas { context, size in
+            // Calculate spacing between bars
+            let barCount = waveformData.count
+            let barWidth: CGFloat = 2 // Fixed bar width
+            let spacing = (width - CGFloat(barCount) * barWidth) / CGFloat(barCount + 1)
+            let effectiveSpacing = max(1, spacing) // Ensure minimum spacing
+            
+            // Starting X position for the first bar
+            var xPos: CGFloat = effectiveSpacing
+            
+            // Midpoint for drawing bars from center
+            let midY = height / 2
+            
+            // Draw each bar in the waveform
+            for amplitude in waveformData {
+                // Each bar extends from center up and down based on amplitude
+                let barHeight = height * amplitude
+                let yOffset = (height - barHeight) / 2
+                
+                // Create path for this bar
+                let barRect = CGRect(
+                    x: xPos,
+                    y: yOffset,
+                    width: barWidth,
+                    height: barHeight
+                )
+                let path = Path(roundedRect: barRect, cornerSize: CGSize(width: 1, height: 1))
+                
+                // Draw the bar
+                context.fill(path, with: .color(color))
+                
+                // Move to the next position
+                xPos += barWidth + effectiveSpacing
+            }
+        }
+        .frame(width: width, height: height)
+    }
+}
+
+// Color extension to help determine if a color is dark or light
+extension Color {
+    var brightness: CGFloat {
+        let nsColor = NSColor(self)
+        
+        // Convert to RGB colorspace if needed
+        let rgbColor = nsColor.usingColorSpace(.sRGB) ?? nsColor
+        
+        // Use the components array which is safer
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        
+        rgbColor.getRed(&r, green: &g, blue: &b, alpha: nil)
+        
+        // Simple luminance calculation (perceived brightness)
+        return (r * 0.299 + g * 0.587 + b * 0.114)
     }
 }
 
