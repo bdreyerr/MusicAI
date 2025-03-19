@@ -16,42 +16,63 @@ class EffectsViewModel: ObservableObject {
     /// Add an effect to the selected track
     func addEffectToSelectedTrack(_ effect: Effect) {
         guard let projectViewModel = projectViewModel,
-              let trackId = projectViewModel.selectedTrackId,
-              let index = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else { return }
+              let trackId = projectViewModel.selectedTrackId else { return }
         
+        // Check if this is the master track
+        if trackId == projectViewModel.masterTrack.id {
+            var updatedTrack = projectViewModel.masterTrack
+            updatedTrack.addEffect(effect)
+            projectViewModel.masterTrack = updatedTrack
+            return
+        }
+        
+        // Handle regular tracks
+        guard let index = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else { return }
         var updatedTrack = projectViewModel.tracks[index]
         updatedTrack.addEffect(effect)
-        
-        // Update the track in the project view model
         projectViewModel.updateTrack(at: index, with: updatedTrack)
     }
     
     /// Remove an effect from the selected track
     func removeEffectFromSelectedTrack(effectId: UUID) {
         guard let projectViewModel = projectViewModel,
-              let trackId = projectViewModel.selectedTrackId,
-              let index = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else { return }
+              let trackId = projectViewModel.selectedTrackId else { return }
         
+        // Check if this is the master track
+        if trackId == projectViewModel.masterTrack.id {
+            var updatedTrack = projectViewModel.masterTrack
+            updatedTrack.removeEffect(id: effectId)
+            projectViewModel.masterTrack = updatedTrack
+            return
+        }
+        
+        // Handle regular tracks
+        guard let index = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else { return }
         var updatedTrack = projectViewModel.tracks[index]
         updatedTrack.removeEffect(id: effectId)
-        
-        // Update the track in the project view model
         projectViewModel.updateTrack(at: index, with: updatedTrack)
     }
     
     /// Update an effect on the selected track
     func updateEffectOnSelectedTrack(_ updatedEffect: Effect) {
         guard let projectViewModel = projectViewModel,
-              let trackId = projectViewModel.selectedTrackId,
-              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else { return }
+              let trackId = projectViewModel.selectedTrackId else { return }
         
+        // Check if this is the master track
+        if trackId == projectViewModel.masterTrack.id {
+            var updatedTrack = projectViewModel.masterTrack
+            if let effectIndex = updatedTrack.effects.firstIndex(where: { $0.id == updatedEffect.id }) {
+                updatedTrack.effects[effectIndex] = updatedEffect
+                projectViewModel.masterTrack = updatedTrack
+            }
+            return
+        }
+        
+        // Handle regular tracks
+        guard let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else { return }
         var updatedTrack = projectViewModel.tracks[trackIndex]
-        
-        // Find and update the effect
         if let effectIndex = updatedTrack.effects.firstIndex(where: { $0.id == updatedEffect.id }) {
             updatedTrack.effects[effectIndex] = updatedEffect
-            
-            // Update the track in the project view model
             projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
         }
     }
@@ -81,7 +102,10 @@ class EffectsViewModel: ObservableObject {
             return [.arpeggiator, .chordTrigger, .instrument]
         case .instrument:
             return [.filter, .synthesizer, .reverb, .delay]
+        case .master:
+            return [.equalizer, .compressor, .reverb, .delay, .filter]
         }
+        
     }
     
     /// Get all effects for a specific track

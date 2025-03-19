@@ -5,6 +5,7 @@ enum TrackType: Equatable {
     case audio
     case midi
     case instrument
+    case master // New case for master track
     
     var icon: String {
         switch self {
@@ -14,6 +15,8 @@ enum TrackType: Equatable {
             return "pianokeys"
         case .instrument:
             return "music.note"
+        case .master:
+            return "slider.horizontal.3" // Icon representing a mixer
         }
     }
     
@@ -25,6 +28,8 @@ enum TrackType: Equatable {
             return Color.green.opacity(0.8)
         case .instrument:
             return Color.purple.opacity(0.8)
+        case .master:
+            return Color.red.opacity(0.8) // Distinctive color for master track
         }
     }
     

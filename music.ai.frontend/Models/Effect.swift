@@ -68,11 +68,11 @@ enum EffectType: Equatable {
     func isCompatibleWith(trackType: TrackType) -> Bool {
         switch self {
         case .equalizer, .compressor, .reverb, .delay:
-            // Audio effects work with audio tracks
-            return trackType == .audio
+            // Audio effects work with audio tracks and master track
+            return trackType == .audio || trackType == .master
         case .filter:
-            // Filter works with audio and instrument tracks
-            return trackType == .audio || trackType == .instrument
+            // Filter works with audio, instrument, and master tracks
+            return trackType == .audio || trackType == .instrument || trackType == .master
         case .arpeggiator, .chordTrigger:
             // MIDI effects work with MIDI tracks
             return trackType == .midi

@@ -9,6 +9,7 @@ class ProjectViewModel: ObservableObject {
     @Published var currentBeat: Double = 0.0 // Current playback position in beats
     @Published var tracks: [Track] = Track.samples
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
+    @Published var masterTrack: Track // Master track for final output processing
     
     // Performance optimization settings
     @Published var performanceMode: PerformanceMode = .balanced
@@ -39,6 +40,10 @@ class ProjectViewModel: ObservableObject {
     
     // Initialize with default values
     init() {
+        // Initialize master track
+        self.masterTrack = Track(name: "Master", type: .master)
+        self.masterTrack.height = 100 // Set default height
+        
         // Select the first track by default if available
         if !tracks.isEmpty {
             selectedTrackId = tracks[0].id
@@ -52,7 +57,10 @@ class ProjectViewModel: ObservableObject {
     
     // Computed property to get the currently selected track
     var selectedTrack: Track? {
-        tracks.first { $0.id == selectedTrackId }
+        if selectedTrackId == masterTrack.id {
+            return masterTrack
+        }
+        return tracks.first { $0.id == selectedTrackId }
     }
     
     // Performance mode enum
