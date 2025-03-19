@@ -92,7 +92,7 @@ struct NotchDisplayView: View {
                 .antialiased(true) // Enable antialiasing
                 .renderingMode(.original) // Preserve original colors
                 .scaledToFit()
-                .frame(width: 30, height: 30)
+                .frame(width: 24, height: 24) // Reduced size
 //                .colorInvert() // Ensure logo is visible on black background
             
             // Position displays (side by side with divider)
@@ -103,7 +103,7 @@ struct NotchDisplayView: View {
                 // Small divider between position and time
                 Rectangle()
                     .fill(Color.white.opacity(0.4))
-                    .frame(width: 1, height: 14)
+                    .frame(width: 1, height: 12) // Reduced height
                 
                 // Time format (minutes:seconds)
                 NotchTimeDisplayWrapper(projectViewModel: projectViewModel)
@@ -113,15 +113,15 @@ struct NotchDisplayView: View {
             // Right side - Waveform visualization
             SimpleWaveformView(projectViewModel: projectViewModel)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 5) // Further reduced height
+        .padding(.horizontal, 16) // Slightly reduced padding
+        .padding(.vertical, 4) // Reduced vertical padding
         .background(
             Capsule()
                 .fill(Color.black) // Always black in both themes
         )
-        .frame(width: 280, height: 32) // Wider and shorter
+        .frame(width: 280, height: 28) // Reduced height
         // Add a subtle shadow for depth
-        .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 1)
+        .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -205,6 +205,7 @@ struct TopControlBarView: View {
     @State private var isLoopEnabled: Bool = false
     @State private var cpuUsage: Double = 12.5 // Mock CPU usage value
     @State private var memoryUsage: Double = 256.0 // Mock RAM usage in MB
+    @State private var selectedPerformanceMode: PerformanceMode = .lowLatency
     
     // Using a separate controller for text field operations to avoid view cycle issues
     private let tempoFieldController = TempoFieldController()
@@ -215,12 +216,6 @@ struct TopControlBarView: View {
     
     var body: some View {
         HStack(spacing: 0) {
-            // Notch display (moved to left side)
-            NotchDisplayView(projectViewModel: projectViewModel)
-                .padding(.vertical, 1)
-                .padding(.leading, 14)
-                .padding(.trailing, 20)
-            
             // Left group with controls
             HStack(spacing: 0) {
                 // BPM control with tap button
@@ -230,7 +225,7 @@ struct TopControlBarView: View {
                         // TODO: Implement tap tempo
                     }) {
                         Text("Tap")
-                            .font(.subheadline)
+                            .font(.system(.callout, design: .monospaced))
                             .foregroundColor(themeManager.primaryTextColor)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
@@ -262,7 +257,7 @@ struct TopControlBarView: View {
                             .frame(width: 62, height: 30)
                         } else {
                             Text("\(Int(projectViewModel.tempo))")
-                                .font(.system(.title3, design: .monospaced))
+                                .font(.system(.callout, design: .monospaced))
                                 .foregroundColor(themeManager.primaryTextColor)
                                 .frame(width: 50, height: 24, alignment: .center)
                                 .padding(.horizontal, 6)
@@ -279,7 +274,7 @@ struct TopControlBarView: View {
                     .frame(width: 62, height: 30) // Fixed size for both states
                     
                     Text("BPM")
-                        .font(.subheadline)
+                        .font(.system(.callout, design: .monospaced))
                         .foregroundColor(themeManager.primaryTextColor)
                     
                     // Metronome toggle
@@ -302,17 +297,14 @@ struct TopControlBarView: View {
                 
                 // Time signature controls
                 HStack(spacing: 8) {
-                    Text("Time:")
-                        .font(.subheadline)
-                        .foregroundColor(themeManager.primaryTextColor)
-                    
-                    // Beats (numerator) button
+                    // Beats per bar
                     Button(action: {
                         isEditingTimeSignatureBeats = true
+                        isEditingTempo = false
                         isEditingTimeSignatureUnit = false
                     }) {
                         Text("\(projectViewModel.timeSignatureBeats)")
-                            .font(.system(.subheadline, design: .monospaced))
+                            .font(.system(.callout, design: .monospaced))
                             .foregroundColor(themeManager.primaryTextColor)
                             .frame(width: 30, height: 24)
                             .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
@@ -321,7 +313,7 @@ struct TopControlBarView: View {
                     .buttonStyle(BorderlessButtonStyle())
                     .popover(isPresented: $isEditingTimeSignatureBeats, arrowEdge: .bottom) {
                         VStack(spacing: 0) {
-                            ForEach(2...12, id: \.self) { beats in
+                            ForEach([2, 3, 4, 6, 8, 12], id: \.self) { beats in
                                 Button(action: {
                                     projectViewModel.timeSignatureBeats = beats
                                     isEditingTimeSignatureBeats = false
@@ -341,17 +333,17 @@ struct TopControlBarView: View {
                     }
                     
                     Text("/")
-                        .font(.title3)
+                        .font(.system(.callout, design: .monospaced))
                         .foregroundColor(themeManager.primaryTextColor)
-                        .padding(.horizontal, 2)
                     
-                    // Unit (denominator) button
+                    // Note value
                     Button(action: {
                         isEditingTimeSignatureUnit = true
+                        isEditingTempo = false
                         isEditingTimeSignatureBeats = false
                     }) {
                         Text("\(projectViewModel.timeSignatureUnit)")
-                            .font(.system(.subheadline, design: .monospaced))
+                            .font(.system(.callout, design: .monospaced))
                             .foregroundColor(themeManager.primaryTextColor)
                             .frame(width: 30, height: 24)
                             .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
@@ -434,89 +426,42 @@ struct TopControlBarView: View {
                 .padding(.horizontal, 10)
             }
             
+            // Notch display (moved to after transport controls)
+            NotchDisplayView(projectViewModel: projectViewModel)
+                .padding(.vertical, 1)
+                .padding(.horizontal, 14)
+            
             Spacer()
             
-            // Right group with system monitors
+            // Existing system monitors
             HStack(spacing: 16) {
-                // CPU usage indicator
+                // CPU usage
                 HStack(spacing: 4) {
-                    Text("CPU:")
-                        .font(.subheadline)
+                    Image(systemName: "cpu")
+                        .font(.system(.callout, design: .monospaced))
                         .foregroundColor(themeManager.primaryTextColor)
                     
-                    Text(String(format: "%.1f%%", cpuUsage))
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundColor(cpuUsage > 80 ? .red : themeManager.primaryTextColor)
-                        .frame(width: 50, alignment: .leading)
+                    Text("\(Int(cpuUsage))%")
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundColor(themeManager.primaryTextColor)
                 }
                 
-                // Memory usage indicator
+                // Memory usage
                 HStack(spacing: 4) {
-                    Text("RAM:")
-                        .font(.subheadline)
+                    Image(systemName: "memorychip")
+                        .font(.system(.callout, design: .monospaced))
                         .foregroundColor(themeManager.primaryTextColor)
                     
-                    Text(String(format: "%.0f MB", memoryUsage))
-                        .font(.system(.subheadline, design: .monospaced))
-                        .foregroundColor(memoryUsage > 1024 ? .red : themeManager.primaryTextColor)
-                        .frame(width: 65, alignment: .leading)
+                    Text("\(Int(memoryUsage)) MB")
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundColor(themeManager.primaryTextColor)
                 }
-                
-                // Performance mode toggle
-                Button(action: {
-                    projectViewModel.togglePerformanceMode()
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "gauge")
-                            .font(.subheadline)
-                            .foregroundColor(themeManager.primaryTextColor)
-                        Text(projectViewModel.performanceModeName())
-                            .font(.subheadline)
-                            .foregroundColor(themeManager.primaryTextColor)
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(themeManager.secondaryBackgroundColor)
-                            .opacity(1.0)
-                    )
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Toggle performance mode")
-                
-                // Theme toggle
-                Button(action: {
-                    themeManager.toggleTheme()
-                }) {
-                    Image(systemName: themeManager.currentTheme == .dark ? "sun.max" : "moon")
-                       .foregroundColor(themeManager.primaryTextColor)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("Toggle between light and dark theme")
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 14)
         }
-        .padding(.vertical, 6)
-        .frame(height: 44) // Further reduced height to match the new notch
-        .background(themeManager.secondaryBackgroundColor)
-        .border(themeManager.borderColor, width: 0.3)
-        .environmentObject(ClickObserver.shared)
-        .onReceive(NotificationCenter.default.publisher(for: ClickObserver.clickNotification)) { _ in
-            // Handle outside clicks
-            if isEditingTempo && !tempoFieldController.isEditing {
-                isEditingTempo = false
-            }
-        }
-        .onAppear {
-            // Start a timer to update resource usage
-            Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-                // Simulate CPU usage fluctuation between 5% and 25%
-                cpuUsage = Double.random(in: 5...25)
-                // Simulate memory usage fluctuation
-                memoryUsage = Double.random(in: 200...600)
-            }
-        }
+        .frame(height: 44)
+        .background(themeManager.backgroundColor)
+        .border(themeManager.secondaryBorderColor, width: 0.5)
     }
 }
 
@@ -771,6 +716,13 @@ class ClickObserver: ObservableObject {
             return event
         }
     }
+}
+
+// Add this enum back if it's not defined elsewhere
+enum PerformanceMode: String {
+    case lowLatency = "Low Latency"
+    case balanced = "Balanced"
+    case highQuality = "High Quality"
 }
 
 #Preview {

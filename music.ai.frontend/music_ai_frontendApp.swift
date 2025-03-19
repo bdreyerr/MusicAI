@@ -26,6 +26,8 @@ struct music_ai_frontendApp: App {
     @StateObject private var sidebarViewModel = SidebarViewModel()
     // Create a shared AudioDragDropViewModel instance
     @StateObject private var audioDragDropViewModel = AudioDragDropViewModel.shared
+    // Create a shared SettingsViewModel instance
+    @StateObject private var settingsViewModel = SettingsViewModel()
     
     // Register the app delegate
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -46,6 +48,12 @@ struct music_ai_frontendApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
+        
+        // Add Settings window
+        Settings {
+            SettingsView(viewModel: settingsViewModel)
+                .environmentObject(themeManager)
+        }
     }
     
     // Configure the app's appearance based on the current theme
