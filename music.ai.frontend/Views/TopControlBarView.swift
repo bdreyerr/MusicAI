@@ -10,6 +10,9 @@ struct SimpleWaveformView: View {
     @State private var barHeights: [CGFloat] = Array(repeating: 0.5, count: 14)
     @State private var updateTimer: Timer? = nil
     
+    // Resource Usage
+    @State private var cpuUsagePercentage: Double = 0.0
+    
     var body: some View {
         HStack(spacing: 2) {
             ForEach(0..<barHeights.count, id: \.self) { index in
@@ -388,6 +391,7 @@ struct TopControlBarView: View {
                             .foregroundColor(themeManager.primaryTextColor)
                     }
                     .buttonStyle(BorderlessButtonStyle())
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .shift])
                     .help("Rewind to beginning")
                     
                     // Play/Pause button
@@ -399,6 +403,7 @@ struct TopControlBarView: View {
                             .foregroundColor(themeManager.primaryTextColor)
                     }
                     .buttonStyle(BorderlessButtonStyle())
+                    .keyboardShortcut(.space, modifiers: [])
                     .help("Play/Pause")
                     
                     // Record button
@@ -433,31 +438,11 @@ struct TopControlBarView: View {
             
             Spacer()
             
-            // Existing system monitors
-            HStack(spacing: 16) {
-                // CPU usage
-                HStack(spacing: 4) {
-                    Image(systemName: "cpu")
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundColor(themeManager.primaryTextColor)
-                    
-                    Text("\(Int(cpuUsage))%")
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundColor(themeManager.primaryTextColor)
-                }
-                
-                // Memory usage
-                HStack(spacing: 4) {
-                    Image(systemName: "memorychip")
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundColor(themeManager.primaryTextColor)
-                    
-                    Text("\(Int(memoryUsage)) MB")
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundColor(themeManager.primaryTextColor)
-                }
-            }
-            .padding(.horizontal, 14)
+            // TODO: Add CPU usage display (someone figure it out i can't)
+           Text("Glitch v0.1")
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundColor(themeManager.primaryTextColor.opacity(0.5))
+            .padding(.trailing, 20)
         }
         .frame(height: 44)
         .background(themeManager.backgroundColor)

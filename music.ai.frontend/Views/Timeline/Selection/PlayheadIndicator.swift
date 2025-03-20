@@ -26,7 +26,7 @@ struct PlayheadIndicator: View {
         // Simple conditional rendering
         if isVisibleInViewport {
             Rectangle()
-                .fill(Color.blue)
+                .fill(themeManager.playheadColor)
                 .frame(width: 1.0)
                 .frame(maxHeight: .infinity)
                 .offset(x: xOffset)

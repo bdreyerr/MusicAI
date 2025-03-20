@@ -261,16 +261,16 @@ struct TimelineView: View {
                 
                 // Zoom controls in the top right corner
                 VStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("Zoom")
-                            .font(.caption)
-                            .foregroundColor(themeManager.primaryTextColor)
-                        
-                        Text("\(timelineState.zoomLevel)")
-                            .font(.caption)
-                            .foregroundColor(themeManager.primaryTextColor)
-                            .frame(width: 16, alignment: .center)
-                    }
+//                    HStack(spacing: 4) {
+//                        Text("Zoom")
+//                            .font(.caption)
+//                            .foregroundColor(themeManager.primaryTextColor)
+//                        
+//                        Text("\(timelineState.zoomLevel)")
+//                            .font(.caption)
+//                            .foregroundColor(themeManager.primaryTextColor)
+//                            .frame(width: 16, alignment: .center)
+//                    }
                     
                     // Zoom In button
                     Button(action: {

@@ -57,6 +57,7 @@ struct SettingsView: View {
 
 struct LookAndFeelSettingsView: View {
     @EnvironmentObject private var themeManager: ThemeManager
+    @State private var playheadColor: Color = Color.black
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -72,6 +73,19 @@ struct LookAndFeelSettingsView: View {
                         Text(theme.rawValue).tag(theme)
                     }
                 }
+            }
+            
+            // Playhead Color
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Playhead Color")
+                    .bold()
+                ColorPicker("", selection: $playheadColor)
+                    .onChange(of: playheadColor) { newColor in
+                        themeManager.setPlayheadColor(newColor)
+                    }
+                    .onAppear {
+                        playheadColor = themeManager.playheadColor
+                    }
             }
             
             Spacer()

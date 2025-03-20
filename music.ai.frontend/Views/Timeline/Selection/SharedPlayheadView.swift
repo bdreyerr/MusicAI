@@ -25,7 +25,7 @@ struct SharedPlayheadView: View {
         // Only render if visible and not scrolling
         if isVisibleInViewport && !state.isScrolling {
             Rectangle()
-                .fill(Color.blue)
+                .fill(themeManager.playheadColor)
                 .frame(width: 1.0)
                 .frame(maxHeight: .infinity)
                 .offset(x: xOffset)

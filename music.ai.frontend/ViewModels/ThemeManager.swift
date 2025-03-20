@@ -13,6 +13,7 @@ enum ThemeOption: String, CaseIterable, Identifiable {
 class ThemeManager: ObservableObject {
     // Published properties will trigger UI updates when changed
     @Published var currentTheme: ThemeOption = .light
+    @Published var customPlayheadColor: Color? = nil
     
     // Add a UUID that changes whenever the theme changes
     // This helps force SwiftUI Canvas components to redraw
@@ -25,6 +26,16 @@ class ThemeManager: ObservableObject {
            let theme = ThemeOption(rawValue: savedTheme) {
             currentTheme = theme
         }
+        
+        // Load saved playhead color if available
+        if let colorData = UserDefaults.standard.data(forKey: "playheadColor") {
+            do {
+                let color = try NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: colorData)
+                customPlayheadColor = Color(color ?? NSColor.black)
+            } catch {
+                print("Failed to load playhead color: \(error)")
+            }
+        }
     }
     
     // Change the theme and save the preference
@@ -32,6 +43,21 @@ class ThemeManager: ObservableObject {
         currentTheme = theme
         themeChangeIdentifier = UUID() // Generate new identifier to force UI updates
         UserDefaults.standard.set(theme.rawValue, forKey: "appTheme")
+    }
+    
+    // Set and save custom playhead color
+    func setPlayheadColor(_ color: Color) {
+        customPlayheadColor = color
+        themeChangeIdentifier = UUID() // Force UI updates
+        
+        // Save color to UserDefaults
+        let nsColor = NSColor(color)
+        do {
+            let colorData = try NSKeyedArchiver.archivedData(withRootObject: nsColor, requiringSecureCoding: false)
+            UserDefaults.standard.set(colorData, forKey: "playheadColor")
+        } catch {
+            print("Failed to save playhead color: \(error)")
+        }
     }
     
     // Toggle between light and dark themes
@@ -177,6 +203,17 @@ class ThemeManager: ObservableObject {
             // Lighter than tertiaryBackgroundColor in dark mode
             return Color(white: 0.35)
         }
+    }
+    
+    // Playhead color for timeline indicator
+    var playheadColor: Color {
+        // Return custom color if set, otherwise return default black
+        if let customColor = customPlayheadColor {
+            return customColor
+        }
+        
+        // Default to black in both themes
+        return Color.black
     }
     
     // Alternating grid section color for visual distinction
