@@ -86,6 +86,14 @@ struct TimelineView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topTrailing) {
+
+                // Invisible buttons for keyboard shortcuts
+                TimelineButtons(
+                    projectViewModel: projectViewModel,
+                    timelineState: timelineState
+                )
+                
+
                 VStack(spacing: 0) {
                     ScrollViewReader { scrollProxy in
                         VStack(spacing: 0) {
@@ -330,6 +338,9 @@ struct TimelineView: View {
                         projectViewModel.timelineState = timelineState
                         // Connect the timeline state to the MIDI view model
                         projectViewModel.midiViewModel.setTimelineState(timelineState)
+                        
+                        // Sync track selection state between timelineState and projectViewModel
+                        timelineState.syncWithProjectViewModel(projectViewModel: projectViewModel)
                     }
                 }
                 // Respond to zoom level changes
@@ -447,10 +458,10 @@ struct TimelineView: View {
         let menu = NSMenu(title: "Add Track")
         
         // Use our coordinator for the selectors
-        menu.addItem(withTitle: "Audio Track", action: #selector(MenuCoordinator.addAudioTrack), keyEquivalent: "")
+        menu.addItem(withTitle: "Audio Track", action: #selector(MenuCoordinator.addAudioTrack), keyEquivalent: "a")
             .target = menuCoordinator
         
-        menu.addItem(withTitle: "MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "")
+        menu.addItem(withTitle: "MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "m")
             .target = menuCoordinator
         
         if let event = NSApplication.shared.currentEvent,
@@ -483,19 +494,19 @@ struct TimelineView: View {
                     // This is a selected MIDI clip - show clip-specific options
                     print("Found selected MIDI clip")
                     
-                    menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "")
+                    menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "r")
                         .target = menuCoordinator
                     
-                    menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "")
+                    menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                         .target = menuCoordinator
                     
-                    menu.addItem(withTitle: "Edit Notes", action: #selector(MenuCoordinator.editClipNotes), keyEquivalent: "")
+                    menu.addItem(withTitle: "Edit Notes", action: #selector(MenuCoordinator.editClipNotes), keyEquivalent: "e")
                         .target = menuCoordinator
                 } else {
                     // This is a regular selection - show option to create a new clip
                     print("No MIDI clip found at selection")
                     
-                    menu.addItem(withTitle: "Create MIDI Clip", action: #selector(MenuCoordinator.createMidiClip), keyEquivalent: "")
+                    menu.addItem(withTitle: "Create MIDI Clip", action: #selector(MenuCoordinator.createMidiClip), keyEquivalent: "n")
                         .target = menuCoordinator
                 }
                 
@@ -513,19 +524,19 @@ struct TimelineView: View {
                     // This is a selected audio clip - show clip-specific options
                     print("Found selected audio clip")
                     
-                    menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "")
+                    menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "r")
                         .target = menuCoordinator
                     
-                    menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "")
+                    menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                         .target = menuCoordinator
                     
-                    menu.addItem(withTitle: "Edit Audio", action: #selector(MenuCoordinator.editAudioClip), keyEquivalent: "")
+                    menu.addItem(withTitle: "Edit Audio", action: #selector(MenuCoordinator.editAudioClip), keyEquivalent: "e")
                         .target = menuCoordinator
                 } else {
                     // This is a regular selection - show option to create a new clip
                     print("No audio clip found at selection")
                     
-                    menu.addItem(withTitle: "Create Audio Clip", action: #selector(MenuCoordinator.createAudioClip), keyEquivalent: "")
+                    menu.addItem(withTitle: "Create Audio Clip", action: #selector(MenuCoordinator.createAudioClip), keyEquivalent: "n")
                         .target = menuCoordinator
                 }
                 
@@ -534,11 +545,13 @@ struct TimelineView: View {
         }
         
         // Add track options
-        menu.addItem(withTitle: "Add Audio Track", action: #selector(MenuCoordinator.addAudioTrack), keyEquivalent: "")
-            .target = menuCoordinator
+        let audioTrackItem = menu.addItem(withTitle: "Add Audio Track", action: #selector(MenuCoordinator.addAudioTrack), keyEquivalent: "a")
+        audioTrackItem.target = menuCoordinator
+        audioTrackItem.keyEquivalentModifierMask = [.command, .shift]
         
-        menu.addItem(withTitle: "Add MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "")
-            .target = menuCoordinator
+        let midiTrackItem = menu.addItem(withTitle: "Add MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "m")
+        midiTrackItem.target = menuCoordinator
+        midiTrackItem.keyEquivalentModifierMask = [.command, .shift]
         
         if let event = NSApplication.shared.currentEvent,
            let contentView = NSApp.mainWindow?.contentView {

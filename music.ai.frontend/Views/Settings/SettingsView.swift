@@ -40,6 +40,8 @@ struct SettingsView: View {
                         AudioSettingsView(viewModel: viewModel)
                     case .lookFeel:
                         LookAndFeelSettingsView()
+                    case .shortcuts:
+                        KeyboardShortcutsView()
                     default:
                         Text("\(viewModel.selectedTab.rawValue) settings coming soon")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -52,6 +54,120 @@ struct SettingsView: View {
         }
         .background(themeManager.backgroundColor)
         .frame(minWidth: 600, minHeight: 400)
+    }
+}
+
+// Keyboard Shortcuts View
+struct KeyboardShortcutsView: View {
+    @EnvironmentObject private var themeManager: ThemeManager
+    
+    // Define all keyboard shortcuts
+    private let shortcuts: [ShortcutCategory] = [
+        ShortcutCategory(
+            name: "Timeline",
+            shortcuts: [
+                ShortcutItem(name: "Zoom In", shortcut: "⌘+"),
+                ShortcutItem(name: "Zoom Out", shortcut: "⌘-"),
+                ShortcutItem(name: "Add Audio Track", shortcut: "⌘T"),
+                ShortcutItem(name: "Add MIDI Track", shortcut: "⇧⌘T"),
+                ShortcutItem(name: "Create MIDI Clip", shortcut: "⇧⌘M"),
+                ShortcutItem(name: "Select Track Above", shortcut: "↑"),
+                ShortcutItem(name: "Select Track Below", shortcut: "↓"),
+            ]
+        ),
+        ShortcutCategory(
+            name: "Playback",
+            shortcuts: [
+                ShortcutItem(name: "Play/Pause", shortcut: "Space"),
+                ShortcutItem(name: "Rewind to Start", shortcut: "⇧⌘←")
+            ]
+        ),
+        ShortcutCategory(
+            name: "Editing",
+            shortcuts: [
+                ShortcutItem(name: "Rename Selected Clip", shortcut: "R"),
+                ShortcutItem(name: "Delete Selected Clip", shortcut: "⌫"),
+                ShortcutItem(name: "Edit MIDI Notes", shortcut: "E"),
+                ShortcutItem(name: "Create New Clip", shortcut: "N")
+            ]
+        )
+    ]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Title with information about future editable shortcuts
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Keyboard Shortcuts")
+                    .font(.title2)
+                    .bold()
+                
+                Text("Editable keyboard shortcuts coming soon")
+                    .font(.subheadline)
+                    .foregroundColor(themeManager.primaryTextColor.opacity(0.7))
+                    .italic()
+            }
+            .padding(.bottom, 8)
+            
+            // List of shortcuts by category
+            ForEach(shortcuts) { category in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(category.name)
+                        .font(.headline)
+                        .foregroundColor(themeManager.primaryTextColor)
+                        .padding(.bottom, 4)
+                    
+                    // Shortcuts table
+                    VStack(spacing: 2) {
+                        ForEach(category.shortcuts) { shortcut in
+                            HStack {
+                                Text(shortcut.name)
+                                    .frame(width: 160, alignment: .leading)
+                                
+                                Spacer()
+                                
+                                Text(shortcut.shortcut)
+                                    .font(.system(.body, design: .monospaced))
+                                    .padding(4)
+                                    .background(themeManager.secondaryBackgroundColor)
+                                    .cornerRadius(4)
+                                    .frame(width: 100, alignment: .center)
+                            }
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(category.shortcuts.firstIndex(of: shortcut)! % 2 == 0 ? themeManager.backgroundColor : themeManager.tertiaryBackgroundColor.opacity(0.3))
+                            .cornerRadius(2)
+                        }
+                    }
+                    .background(themeManager.secondaryBackgroundColor.opacity(0.1))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
+                    )
+                }
+                .padding(.bottom, 12)
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+// Models for keyboard shortcuts
+struct ShortcutCategory: Identifiable {
+    let id = UUID()
+    let name: String
+    let shortcuts: [ShortcutItem]
+}
+
+struct ShortcutItem: Identifiable, Equatable {
+    let id = UUID()
+    let name: String
+    let shortcut: String
+    
+    static func == (lhs: ShortcutItem, rhs: ShortcutItem) -> Bool {
+        return lhs.id == rhs.id
     }
 }
 

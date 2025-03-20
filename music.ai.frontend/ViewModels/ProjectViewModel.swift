@@ -231,23 +231,44 @@ class ProjectViewModel: ObservableObject {
     }
     
     // Add a new track
-    func addTrack(name: String, type: TrackType, height: CGFloat = 100) {
+    func addTrack(name: String, type: TrackType, height: CGFloat = 100, afterIndex: Int? = nil) {
         var newTrack = Track(name: name, type: type)
         newTrack.height = height
         
+        // print("📝 PROJECT VM: Adding new \(type) track: \(name)")
+        // print("📝 PROJECT VM: Current track count: \(tracks.count)")
+        // print("📝 PROJECT VM: afterIndex parameter: \(String(describing: afterIndex))")
+        
         // Use withAnimation to make the track addition smoother
         withAnimation(.easeInOut(duration: 0.2)) {
-            tracks.append(newTrack)
+            if let afterIndex = afterIndex, afterIndex >= 0 && afterIndex < tracks.count {
+                // Insert after the specified index if provided and valid
+                // print("📝 PROJECT VM: Inserting track at index \(afterIndex + 1)")
+                tracks.insert(newTrack, at: afterIndex + 1)
+            } else {
+                // Otherwise append to the end
+                // print("📝 PROJECT VM: Appending track to the end")
+                tracks.append(newTrack)
+            }
         }
         
         // If this is the first track, select it automatically
         if tracks.count == 1 {
             selectedTrackId = newTrack.id
+            print("📝 PROJECT VM: First track, selecting it automatically")
         }
         
         // Track was just added - update the timeline content width
         // This is done to ensure there's enough space for the new track
         updateTimelineContentWidth(reason: "track_addition")
+        
+        // Print tracks after adding to verify
+        DispatchQueue.main.async {
+            // print("📋 PROJECT VM: Track list after adding:")
+            for (i, track) in self.tracks.enumerated() {
+                print("  \(i): \(track.name) (ID: \(track.id.uuidString.prefix(8))...)")
+            }
+        }
     }
     
     // Remove a track

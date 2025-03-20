@@ -632,4 +632,43 @@ class TimelineStateViewModel: ObservableObject {
     init() {
         _zoomLevel = 5 // Default zoom level - changed from 3 to 5 (more zoomed out)
     }
+    
+    // Make sure TimelineStateViewModel's selectionTrackId is in sync with ProjectViewModel's selectedTrackId
+    public func syncWithProjectViewModel(projectViewModel: ProjectViewModel) {
+        // First check if we already have a selection
+        if self.selectionTrackId != nil {
+            // If we have a selection, ensure the ProjectViewModel knows about it
+            if projectViewModel.selectedTrackId != self.selectionTrackId {
+                print("🔄 TimelineState: Updating ProjectViewModel.selectedTrackId to match TimelineState.selectionTrackId")
+                // Use DispatchQueue.main.async to prevent "Publishing changes from within view updates" warnings
+                DispatchQueue.main.async {
+                    projectViewModel.selectedTrackId = self.selectionTrackId
+                }
+            }
+        } else if projectViewModel.selectedTrackId != nil {
+            // If we don't have a selection but the ProjectViewModel does, use that
+            print("🔄 TimelineState: Updating TimelineState.selectionTrackId to match ProjectViewModel.selectedTrackId")
+            // Use DispatchQueue.main.async to prevent "Publishing changes from within view updates" warnings
+            DispatchQueue.main.async {
+                self.selectionTrackId = projectViewModel.selectedTrackId
+            }
+        }
+    }
+    
+    // Start selection at a specific beat and track (now with debug logging)
+    func startSelection(at beat: Double, trackId: UUID?) {
+        // Print debug info
+        print("🎯 TimelineState: Starting selection at beat \(beat) for track \(trackId?.uuidString.prefix(8) ?? "nil")")
+        
+        // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.selectionStartBeat = beat
+            self.selectionEndBeat = beat
+            self.selectionTrackId = trackId
+            self.selectionActive = true
+            
+            print("✅ TimelineState: Selection started, active: \(self.selectionActive), trackId: \(self.selectionTrackId?.uuidString.prefix(8) ?? "nil")")
+        }
+    }
 } 

@@ -15,6 +15,7 @@ class SettingsViewModel: ObservableObject {
         case profileAccount = "Profile & Account"
         case lookFeel = "Look & Feel"
         case audio = "Audio"
+        case shortcuts = "Keyboard Shortcuts"
         case fileFolder = "File & Folder"
         case plugins = "Plugins"
         case recordWarp = "Record & Warp"
