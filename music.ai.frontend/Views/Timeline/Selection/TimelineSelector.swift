@@ -49,12 +49,6 @@ struct TimelineSelector: View {
                         // Ensure valid position
                         guard rawBeatPosition >= 0 else { return }
                         
-                        // Check if clicking on a clip
-                        if (track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
-                           (track.type == .audio && isPositionOnAudioClip(rawBeatPosition)) {
-                            return // Clip will handle interaction
-                        }
-                        
                         // Snap to nearest grid marker
                         let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
                         
@@ -81,7 +75,8 @@ struct TimelineSelector: View {
                                     }
                                 }
                                 
-                                // Start selection at this point
+                                // Start selection at this point - now we allow selection to start
+                                // even on clips
                                 state.startSelection(at: snappedBeatPosition, trackId: track.id)
                                 
                                 // Move playhead to selection start
@@ -96,6 +91,8 @@ struct TimelineSelector: View {
                             // Only update the selection if we've moved a meaningful amount
                             // This helps distinguish between clicks and actual drags
                             if dragDistance > 5 { // 5 pixels threshold
+                                // Update the selection to the current position
+                                // We always update to wherever the mouse is
                                 state.updateSelection(to: snappedBeatPosition)
                             }
                         }
@@ -174,17 +171,29 @@ struct TimelineSelector: View {
                 let xPosition = value.location.x
                 let rawBeatPosition = xPosition / CGFloat(state.effectivePixelsPerBeat)
                 
-                // Check if we're clicking on a clip
-                if !((track.type == .midi && isPositionOnMidiClip(rawBeatPosition)) ||
-                     (track.type == .audio && isPositionOnAudioClip(rawBeatPosition))) {
+                // Set up selection if there's no existing selection
+                let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
+                
+                if !state.hasSelection(trackId: track.id) {
+                    // If we don't have a selection, create one at the clicked position
+                    state.startSelection(at: snappedBeatPosition, trackId: track.id)
                     
-                    // Set up selection if there's no existing selection
-                    let snappedBeatPosition = snapToNearestGridMarker(rawBeatPosition)
-                    
-                    if !state.hasSelection(trackId: track.id) {
-                        // If we don't have a selection, create one at the clicked position
-                        state.startSelection(at: snappedBeatPosition, trackId: track.id)
-                        state.updateSelection(to: snappedBeatPosition + 4.0) // Default selection of 4 beats
+                    // Check if we're clicking within a clip
+                    if track.type == .midi, let clip = midiViewModel.getMidiClipAt(trackId: track.id, beatPosition: snappedBeatPosition) {
+                        // If right-clicking on a clip, default to selecting a 1-beat region
+                        // or the remaining part of the clip, whichever is smaller
+                        let remainingClipBeats = clip.endBeat - snappedBeatPosition
+                        let selectionSize = min(1.0, remainingClipBeats)
+                        state.updateSelection(to: snappedBeatPosition + selectionSize)
+                    } else if track.type == .audio, let clip = audioViewModel.getAudioClipAt(trackId: track.id, beatPosition: snappedBeatPosition) {
+                        // If right-clicking on a clip, default to selecting a 1-beat region
+                        // or the remaining part of the clip, whichever is smaller
+                        let remainingClipBeats = clip.endBeat - snappedBeatPosition
+                        let selectionSize = min(1.0, remainingClipBeats)
+                        state.updateSelection(to: snappedBeatPosition + selectionSize)
+                    } else {
+                        // Default selection of 4 beats if not on a clip
+                        state.updateSelection(to: snappedBeatPosition + 4.0)
                     }
                 }
                 

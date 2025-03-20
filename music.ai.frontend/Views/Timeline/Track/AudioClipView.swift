@@ -8,6 +8,7 @@ struct AudioClipView: View {
     @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var menuCoordinator: MenuCoordinator
     
     // Computed property to access the Audio view model
     private var audioViewModel: AudioViewModel {
@@ -560,7 +561,8 @@ struct AudioClipView: View {
                 }
                 
                 Button("Delete Clip") {
-                    audioViewModel.removeAudioClip(trackId: track.id, clipId: clip.id)
+                    // audioViewModel.removeAudioClip(trackId: track.id, clipId: clip.id)
+                    menuCoordinator.deleteSelectedClip()
                 }
                 
                 Divider()

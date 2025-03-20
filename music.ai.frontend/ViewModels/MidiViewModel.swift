@@ -300,23 +300,24 @@ class MidiViewModel: ObservableObject {
         
         // Check if the position is within any clip
         let isOnClip = track.midiClips.contains { clip in
-            let isWithinClip = beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
-            if isWithinClip {
-//                print("Position \(beatPosition) is on clip: \(clip.name) (clip range: \(clip.startBeat)-\(clip.endBeat))")
-                
-                // Try to select the clip directly
-                if let timelineState = findTimelineState() {
-                    projectViewModel.selectTrack(id: trackId)
-                    timelineState.startSelection(at: clip.startBeat, trackId: trackId)
-                    timelineState.updateSelection(to: clip.endBeat)
-                    projectViewModel.seekToBeat(clip.startBeat)
-                    print("Directly selected clip: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
-                }
-            }
-            return isWithinClip
+            beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
         }
         
         return isOnClip
+    }
+    
+    /// Get MIDI clip at a specific position if one exists
+    func getMidiClipAt(trackId: UUID, beatPosition: Double) -> MidiClip? {
+        guard let projectViewModel = projectViewModel,
+              let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
+              track.type == .midi else {
+            return nil
+        }
+        
+        // Find clip at position
+        return track.midiClips.first { clip in
+            beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
+        }
     }
     
     /// Set the timeline state reference

@@ -8,6 +8,7 @@ struct MidiClipView: View {
     @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var menuCoordinator: MenuCoordinator
     
     // Computed property to access the MIDI view model
     private var midiViewModel: MidiViewModel {
@@ -513,7 +514,8 @@ struct MidiClipView: View {
                 }
                 
                 Button("Delete Clip") {
-                    midiViewModel.removeMidiClip(trackId: track.id, clipId: clip.id)
+                    // midiViewModel.removeMidiClip(trackId: track.id, clipId: clip.id)
+                    menuCoordinator.deleteSelectedClip()
                 }
                 
                 Divider()

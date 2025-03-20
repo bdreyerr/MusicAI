@@ -379,6 +379,7 @@ struct TimelineView: View {
                 }
             }
         }
+        .environmentObject(menuCoordinator)
     }
     
     // MARK: - Zoom Controls
@@ -503,11 +504,22 @@ struct TimelineView: View {
                     menu.addItem(withTitle: "Edit Notes", action: #selector(MenuCoordinator.editClipNotes), keyEquivalent: "e")
                         .target = menuCoordinator
                 } else {
-                    // This is a regular selection - show option to create a new clip
-                    print("No MIDI clip found at selection")
+                    // Check if the selection overlaps with any clips
+                    let overlappingClips = track.midiClips.filter { clip in
+                        selStart < clip.endBeat && selEnd > clip.startBeat
+                    }
                     
-                    menu.addItem(withTitle: "Create MIDI Clip", action: #selector(MenuCoordinator.createMidiClip), keyEquivalent: "n")
-                        .target = menuCoordinator
+                    if !overlappingClips.isEmpty {
+                        // Selection overlaps with clips but doesn't match exactly - show option to trim
+                        menu.addItem(withTitle: "Trim Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
+                            .target = menuCoordinator
+                    } else {
+                        // This is a regular selection - show option to create a new clip
+                        print("No MIDI clip found at selection")
+                        
+                        menu.addItem(withTitle: "Create MIDI Clip", action: #selector(MenuCoordinator.createMidiClip), keyEquivalent: "n")
+                            .target = menuCoordinator
+                    }
                 }
                 
                 menu.addItem(NSMenuItem.separator())
@@ -533,11 +545,22 @@ struct TimelineView: View {
                     menu.addItem(withTitle: "Edit Audio", action: #selector(MenuCoordinator.editAudioClip), keyEquivalent: "e")
                         .target = menuCoordinator
                 } else {
-                    // This is a regular selection - show option to create a new clip
-                    print("No audio clip found at selection")
+                    // Check if the selection overlaps with any clips
+                    let overlappingClips = track.audioClips.filter { clip in
+                        selStart < clip.endBeat && selEnd > clip.startBeat
+                    }
                     
-                    menu.addItem(withTitle: "Create Audio Clip", action: #selector(MenuCoordinator.createAudioClip), keyEquivalent: "n")
-                        .target = menuCoordinator
+                    if !overlappingClips.isEmpty {
+                        // Selection overlaps with clips but doesn't match exactly - show option to trim
+                        menu.addItem(withTitle: "Trim Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
+                            .target = menuCoordinator
+                    } else {
+                        // This is a regular selection - show option to create a new clip
+                        print("No audio clip found at selection")
+                        
+                        menu.addItem(withTitle: "Create Audio Clip", action: #selector(MenuCoordinator.createAudioClip), keyEquivalent: "n")
+                            .target = menuCoordinator
+                    }
                 }
                 
                 menu.addItem(NSMenuItem.separator())

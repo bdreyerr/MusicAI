@@ -363,23 +363,24 @@ class AudioViewModel: ObservableObject {
         
         // Check if the position is within any clip
         let isOnClip = track.audioClips.contains { clip in
-            let isWithinClip = beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
-            if isWithinClip {
-//                print("Position \(beatPosition) is on clip: \(clip.name) (clip range: \(clip.startBeat)-\(clip.endBeat))")
-                
-                // Try to select the clip directly
-                if let timelineState = findTimelineState() {
-                    projectViewModel.selectTrack(id: trackId)
-                    timelineState.startSelection(at: clip.startBeat, trackId: trackId)
-                    timelineState.updateSelection(to: clip.endBeat)
-                    projectViewModel.seekToBeat(clip.startBeat)
-                    print("Directly selected clip: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
-                }
-            }
-            return isWithinClip
+            beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
         }
         
         return isOnClip
+    }
+    
+    /// Get audio clip at a specific position if one exists
+    func getAudioClipAt(trackId: UUID, beatPosition: Double) -> AudioClip? {
+        guard let projectViewModel = projectViewModel,
+              let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
+              track.type == .audio else {
+            return nil
+        }
+        
+        // Find clip at position
+        return track.audioClips.first { clip in
+            beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
+        }
     }
     
     /// Set the timeline state reference

@@ -83,6 +83,22 @@ struct TimelineButtons: View {
                 EmptyView()
             }
             .keyboardShortcut(.upArrow, modifiers: [])
+            
+            // Delete/trim selection (delete/backspace key)
+            Button(action: {
+                deleteSelection()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut(.delete, modifiers: [])
+            
+            // // Also support backspace key for deletion
+            // Button(action: {
+            //     deleteSelection()
+            // }) {
+            //     EmptyView()
+            // }
+            // .keyboardShortcut(.init("\u{8}"), modifiers: [])
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -244,6 +260,12 @@ struct TimelineButtons: View {
         timelineState.selectionTrackId = previousTrackId
         timelineState.selectionStartBeat = startBeat
         timelineState.selectionEndBeat = endBeat
+    }
+    
+    // Delete/trim selection
+    private func deleteSelection() {
+        // Use the MenuCoordinator's deleteSelectedClip method
+        menuCoordinator.deleteSelectedClip()
     }
 }
 
