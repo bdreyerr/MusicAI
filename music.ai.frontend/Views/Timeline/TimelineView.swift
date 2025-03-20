@@ -80,7 +80,7 @@ struct TimelineView: View {
         self.projectViewModel = projectViewModel
         // Initialize the timeline state with _StateObject wrapper
         // This prevents potential didSet triggers during view initialization
-        _timelineState = StateObject(wrappedValue: TimelineStateViewModel())
+        _timelineState = StateObject(wrappedValue: TimelineStateViewModel(projectViewModel: projectViewModel))
     }
     
     var body: some View {
@@ -338,9 +338,6 @@ struct TimelineView: View {
                         projectViewModel.timelineState = timelineState
                         // Connect the timeline state to the MIDI view model
                         projectViewModel.midiViewModel.setTimelineState(timelineState)
-                        
-                        // Sync track selection state between timelineState and projectViewModel
-                        timelineState.syncWithProjectViewModel(projectViewModel: projectViewModel)
                     }
                 }
                 // Respond to zoom level changes
@@ -459,10 +456,10 @@ struct TimelineView: View {
         let menu = NSMenu(title: "Add Track")
         
         // Use our coordinator for the selectors
-        menu.addItem(withTitle: "Audio Track", action: #selector(MenuCoordinator.addAudioTrack), keyEquivalent: "a")
+        menu.addItem(withTitle: "Audio Track", action: #selector(MenuCoordinator.addAudioTrack), keyEquivalent: "t")
             .target = menuCoordinator
         
-        menu.addItem(withTitle: "MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "m")
+        menu.addItem(withTitle: "MIDI Track", action: #selector(MenuCoordinator.addMidiTrack), keyEquivalent: "T")
             .target = menuCoordinator
         
         if let event = NSApplication.shared.currentEvent,
@@ -477,7 +474,7 @@ struct TimelineView: View {
         
         // Check if there's an active selection on a track
         if timelineState.selectionActive,
-           let trackId = timelineState.selectionTrackId,
+           let trackId = projectViewModel.selectedTrackId,
            let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
             
             // Get the track (non-optional since we have a valid index)

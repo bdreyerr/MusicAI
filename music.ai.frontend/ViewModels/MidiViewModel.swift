@@ -23,7 +23,7 @@ class MidiViewModel: ObservableObject {
         guard let projectViewModel = projectViewModel,
               let timelineState = findTimelineState(),
               timelineState.selectionActive,
-              let trackId = timelineState.selectionTrackId,
+              let trackId = projectViewModel.selectedTrackId,
               let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
             return false
         }
@@ -195,7 +195,7 @@ class MidiViewModel: ObservableObject {
         // Update the selection to match the new clip position
         if let timelineState = findTimelineState(),
            timelineState.selectionActive,
-           timelineState.selectionTrackId == trackId {
+           projectViewModel.selectedTrackId == trackId {
             timelineState.startSelection(at: newStartBeat, trackId: trackId)
             timelineState.updateSelection(to: newEndBeat)
             // print("📝 MIDI VM: Updated selection to match new clip position")
@@ -260,7 +260,7 @@ class MidiViewModel: ObservableObject {
         // Update the selection to match the new clip size
         if let timelineState = findTimelineState(),
            timelineState.selectionActive,
-           timelineState.selectionTrackId == trackId {
+           projectViewModel.selectedTrackId == trackId {
             timelineState.startSelection(at: startBeat, trackId: trackId)
             timelineState.updateSelection(to: newEndBeat)
         }
@@ -275,7 +275,7 @@ class MidiViewModel: ObservableObject {
     func isMidiClipSelected(trackId: UUID) -> Bool {
         guard let timelineState = findTimelineState(),
               timelineState.selectionActive,
-              timelineState.selectionTrackId == trackId,
+              projectViewModel?.selectedTrackId == trackId,
               let track = projectViewModel?.tracks.first(where: { $0.id == trackId }),
               track.type == .midi else {
             return false

@@ -20,9 +20,6 @@ struct TimelineButtons: View {
         
         // Connect the coordinator
         menuCoordinator.projectViewModel = projectViewModel
-        
-        // Sync the timelineState with projectViewModel to ensure track selection is consistent
-        timelineState.syncWithProjectViewModel(projectViewModel: projectViewModel)
     }
     
     var body: some View {
@@ -156,15 +153,8 @@ struct TimelineButtons: View {
         // print("🔍 TimelineButtons: TimelineState selectionTrackId: \(timelineState.selectionTrackId?.uuidString ?? "nil")")
         // print("🔍 TimelineButtons: ProjectViewModel selectedTrackId: \(projectViewModel.selectedTrackId?.uuidString ?? "nil")")
         
-        // First check if we have a selected track in the timeline state
-        if let trackId = timelineState.selectionTrackId,
-           let selectedIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
-            // If a track is selected in the timeline state, add the new track after it
-            // print("✅ TimelineButtons: Found selected track in TimelineState at index \(selectedIndex), adding new track after it")
-            projectViewModel.addTrack(name: name, type: type, height: height, afterIndex: selectedIndex)
-        }
         // If not, check if we have a selected track in the project view model
-        else if let trackId = projectViewModel.selectedTrackId,
+        if let trackId = projectViewModel.selectedTrackId,
                 let selectedIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
             // If a track is selected in the project view model, add the new track after it
             // print("✅ TimelineButtons: Found selected track in ProjectViewModel at index \(selectedIndex), adding new track after it")
@@ -202,10 +192,12 @@ struct TimelineButtons: View {
         }
         
         // If no track is currently selected, select the first track
-        guard let currentTrackId = timelineState.selectionTrackId,
+        guard let currentTrackId = projectViewModel.selectedTrackId,
               let currentIndex = projectViewModel.tracks.firstIndex(where: { $0.id == currentTrackId }) else {
             // No track selected, select the first track
-            timelineState.selectionTrackId = projectViewModel.tracks.first?.id
+            let firstTrackId = projectViewModel.tracks.first?.id
+            projectViewModel.selectTrack(id: firstTrackId)
+            
             if !timelineState.selectionActive {
                 // Create a default selection at beat 0
                 timelineState.selectionActive = true
@@ -223,7 +215,7 @@ struct TimelineButtons: View {
         let (startBeat, endBeat) = timelineState.normalizedSelectionRange
         
         timelineState.selectionActive = true
-        timelineState.selectionTrackId = nextTrackId
+        projectViewModel.selectTrack(id: nextTrackId)
         timelineState.selectionStartBeat = startBeat
         timelineState.selectionEndBeat = endBeat
     }
@@ -236,10 +228,10 @@ struct TimelineButtons: View {
         }
         
         // If no track is currently selected, select the last track
-        guard let currentTrackId = timelineState.selectionTrackId,
+        guard let currentTrackId = projectViewModel.selectedTrackId,
               let currentIndex = projectViewModel.tracks.firstIndex(where: { $0.id == currentTrackId }) else {
             // No track selected, select the last track
-            timelineState.selectionTrackId = projectViewModel.tracks.last?.id
+            projectViewModel.selectTrack(id: projectViewModel.tracks.last?.id)
             if !timelineState.selectionActive {
                 // Create a default selection at beat 0
                 timelineState.selectionActive = true
@@ -250,14 +242,14 @@ struct TimelineButtons: View {
         }
         
         // Calculate the previous track index (cycling if at the beginning)
-        let previousIndex = (currentIndex - 1 + projectViewModel.tracks.count) % projectViewModel.tracks.count
+        let previousIndex = currentIndex == 0 ? projectViewModel.tracks.count - 1 : currentIndex - 1
         let previousTrackId = projectViewModel.tracks[previousIndex].id
         
         // Update selection to the previous track, keeping the same beat range
         let (startBeat, endBeat) = timelineState.normalizedSelectionRange
         
         timelineState.selectionActive = true
-        timelineState.selectionTrackId = previousTrackId
+        projectViewModel.selectTrack(id: previousTrackId)
         timelineState.selectionStartBeat = startBeat
         timelineState.selectionEndBeat = endBeat
     }

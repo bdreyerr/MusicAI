@@ -38,7 +38,7 @@ class MenuCoordinator: NSObject, ObservableObject {
         guard let projectViewModel = projectViewModel,
               let timelineState = projectViewModel.timelineState,
               timelineState.selectionActive,
-              let trackId = timelineState.selectionTrackId,
+              let trackId = projectViewModel.selectedTrackId,
               let track = projectViewModel.tracks.first(where: { $0.id == trackId }) else {
             return
         }
@@ -106,7 +106,7 @@ class MenuCoordinator: NSObject, ObservableObject {
         guard let projectViewModel = projectViewModel,
               let timelineState = projectViewModel.timelineState,
               timelineState.selectionActive,
-              let trackId = timelineState.selectionTrackId,
+              let trackId = projectViewModel.selectedTrackId,
               let track = projectViewModel.tracks.first(where: { $0.id == trackId }) else {
             return
         }

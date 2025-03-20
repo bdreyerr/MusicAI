@@ -260,7 +260,7 @@ struct AudioWaveformView: View {
     private var selectedClip: AudioClip? {
         guard let timelineState = projectViewModel.timelineState,
               timelineState.selectionActive,
-              timelineState.selectionTrackId == track.id else {
+              projectViewModel.selectedTrackId == track.id else {
             return nil
         }
         
@@ -344,7 +344,7 @@ struct MIDIPianoRollView: View {
     private var selectedClip: MidiClip? {
         guard let timelineState = projectViewModel.timelineState,
               timelineState.selectionActive,
-              timelineState.selectionTrackId == track.id else {
+              projectViewModel.selectedTrackId == track.id else {
             return nil
         }
         

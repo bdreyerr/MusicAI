@@ -35,7 +35,7 @@ struct TimelineSelectionOverlay: View {
     private var shouldShowSelection: Bool {
         if let track = track {
             // If track is provided, only show selection if it's for this track
-            return state.selectionActive && state.selectionTrackId == track.id
+            return state.selectionActive && projectViewModel.selectedTrackId == track.id
         } else {
             // If no track is provided (e.g., for ruler), show selection if any is active
             return state.selectionActive
@@ -68,21 +68,3 @@ struct TimelineSelectionOverlay: View {
         }
     }
 }
-
-#Preview {
-    TimelineSelectionOverlay(
-        state: {
-            let state = TimelineStateViewModel()
-            state.selectionActive = true
-            state.selectionStartBeat = 4.0
-            state.selectionEndBeat = 8.0
-            state.selectionTrackId = UUID()
-            return state
-        }(),
-        projectViewModel: ProjectViewModel(),
-        track: Track.samples[0]
-    )
-    .environmentObject(ThemeManager())
-    .frame(width: 500, height: 100)
-    .background(Color.gray.opacity(0.2))
-} 

@@ -37,7 +37,7 @@ struct MidiClipView: View {
     // Computed property to check if this clip is selected
     private var isSelected: Bool {
         guard state.selectionActive,
-                state.selectionTrackId == track.id else {
+                projectViewModel.selectedTrackId == track.id else {
             return false
         }
         

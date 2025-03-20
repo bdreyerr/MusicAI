@@ -4,6 +4,9 @@ import Combine
 /// TimelineState manages the visual representation and zoom behavior of the timeline.
 /// This is separate from ProjectViewModel which manages the actual music project data.
 class TimelineStateViewModel: ObservableObject {
+    // Reference to ProjectViewModel to access selectedTrackId
+    private weak var projectViewModel: ProjectViewModel?
+    
     @Published private var _zoomLevel: Int
     var zoomLevel: Int {
         get { return _zoomLevel }
@@ -96,7 +99,6 @@ class TimelineStateViewModel: ObservableObject {
     @Published var selectionActive: Bool = false
     @Published var selectionStartBeat: Double = 0.0
     @Published var selectionEndBeat: Double = 0.0
-    @Published var selectionTrackId: UUID? = nil
     
     // Fixed 81 bars minimum for the timeline
     private let minimumBarsToShow: Int = 81
@@ -312,14 +314,17 @@ class TimelineStateViewModel: ObservableObject {
     }
     
     // Start a new selection
-    func startSelection(at beat: Double, trackId: UUID) {
+    func startSelection(at beat: Double, trackId: UUID, projectViewModel: ProjectViewModel) {
         // Use DispatchQueue.main.async to prevent "modifying state during view update" errors
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.selectionStartBeat = beat
             self.selectionEndBeat = beat
-            self.selectionTrackId = trackId
             self.selectionActive = true
+            
+            // Update the ProjectViewModel's selected track ID
+            projectViewModel.selectTrack(id: trackId)
+            
             // print("🔍 SELECTION: Started selection at beat \(beat) on track \(trackId)")
         }
     }
@@ -345,7 +350,6 @@ class TimelineStateViewModel: ObservableObject {
             self.selectionActive = false
             self.selectionStartBeat = 0.0
             self.selectionEndBeat = 0.0
-            self.selectionTrackId = nil
         }
     }
     
@@ -359,10 +363,10 @@ class TimelineStateViewModel: ObservableObject {
     }
     
     // Check if a track has an active selection
-    func hasSelection(trackId: UUID) -> Bool {
-        let result = selectionActive && selectionTrackId == trackId
+    func hasSelection(trackId: UUID, projectViewModel: ProjectViewModel) -> Bool {
+        let result = selectionActive && projectViewModel.selectedTrackId == trackId
         // if selectionActive {
-        //     print("🔍 SELECTION: Track \(trackId) has selection: \(result), active track: \(String(describing: selectionTrackId))")
+        //     print("🔍 SELECTION: Track \(trackId) has selection: \(result), active track: \(String(describing: projectViewModel.selectedTrackId))")
         // }
         return result
     }
@@ -372,7 +376,7 @@ class TimelineStateViewModel: ObservableObject {
     // Return the appropriate grid division based on zoom level
     enum GridDivision: CaseIterable, CustomStringConvertible {
         case sixteenth   // Show sixteenth note grid lines
-        case eighth      // Show eighth note grid lines (zoom level 0)
+        case eighth      // Show eighth note grid lines
         case quarter     // Show quarter note grid lines (zoom level 1-2)
         case half        // Show half note grid lines (zoom level 3-4)
         case bar         // Show bar lines (zoom level 5-6)
@@ -633,30 +637,19 @@ class TimelineStateViewModel: ObservableObject {
         _zoomLevel = 5 // Default zoom level - changed from 3 to 5 (more zoomed out)
     }
     
-    // Make sure TimelineStateViewModel's selectionTrackId is in sync with ProjectViewModel's selectedTrackId
-    public func syncWithProjectViewModel(projectViewModel: ProjectViewModel) {
-        // First check if we already have a selection
-        if self.selectionTrackId != nil {
-            // If we have a selection, ensure the ProjectViewModel knows about it
-            if projectViewModel.selectedTrackId != self.selectionTrackId {
-                print("🔄 TimelineState: Updating ProjectViewModel.selectedTrackId to match TimelineState.selectionTrackId")
-                // Use DispatchQueue.main.async to prevent "Publishing changes from within view updates" warnings
-                DispatchQueue.main.async {
-                    projectViewModel.selectedTrackId = self.selectionTrackId
-                }
-            }
-        } else if projectViewModel.selectedTrackId != nil {
-            // If we don't have a selection but the ProjectViewModel does, use that
-            print("🔄 TimelineState: Updating TimelineState.selectionTrackId to match ProjectViewModel.selectedTrackId")
-            // Use DispatchQueue.main.async to prevent "Publishing changes from within view updates" warnings
-            DispatchQueue.main.async {
-                self.selectionTrackId = projectViewModel.selectedTrackId
-            }
-        }
+    // Initialize with ProjectViewModel reference
+    init(projectViewModel: ProjectViewModel) {
+        self.projectViewModel = projectViewModel
+        _zoomLevel = 5 // Default zoom level
+    }
+    
+    // Set the ProjectViewModel (can be called after initialization)
+    func setProjectViewModel(_ projectViewModel: ProjectViewModel) {
+        self.projectViewModel = projectViewModel
     }
     
     // Start selection at a specific beat and track (now with debug logging)
-    func startSelection(at beat: Double, trackId: UUID?) {
+    func startSelection(at beat: Double, trackId: UUID?, projectViewModel: ProjectViewModel) {
         // Print debug info
         print("🎯 TimelineState: Starting selection at beat \(beat) for track \(trackId?.uuidString.prefix(8) ?? "nil")")
         
@@ -665,10 +658,46 @@ class TimelineStateViewModel: ObservableObject {
             guard let self = self else { return }
             self.selectionStartBeat = beat
             self.selectionEndBeat = beat
-            self.selectionTrackId = trackId
             self.selectionActive = true
             
-            print("✅ TimelineState: Selection started, active: \(self.selectionActive), trackId: \(self.selectionTrackId?.uuidString.prefix(8) ?? "nil")")
+            // Update the ProjectViewModel's selected track ID
+            if let trackId = trackId {
+                projectViewModel.selectTrack(id: trackId)
+            }
+            
+            print("✅ TimelineState: Selection started, active: \(self.selectionActive), trackId: \(projectViewModel.selectedTrackId?.uuidString.prefix(8) ?? "nil")")
         }
+    }
+    
+    // Simplified versions that use the stored projectViewModel reference
+    
+    // Start a new selection (simplified version)
+    func startSelection(at beat: Double, trackId: UUID) {
+        guard let projectViewModel = projectViewModel else {
+            print("❌ Error: ProjectViewModel reference not set in TimelineStateViewModel")
+            return
+        }
+        
+        startSelection(at: beat, trackId: trackId, projectViewModel: projectViewModel)
+    }
+    
+    // Start selection (simplified version with optional trackId)
+    func startSelection(at beat: Double, trackId: UUID?) {
+        guard let projectViewModel = projectViewModel else {
+            print("❌ Error: ProjectViewModel reference not set in TimelineStateViewModel")
+            return
+        }
+        
+        startSelection(at: beat, trackId: trackId, projectViewModel: projectViewModel)
+    }
+    
+    // Check if a track has an active selection (simplified version)
+    func hasSelection(trackId: UUID) -> Bool {
+        guard let projectViewModel = projectViewModel else {
+            print("❌ Error: ProjectViewModel reference not set in TimelineStateViewModel")
+            return false
+        }
+        
+        return hasSelection(trackId: trackId, projectViewModel: projectViewModel)
     }
 } 
