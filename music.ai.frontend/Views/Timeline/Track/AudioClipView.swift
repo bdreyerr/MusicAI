@@ -9,6 +9,7 @@ struct AudioClipView: View {
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var menuCoordinator: MenuCoordinator
+    @ObservedObject var trackViewModel: TrackViewModel
     
     // Computed property to access the Audio view model
     private var audioViewModel: AudioViewModel {
@@ -53,11 +54,12 @@ struct AudioClipView: View {
     }
     
     // Initialize with additional setup for waveform data
-    init(clip: AudioClip, track: Track, state: TimelineStateViewModel, projectViewModel: ProjectViewModel) {
+    init(clip: AudioClip, track: Track, state: TimelineStateViewModel, projectViewModel: ProjectViewModel, trackViewModel: TrackViewModel) {
         self.clip = clip
         self.track = track
         self.state = state
         self.projectViewModel = projectViewModel
+        self.trackViewModel = trackViewModel
         
         // Calculate contrasting color for waveform bars
         let baseColor = clip.color ?? track.effectiveColor
@@ -95,29 +97,29 @@ struct AudioClipView: View {
         // Calculate position and size based on timeline state
         let startX = CGFloat(clip.startBeat * state.effectivePixelsPerBeat)
         let width = CGFloat(clip.duration * state.effectivePixelsPerBeat)
+        let clipHeight = trackViewModel.isCollapsed ? 26 : track.height - 4 // Use fixed 26px for collapsed state
         
-        // Use a ZStack to position the clip correctly
         ZStack(alignment: .topLeading) {
             // Empty view to take up the entire track width
             Color.clear
-                .frame(width: width, height: track.height - 4)
+                .frame(width: width, height: clipHeight)
                 .allowsHitTesting(false) // Don't block clicks
             
             // Clip background with content
             ZStack(alignment: .topLeading) {
                 // Background
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
                     .fill(clip.color ?? track.effectiveColor)
                     .opacity(isSelected ? 0.9 : (isHovering ? 0.8 : 0.6))
                 
                 // Selection border
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
                     .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
                     .opacity(isSelected ? 0.8 : 0)
                 
                 // Dragging indicator
                 if isDragging {
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
                         .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
                         .foregroundColor(.white)
                         .opacity(0.9)
@@ -125,7 +127,7 @@ struct AudioClipView: View {
                 
                 // Resizing indicator
                 if isResizing {
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
                         .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
                         .foregroundColor(.yellow)
                         .opacity(0.9)
@@ -135,19 +137,18 @@ struct AudioClipView: View {
                 Text(clip.name)
                     .font(.caption)
                     .foregroundColor(.white)
-                    .padding(6)
+                    .padding(trackViewModel.isCollapsed ? 2 : 6)
                     .lineLimit(1)
                 
-                // Waveform visualization using pre-generated data
-                if clip.waveformData.isEmpty {
-                    // Draw striped waveform pattern (vertical bars)
+                // Only show waveform when not collapsed
+                if !trackViewModel.isCollapsed && clip.waveformData.isEmpty {
                     StripedWaveformView(
                         waveformData: placeholderWaveformData,
                         color: waveformColor,
                         width: width,
-                        height: track.height - 30
+                        height: clipHeight - 30
                     )
-                    .padding(.top, 24) // Same padding as before for consistency
+                    .padding(.top, 24)
                 }
                 
                 // Add three distinct interaction regions: left resize, center drag, right resize
@@ -157,10 +158,10 @@ struct AudioClipView: View {
                         // Visual handle
                         Rectangle()
                             .fill(Color.white.opacity(isHoveringLeftResizeArea ? 0.5 : (showResizeHandles ? 0.2 : 0)))
-                            .frame(width: 10, height: track.height - 8)
+                            .frame(width: trackViewModel.isCollapsed ? 6 : 10, height: clipHeight - 8)
                             .cornerRadius(2)
                     }
-                    .frame(width: 10, height: track.height - 4)
+                    .frame(width: trackViewModel.isCollapsed ? 6 : 10, height: clipHeight)
                     .contentShape(Rectangle())
                     .onHover { hovering in
                         isHoveringLeftResizeArea = hovering
@@ -289,7 +290,7 @@ struct AudioClipView: View {
                     // Main clip drag area in the center (takes all remaining space)
                     Rectangle()
                         .fill(Color.clear)
-                        .frame(width: max(0, width - 20), height: track.height - 4)
+                        .frame(width: max(0, width - (trackViewModel.isCollapsed ? 12 : 20)), height: clipHeight)
                         .contentShape(Rectangle())
                         .onHover { hovering in
                             isHovering = hovering
@@ -422,10 +423,10 @@ struct AudioClipView: View {
                         // Visual handle
                         Rectangle()
                             .fill(Color.white.opacity(isHoveringRightResizeArea ? 0.5 : (showResizeHandles ? 0.2 : 0)))
-                            .frame(width: 10, height: track.height - 8)
+                            .frame(width: trackViewModel.isCollapsed ? 6 : 10, height: clipHeight - 8)
                             .cornerRadius(2)
                     }
-                    .frame(width: 10, height: track.height - 4)
+                    .frame(width: trackViewModel.isCollapsed ? 6 : 10, height: clipHeight)
                     .contentShape(Rectangle())
                     .onHover { hovering in
                         isHoveringRightResizeArea = hovering
@@ -532,7 +533,7 @@ struct AudioClipView: View {
                     )
                 }
             }
-            .frame(width: width, height: track.height - 4)
+            .frame(width: width, height: clipHeight)
             .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
             // Add right-click gesture as a simultaneous gesture to the overall clip
             .simultaneousGesture(
@@ -580,7 +581,8 @@ struct AudioClipView: View {
                 }
             }
         }
-        .position(x: startX + width/2, y: (track.height - 4)/2)
+        .frame(width: width, height: clipHeight)
+        .position(x: startX + width/2, y: clipHeight/2)
         .zIndex(40) // Ensure clips are above other elements for better interaction
         .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.7, blendDuration: 0.1), value: clip.startBeat) // Animate when the actual clip position changes
         .alert("Rename Clip", isPresented: $showRenameDialog) {
@@ -728,42 +730,47 @@ struct StripedWaveformView: View {
     let height: CGFloat
     
     var body: some View {
-        Canvas { context, size in
-            // Calculate spacing between bars
-            let barCount = waveformData.count
-            let barWidth: CGFloat = 2 // Fixed bar width
-            let spacing = (width - CGFloat(barCount) * barWidth) / CGFloat(barCount + 1)
-            let effectiveSpacing = max(1, spacing) // Ensure minimum spacing
-            
-            // Starting X position for the first bar
-            var xPos: CGFloat = effectiveSpacing
-            
-            // Midpoint for drawing bars from center
-            let midY = height / 2
-            
-            // Draw each bar in the waveform
-            for amplitude in waveformData {
-                // Each bar extends from center up and down based on amplitude
-                let barHeight = height * amplitude
-                let yOffset = (height - barHeight) / 2
+        // Don't render anything if height is too small (when collapsed)
+        if height < 10 {
+            Color.clear.frame(width: 0, height: 0)
+        } else {
+            Canvas { context, size in
+                // Calculate spacing between bars
+                let barCount = waveformData.count
+                let barWidth: CGFloat = 2 // Fixed bar width
+                let spacing = (width - CGFloat(barCount) * barWidth) / CGFloat(barCount + 1)
+                let effectiveSpacing = max(1, spacing) // Ensure minimum spacing
                 
-                // Create path for this bar
-                let barRect = CGRect(
-                    x: xPos,
-                    y: yOffset,
-                    width: barWidth,
-                    height: barHeight
-                )
-                let path = Path(roundedRect: barRect, cornerSize: CGSize(width: 1, height: 1))
+                // Starting X position for the first bar
+                var xPos: CGFloat = effectiveSpacing
                 
-                // Draw the bar
-                context.fill(path, with: .color(color))
+                // Midpoint for drawing bars from center
+                let midY = height / 2
                 
-                // Move to the next position
-                xPos += barWidth + effectiveSpacing
+                // Draw each bar in the waveform
+                for amplitude in waveformData {
+                    // Each bar extends from center up and down based on amplitude
+                    let barHeight = height * amplitude
+                    let yOffset = (height - barHeight) / 2
+                    
+                    // Create path for this bar
+                    let barRect = CGRect(
+                        x: xPos,
+                        y: yOffset,
+                        width: barWidth,
+                        height: barHeight
+                    )
+                    let path = Path(roundedRect: barRect, cornerSize: CGSize(width: 1, height: 1))
+                    
+                    // Draw the bar
+                    context.fill(path, with: .color(color))
+                    
+                    // Move to the next position
+                    xPos += barWidth + effectiveSpacing
+                }
             }
+            .frame(width: width, height: height)
         }
-        .frame(width: width, height: height)
     }
 }
 
@@ -788,12 +795,18 @@ extension Color {
 }
 
 #Preview {
-    AudioClipView(
+    let projectVM = ProjectViewModel()
+    let track = Track.samples.first(where: { $0.type == .audio })!
+    let trackVM = projectVM.trackViewModelManager.viewModel(for: track)
+    
+    return AudioClipView(
         clip: AudioClip(name: "Test Audio", startBeat: 4, duration: 4),
-        track: Track.samples.first(where: { $0.type == .audio })!,
+        track: track,
         state: TimelineStateViewModel(),
-        projectViewModel: ProjectViewModel()
+        projectViewModel: projectVM,
+        trackViewModel: trackVM
     )
     .environmentObject(ThemeManager())
+    .environmentObject(MenuCoordinator())
     .frame(width: 400, height: 70)
 }

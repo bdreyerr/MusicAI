@@ -21,6 +21,7 @@ class TrackViewModel: ObservableObject, Identifiable {
     @Published var trackName: String
     @Published var volume: Double
     @Published var pan: Double
+    @Published var isCollapsed: Bool
     
     // UI state for popups
     @Published var showingColorPicker: Bool = false
@@ -43,6 +44,7 @@ class TrackViewModel: ObservableObject, Identifiable {
         self.trackName = track.name
         self.volume = track.volume
         self.pan = track.pan
+        self.isCollapsed = track.isCollapsed
         
         // Listen for changes to the tracks array to update our local state
         setupTracksObserver()
@@ -68,6 +70,7 @@ class TrackViewModel: ObservableObject, Identifiable {
                 self.trackName = updatedTrack.name
                 self.volume = updatedTrack.volume
                 self.pan = updatedTrack.pan
+                self.isCollapsed = updatedTrack.isCollapsed
             }
             .store(in: &cancellables)
     }
@@ -107,6 +110,13 @@ class TrackViewModel: ObservableObject, Identifiable {
     func toggleArmed() {
         isArmed.toggle()
         updateTrackControlsOnly()
+    }
+    
+    func toggleCollapsed() {
+        isCollapsed.toggle()
+        if let index = getTrackIndex() {
+            projectViewModel?.updateTrackCollapsedStateOnly(at: index, isCollapsed: isCollapsed)
+        }
     }
     
     func updateTrackName() {

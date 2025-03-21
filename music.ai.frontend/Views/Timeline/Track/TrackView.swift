@@ -58,9 +58,11 @@ struct TrackView: View {
                             clip: clip,
                             track: track,
                             state: state,
-                            projectViewModel: projectViewModel
+                            projectViewModel: projectViewModel,
+                            trackViewModel: trackViewModel
                         )
                         .environmentObject(themeManager)
+                        .environmentObject(menuCoordinator)
                     }
                 } else if track.type == .audio {
                     // Audio clips
@@ -69,9 +71,11 @@ struct TrackView: View {
                             clip: clip,
                             track: track,
                             state: state,
-                            projectViewModel: projectViewModel
+                            projectViewModel: projectViewModel,
+                            trackViewModel: trackViewModel
                         )
                         .environmentObject(themeManager)
+                        .environmentObject(menuCoordinator)
                     }
                 }
             }
@@ -99,11 +103,11 @@ struct TrackView: View {
             if isTargeted {
                 Rectangle()
                     .fill(Color.blue.opacity(0.3))
-                    .frame(width: 4, height: track.height)
+                    .frame(width: 4, height: trackViewModel.isCollapsed ? 30 : track.height)
                     .offset(x: dropLocation.x)
             }
         }
-        .frame(width: width, height: track.height)
+        .frame(width: width, height: trackViewModel.isCollapsed ? 30 : track.height)
         .background(Color.clear) // Make background transparent to let grid show through
         .contextMenu { trackContextMenu }
         .popover(isPresented: $trackViewModel.showingColorPicker) {

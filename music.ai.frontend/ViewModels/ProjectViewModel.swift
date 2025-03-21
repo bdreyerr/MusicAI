@@ -456,7 +456,7 @@ class ProjectViewModel: ObservableObject {
     
     // Update track controls without recalculating timeline content width
     func updateTrackControlsOnly(at index: Int, isMuted: Bool? = nil, isSolo: Bool? = nil, 
-                               isArmed: Bool? = nil, isEnabled: Bool? = nil) {
+                              isArmed: Bool? = nil, isEnabled: Bool? = nil) {
         guard index >= 0 && index < tracks.count else {
             print("❌ PROJECT VM: Failed to update track controls - index \(index) out of bounds")
             return
@@ -481,6 +481,21 @@ class ProjectViewModel: ObservableObject {
         
         // Still notify observers but skip the timeline content width update
         // since control changes don't affect the layout of the timeline
+        objectWillChange.send()
+    }
+    
+    // Update just the track collapsed state without recalculating timeline content width
+    func updateTrackCollapsedStateOnly(at index: Int, isCollapsed: Bool) {
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to update track collapsed state - index \(index) out of bounds")
+            return
+        }
+        
+        // Update just the collapsed state directly
+        tracks[index].isCollapsed = isCollapsed
+        
+        // Still notify observers but skip the timeline content width update
+        // since collapsed state changes don't affect the horizontal layout of the timeline
         objectWillChange.send()
     }
     

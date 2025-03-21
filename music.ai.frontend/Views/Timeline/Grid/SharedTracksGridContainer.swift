@@ -48,6 +48,7 @@ struct SharedTracksGridContainer: View {
                         state.clearSelection()
                     }
             }
+            .id("tracks-vstack-\(projectViewModel.tracks.map { $0.id.uuidString + (projectViewModel.trackViewModelManager.viewModel(for: $0).isCollapsed ? "-c" : "-e") }.joined())")
             .padding(.top, 0) // Ensure no top padding
             
             // Add "Add More Bars" button at the end of the timeline
@@ -126,9 +127,12 @@ struct SharedTracksGridContainer: View {
         
         var totalHeight: CGFloat = 0
         
-        // Sum up the height of all tracks
+        // Sum up the height of all tracks, taking into account collapsed state
         for track in projectViewModel.tracks {
-            totalHeight += track.height
+            // Get the track view model to check collapsed state
+            let trackVM = projectViewModel.trackViewModelManager.viewModel(for: track)
+            // Use collapsed height (30) or actual track height
+            totalHeight += trackVM.isCollapsed ? 30 : track.height
         }
         
         // Add padding for the add track button area

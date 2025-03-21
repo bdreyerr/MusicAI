@@ -91,157 +91,175 @@ struct TrackControlsView: View {
                             .help("Double-click to rename")
                     }
                     Spacer()
+                    
+                    // Collapse/expand indicator
+                    Image(systemName: trackViewModel.isCollapsed ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 10))
+                        .foregroundColor(themeManager.primaryTextColor.opacity(0.7))
+                        .padding(.trailing, 8)
+                        .onTapGesture {
+                            trackViewModel.toggleCollapsed()
+                        }
+                        .help(trackViewModel.isCollapsed ? "Expand track" : "Collapse track")
                 }
                 .padding(.leading, 8)
                 .padding(.top, 4)
                 
-                HStack {
-                    // Track controls
-                    HStack(spacing: 8) {
-                        // Enable/Disable toggle
-                        Button(action: {
-                            trackViewModel.toggleEnabled()
-                        }) {
-                            Image(systemName: trackViewModel.isEnabled ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(trackViewModel.isEnabled ? .green : themeManager.primaryTextColor)
-                                .font(.system(size: 12))
+                // Only show additional controls when track is not collapsed
+                if !trackViewModel.isCollapsed {
+                    HStack {
+                        // Track controls
+                        HStack(spacing: 8) {
+                            // Enable/Disable toggle
+                            Button(action: {
+                                trackViewModel.toggleEnabled()
+                            }) {
+                                Image(systemName: trackViewModel.isEnabled ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(trackViewModel.isEnabled ? .green : themeManager.primaryTextColor)
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help(trackViewModel.isEnabled ? "Disable Track" : "Enable Track")
+                            
+                            // Mute button
+                            Button(action: {
+                                trackViewModel.toggleMute()
+                            }) {
+                                Image(systemName: trackViewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2")
+                                    .foregroundColor(trackViewModel.isMuted ? .red : themeManager.primaryTextColor)
+                                    .font(.system(size: 12))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Mute Track")
+                            
+                            // Solo button
+                            Button(action: {
+                                trackViewModel.toggleSolo()
+                            }) {
+                                Image(systemName: trackViewModel.isSolo ? "s.square.fill" : "s.square")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(trackViewModel.isSolo ? .yellow : themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Solo Track")
+                            
+                            // Record arm button
+                            Button(action: {
+                                trackViewModel.toggleArmed()
+                            }) {
+                                Image(systemName: "record.circle")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(trackViewModel.isArmed ? .red : themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Arm Track for Recording")
+                            
+                            // Delete track button
+                            Button(action: {
+                                trackViewModel.showingDeleteConfirmation = true
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .help("Delete Track")
+                            .alert(isPresented: $trackViewModel.showingDeleteConfirmation) {
+                                Alert(
+                                    title: Text("Delete Track"),
+                                    message: Text("Are you sure you want to delete '\(trackViewModel.trackName)'? This cannot be undone."),
+                                    primaryButton: .destructive(Text("Delete")) {
+                                        deleteTrack()
+                                    },
+                                    secondaryButton: .cancel()
+                                )
+                            }
                         }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help(trackViewModel.isEnabled ? "Disable Track" : "Enable Track")
-                        
-                        // Mute button
-                        Button(action: {
-                            trackViewModel.toggleMute()
-                        }) {
-                            Image(systemName: trackViewModel.isMuted ? "speaker.slash.fill" : "speaker.wave.2")
-                                .foregroundColor(trackViewModel.isMuted ? .red : themeManager.primaryTextColor)
-                                .font(.system(size: 12))
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Mute Track")
-                        
-                        // Solo button
-                        Button(action: {
-                            trackViewModel.toggleSolo()
-                        }) {
-                            Image(systemName: trackViewModel.isSolo ? "s.square.fill" : "s.square")
-                                .font(.system(size: 12))
-                                .foregroundColor(trackViewModel.isSolo ? .yellow : themeManager.primaryTextColor)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Solo Track")
-                        
-                        // Record arm button
-                        Button(action: {
-                            trackViewModel.toggleArmed()
-                        }) {
-                            Image(systemName: "record.circle")
-                                .font(.system(size: 12))
-                                .foregroundColor(trackViewModel.isArmed ? .red : themeManager.primaryTextColor)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Arm Track for Recording")
-                        
-                        // Delete track button
-                        Button(action: {
-                            trackViewModel.showingDeleteConfirmation = true
-                        }) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 12))
-                                .foregroundColor(themeManager.primaryTextColor)
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        .help("Delete Track")
-                        .alert(isPresented: $trackViewModel.showingDeleteConfirmation) {
-                            Alert(
-                                title: Text("Delete Track"),
-                                message: Text("Are you sure you want to delete '\(trackViewModel.trackName)'? This cannot be undone."),
-                                primaryButton: .destructive(Text("Delete")) {
-                                    deleteTrack()
-                                },
-                                secondaryButton: .cancel()
-                            )
-                        }
+                        .padding(.trailing, 8)
+                        Spacer()
                     }
-                    .padding(.trailing, 8)
-                    Spacer()
+                    .padding(.leading, 8)
+                    .padding(.bottom, 1)
                 }
-                .padding(.leading, 8)
-                .padding(.bottom, 1)
             }
             .frame(maxWidth: .infinity)
             
-//            Spacer()
-            
-            // Volume slider section
-            HStack(spacing: 8) {
-                Image(systemName: "speaker.wave.1")
-                    .foregroundColor(themeManager.primaryTextColor)
-                    .font(.caption)
-                
-                Slider(value: $trackViewModel.volume, in: 0...1) { editing in
-                    if !editing {
-                        updateTrackVolume()
-                    }
-                }
-                .frame(height: 16)
-                
-                Text("\(Int(trackViewModel.volume * 100))%")
-                    .font(.caption)
-                    .foregroundColor(themeManager.primaryTextColor)
-                    .frame(width: 32, alignment: .trailing)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            
-            // Pan control section
-            HStack(spacing: 8) {
-                Text("L")
-                    .font(.caption)
-                    .foregroundColor(themeManager.primaryTextColor)
-                
-                // Pan slider with center indicator
-                ZStack(alignment: .center) {
-                    // Pan slider - only update on completion to reduce timeline redraws
-                    Slider(value: $trackViewModel.pan, in: 0...1) { editing in
-                        // Only update the model when editing is complete
+            // Only show volume and pan controls when track is not collapsed
+            if !trackViewModel.isCollapsed {
+                // Volume slider section
+                HStack(spacing: 8) {
+                    Image(systemName: "speaker.wave.1")
+                        .foregroundColor(themeManager.primaryTextColor)
+                        .font(.caption)
+                    
+                    Slider(value: $trackViewModel.volume, in: 0...1) { editing in
                         if !editing {
-                            updateTrackPan()
+                            updateTrackVolume()
                         }
                     }
-                    .accentColor(track.effectiveColor)
                     .frame(height: 16)
                     
-                    // Center line indicator
-                    Rectangle()
-                        .fill(themeManager.primaryTextColor.opacity(0.5))
-                        .frame(width: 1, height: 12)
+                    Text("\(Int(trackViewModel.volume * 100))%")
+                        .font(.caption)
+                        .foregroundColor(themeManager.primaryTextColor)
+                        .frame(width: 32, alignment: .trailing)
                 }
-                // Double-click to reset to center
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) {
-                    // Reset to center (0.5)
-                    trackViewModel.pan = 0.5
-                    updateTrackPan()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                
+                // Pan control section
+                HStack(spacing: 8) {
+                    Text("L")
+                        .font(.caption)
+                        .foregroundColor(themeManager.primaryTextColor)
+                    
+                    // Pan slider with center indicator
+                    ZStack(alignment: .center) {
+                        // Pan slider - only update on completion to reduce timeline redraws
+                        Slider(value: $trackViewModel.pan, in: 0...1) { editing in
+                            // Only update the model when editing is complete
+                            if !editing {
+                                updateTrackPan()
+                            }
+                        }
+                        .accentColor(track.effectiveColor)
+                        .frame(height: 16)
+                        
+                        // Center line indicator
+                        Rectangle()
+                            .fill(themeManager.primaryTextColor.opacity(0.5))
+                            .frame(width: 1, height: 12)
+                    }
+                    // Double-click to reset to center
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        // Reset to center (0.5)
+                        trackViewModel.pan = 0.5
+                        updateTrackPan()
+                    }
+                    
+                    Text("R")
+                        .font(.caption)
+                        .foregroundColor(themeManager.primaryTextColor)
+                    
+                    // Pan position indicator text
+                    Text(trackViewModel.panPositionText)
+                        .font(.caption)
+                        .foregroundColor(themeManager.primaryTextColor)
+                        .frame(width: 32, alignment: .trailing)
                 }
-                
-                Text("R")
-                    .font(.caption)
-                    .foregroundColor(themeManager.primaryTextColor)
-                
-                // Pan position indicator text
-                Text(trackViewModel.panPositionText)
-                    .font(.caption)
-                    .foregroundColor(themeManager.primaryTextColor)
-                    .frame(width: 32, alignment: .trailing)
+                .padding(.horizontal, 8)
+                .padding(.top, 2)
+                .padding(.bottom, 3)
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 2)
-            .padding(.bottom, 3)
         }
-        .frame(height: track.height)
-        .frame(minHeight: 40)
+        .frame(height: trackViewModel.isCollapsed ? 30 : track.height)
+        .frame(minHeight: trackViewModel.isCollapsed ? 30 : 40)
         .background(track.effectiveBackgroundColor(for: themeManager.currentTheme))
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            trackViewModel.toggleCollapsed()
+        }
         .contextMenu {
             trackControlsContextMenu
         }
@@ -280,56 +298,59 @@ struct TrackControlsView: View {
             currentHeight = track.height
         }
         .overlay(
-            // Resize handle at the bottom
-            Rectangle()
-                .fill(Color.clear)
-                .frame(height: 8)
-                .frame(maxWidth: .infinity)
-                .background(
-                    isHoveringResizeHandle ?
-                    track.effectiveColor.opacity(0.5) :
-                        Color.clear
-                )
-                .onHover { hovering in
-                    isHoveringResizeHandle = hovering
-                    if hovering {
-                        NSCursor.resizeUpDown.set()
-                    } else if !isDraggingResize {
-                        NSCursor.arrow.set()
-                    }
-                }
-                .gesture(
-                    DragGesture(minimumDistance: 1)
-                        .onChanged { value in
-                            if !isDraggingResize {
-                                isDraggingResize = true
+            // Resize handle at the bottom - only show when not collapsed
+            Group {
+                if !trackViewModel.isCollapsed {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(height: 8)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            isHoveringResizeHandle ?
+                            track.effectiveColor.opacity(0.5) :
+                                Color.clear
+                        )
+                        .onHover { hovering in
+                            isHoveringResizeHandle = hovering
+                            if hovering {
                                 NSCursor.resizeUpDown.set()
-                            }
-                            
-                            // Just store the preview height - don't change real height during drag
-                            let baseHeight = track.height
-                            resizePreviewHeight = max(90, baseHeight + value.translation.height)
-                        }
-                        .onEnded { _ in
-                            isDraggingResize = false
-                            if !isHoveringResizeHandle {
+                            } else if !isDraggingResize {
                                 NSCursor.arrow.set()
                             }
-                            
-                            // Only update if we have a preview height and it differs from current
-                            if let previewHeight = resizePreviewHeight, abs(previewHeight - track.height) > 1 {
-                                // Update model once at the end
-                                updateTrackHeight(previewHeight)
-                                // Keep local state in sync with what we set
-                                currentHeight = previewHeight
-                            }
-                            
-                            // Clear the preview
-                            resizePreviewHeight = nil
                         }
-                )
-                .help("Resize track height")
-            , alignment: .bottom
+                        .gesture(
+                            DragGesture(minimumDistance: 1)
+                                .onChanged { value in
+                                    if !isDraggingResize {
+                                        isDraggingResize = true
+                                        NSCursor.resizeUpDown.set()
+                                    }
+                                    
+                                    // Just store the preview height - don't change real height during drag
+                                    let baseHeight = track.height
+                                    resizePreviewHeight = max(90, baseHeight + value.translation.height)
+                                }
+                                .onEnded { _ in
+                                    isDraggingResize = false
+                                    if !isHoveringResizeHandle {
+                                        NSCursor.arrow.set()
+                                    }
+                                    
+                                    // Only update if we have a preview height and it differs from current
+                                    if let previewHeight = resizePreviewHeight, abs(previewHeight - track.height) > 1 {
+                                        // Update model once at the end
+                                        updateTrackHeight(previewHeight)
+                                        // Keep local state in sync with what we set
+                                        currentHeight = previewHeight
+                                    }
+                                    
+                                    // Clear the preview
+                                    resizePreviewHeight = nil
+                                }
+                        )
+                        .help("Resize track height")
+                }
+            }, alignment: .bottom
         )
         // Add resize preview indicator overlay at highest z-index
         .overlay(
@@ -420,6 +441,11 @@ struct TrackControlsView: View {
         // Solo option
         Button(trackViewModel.isSolo ? "Unsolo Track" : "Solo Track") {
             trackViewModel.toggleSolo()
+        }
+        
+        // Collapse/Expand option
+        Button(trackViewModel.isCollapsed ? "Expand Track" : "Collapse Track") {
+            trackViewModel.toggleCollapsed()
         }
         
         Divider()

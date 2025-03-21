@@ -57,6 +57,7 @@ struct Track: Identifiable, Equatable {
     var volume: Double = 0.8 // 0.0 to 1.0
     var pan: Double = 0.5 // 0.0 (left) to 1.0 (right), 0.5 is center
     var height: CGFloat = 100 // Default track height
+    var isCollapsed: Bool = false // Whether the track is collapsed (minimized)
     var customColor: Color? = nil // Custom color for the track, overrides the default type color
     var effects: [Effect] = [] // List of effects applied to this track
     var instrument: Effect? = nil // Optional instrument for MIDI tracks
@@ -272,6 +273,7 @@ struct Track: Identifiable, Equatable {
               lhs.volume == rhs.volume &&
               lhs.pan == rhs.pan &&
               lhs.height == rhs.height &&
+              lhs.isCollapsed == rhs.isCollapsed &&
               lhs.midiClips.count == rhs.midiClips.count &&
               lhs.audioClips.count == rhs.audioClips.count else {
             return false
