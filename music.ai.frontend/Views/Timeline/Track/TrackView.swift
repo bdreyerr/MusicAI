@@ -8,7 +8,9 @@ struct TrackView: View {
     let track: Track
     @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
+    @ObservedObject var trackViewModel: TrackViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var menuCoordinator: MenuCoordinator
     @StateObject private var dragDropViewModel = AudioDragDropViewModel.shared
     let width: CGFloat
     
@@ -22,11 +24,6 @@ struct TrackView: View {
         return projectViewModel.audioViewModel
     }
     
-    // State to track local changes before updating the model
-    @State private var isMuted: Bool
-    @State private var isSolo: Bool
-    @State private var isArmed: Bool
-    
     // State for drop handling
     @State private var isTargeted: Bool = false
     @State private var dropLocation: CGPoint = .zero
@@ -38,10 +35,8 @@ struct TrackView: View {
         self.projectViewModel = projectViewModel
         self.width = width
         
-        // Initialize state from track
-        _isMuted = State(initialValue: track.isMuted)
-        _isSolo = State(initialValue: track.isSolo)
-        _isArmed = State(initialValue: track.isArmed)
+        // Get the track view model from the manager
+        self._trackViewModel = ObservedObject(wrappedValue: projectViewModel.trackViewModelManager.viewModel(for: track))
     }
     
     var body: some View {
@@ -111,6 +106,39 @@ struct TrackView: View {
         .frame(width: width, height: track.height)
         .background(Color.clear) // Make background transparent to let grid show through
         .contextMenu { trackContextMenu }
+        .popover(isPresented: $trackViewModel.showingColorPicker) {
+            VStack(spacing: 10) {
+                Text("Track Color")
+                    .font(.headline)
+                    .padding(.top, 8)
+                
+                ColorPicker("Select Color", selection: Binding(
+                    get: { trackViewModel.customColor ?? track.type.color },
+                    set: { newColor in
+                        trackViewModel.updateTrackColor(newColor)
+                    }
+                ))
+                .padding(.horizontal)
+                
+                Button("Reset to Default") {
+                    trackViewModel.updateTrackColor(nil)
+                    trackViewModel.showingColorPicker = false
+                }
+                .padding(.bottom, 8)
+            }
+            .frame(width: 250)
+            .padding(8)
+        }
+        .alert(isPresented: $trackViewModel.showingDeleteConfirmation) {
+            Alert(
+                title: Text("Delete Track"),
+                message: Text("Are you sure you want to delete this track? This cannot be undone."),
+                primaryButton: .destructive(Text("Delete")) {
+                    trackViewModel.deleteTrack()
+                },
+                secondaryButton: .cancel()
+            )
+        }
         .onDrop(of: [
             "public.file-url",
             "com.microsoft.waveform-audio", 
@@ -158,6 +186,19 @@ struct TrackView: View {
     
     @ViewBuilder
     private var trackContextMenu: some View {
+        // Copy and paste options
+        Button("Copy") {
+            menuCoordinator.copySelectedClip()
+        }
+        .keyboardShortcut("c", modifiers: .command)
+        
+        Button("Paste") {
+            menuCoordinator.pasteClip()
+        }
+        .keyboardShortcut("v", modifiers: .command)
+        
+        Divider()
+        
         // Create MIDI clip option (only for MIDI tracks and when there's a selection)
         if track.type == .midi && state.hasSelection(trackId: track.id) {
             Button("Create MIDI Clip") {
@@ -172,86 +213,93 @@ struct TrackView: View {
             }
         }
         
-        // Track-wide options
         Divider()
         
-        Button("Rename Track") {
-            // Handle rename directly by finding the track and updating its name
-            if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
-                // Show a popup or alert to get the new name
-                let alert = NSAlert()
-                alert.messageText = "Rename Track"
-                alert.informativeText = "Enter a new name for the track:"
-                
-                let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-                textField.stringValue = track.name
-                alert.accessoryView = textField
-                
-                alert.addButton(withTitle: "OK")
-                alert.addButton(withTitle: "Cancel")
-                
-                let response = alert.runModal()
-                if response == .alertFirstButtonReturn {
-                    let newName = textField.stringValue
-                    projectViewModel.updateTrackNameOnly(at: index, name: newName)
-                }
-            }
+        // Enable/Disable option
+        Button(trackViewModel.isEnabled ? "Disable Track" : "Enable Track") {
+            print("trying to enable / disable track")
+            trackViewModel.toggleEnabled()
         }
         
-        Button(isMuted ? "Unmute Track" : "Mute Track") {
+        // Mute option
+        Button(trackViewModel.isMuted ? "Unmute Track" : "Mute Track") {
             toggleMute()
         }
         
-        Button(isSolo ? "Unsolo Track" : "Solo Track") {
+        // Solo option
+        Button(trackViewModel.isSolo ? "Unsolo Track" : "Solo Track") {
             toggleSolo()
         }
         
-        Button(isArmed ? "Disarm Track" : "Arm for Recording") {
+        // Arm option
+        Button(trackViewModel.isArmed ? "Disarm Track" : "Arm for Recording") {
             toggleArmed()
         }
         
         Divider()
         
+        // Rename option
+        Button("Rename Track") {
+            renameTrack()
+        }
+        
+        // Change color option
+        Button("Change Color") {
+            trackViewModel.showingColorPicker = true
+        }
+        
+        // Delete option
         Button("Delete Track", role: .destructive) {
-            // Show a confirmation alert for track deletion
-            let alert = NSAlert()
-            alert.messageText = "Delete Track"
-            alert.informativeText = "Are you sure you want to delete this track? This cannot be undone."
-            alert.alertStyle = .warning
-            
-            alert.addButton(withTitle: "Delete")
-            alert.addButton(withTitle: "Cancel")
-            
-            let response = alert.runModal()
-            if response == .alertFirstButtonReturn {
-                // Find and remove the track by ID
-                if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
-                    projectViewModel.removeTrack(at: index)
-                }
-            }
+            trackViewModel.showingDeleteConfirmation = true
         }
     }
     
     // Methods for handling track control actions
     private func toggleMute() {
-        isMuted.toggle()
-        if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
-            projectViewModel.updateTrackControlsOnly(at: index, isMuted: isMuted)
-        }
+        trackViewModel.toggleMute()
     }
     
     private func toggleSolo() {
-        isSolo.toggle()
-        if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
-            projectViewModel.updateTrackControlsOnly(at: index, isSolo: isSolo)
-        }
+        trackViewModel.toggleSolo()
     }
     
     private func toggleArmed() {
-        isArmed.toggle()
+        trackViewModel.toggleArmed()
+    }
+    
+    private func updateTrackEnabledState() {
+        trackViewModel.toggleEnabled()
+    }
+    
+    private func renameTrack() {
+        // Handle rename directly by finding the track and updating its name
         if let index = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
-            projectViewModel.updateTrackControlsOnly(at: index, isArmed: isArmed)
+            // Show a popup or alert to get the new name
+            let alert = NSAlert()
+            alert.messageText = "Rename Track"
+            alert.informativeText = "Enter a new name for the track:"
+            
+            let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+            textField.stringValue = track.name
+            alert.accessoryView = textField
+            
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Cancel")
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                trackViewModel.trackName = textField.stringValue
+                trackViewModel.updateTrackName()
+            }
         }
+    }
+    
+    private func deleteTrack() {
+        trackViewModel.deleteTrack()
+    }
+    
+    private func updateTrackColor(_ color: Color?) {
+        trackViewModel.updateTrackColor(color)
     }
     
     // Handle the drop of an audio file

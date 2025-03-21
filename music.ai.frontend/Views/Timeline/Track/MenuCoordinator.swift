@@ -362,7 +362,7 @@ class MenuCoordinator: NSObject, ObservableObject {
             }
             
             if overlappingClips.isEmpty {
-                // No clips to copy
+                // No clips to copy - do nothing and return
                 return
             }
             
@@ -410,7 +410,7 @@ class MenuCoordinator: NSObject, ObservableObject {
             }
             
             if overlappingClips.isEmpty {
-                // No clips to copy
+                // No clips to copy - do nothing and return
                 return
             }
             

@@ -6,6 +6,7 @@ struct MasterTrackControlsView: View {
     let track: Track
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var menuCoordinator: MenuCoordinator
     
     // State to track local changes before updating the model
     @State private var isMuted: Bool
@@ -95,6 +96,9 @@ struct MasterTrackControlsView: View {
         }
         .frame(height: 50)
         .background(track.effectiveBackgroundColor(for: themeManager.currentTheme))
+        .contextMenu {
+            masterTrackControlsContextMenu
+        }
         .overlay(
             ZStack {
                 Rectangle()
@@ -135,6 +139,51 @@ struct MasterTrackControlsView: View {
         var updatedTrack = projectViewModel.masterTrack
         updatedTrack.volume = volume
         projectViewModel.masterTrack = updatedTrack
+    }
+    
+    // MARK: - Context Menu
+    
+    @ViewBuilder
+    private var masterTrackControlsContextMenu: some View {
+        // Mute option
+        Button(isMuted ? "Unmute Master" : "Mute Master") {
+            isMuted.toggle()
+            updateTrackMuteState()
+        }
+        
+        Divider()
+        
+        // Add effect option
+        Button("Add Effect") {
+            // Select the master track
+            projectViewModel.selectTrack(id: track.id)
+            
+            // Add a compressor effect
+            var updatedTrack = projectViewModel.masterTrack
+            let effect = Effect(type: .compressor, name: "Compressor")
+            updatedTrack.addEffect(effect)
+            projectViewModel.masterTrack = updatedTrack
+        }
+        
+        if !track.effects.isEmpty {
+            Menu("Effects (\(track.effects.count))") {
+                ForEach(track.effects) { effect in
+                    Button("\(effect.name)") {
+                        // Future: Open effect editor
+                        projectViewModel.selectTrack(id: track.id)
+                    }
+                }
+                
+                Divider()
+                
+                Button("Manage Effects...") {
+                    projectViewModel.selectTrack(id: track.id)
+                    // TODO: Show effects panel when implemented
+                }
+            }
+        }
+        
+        Divider()
     }
 }
 

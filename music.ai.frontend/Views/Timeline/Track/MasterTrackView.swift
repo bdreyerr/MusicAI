@@ -7,6 +7,7 @@ struct MasterTrackView: View {
     @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var menuCoordinator: MenuCoordinator
     let width: CGFloat
     
     var body: some View {
@@ -42,7 +43,6 @@ struct MasterTrackView: View {
         }
         .frame(width: width, height: 70)
         .background(Color.clear)
-        .contextMenu { masterTrackContextMenu }
         // Apply highlight if this track is selected
         .overlay(
             ZStack {
@@ -66,23 +66,19 @@ struct MasterTrackView: View {
     
     @ViewBuilder
     private var masterTrackContextMenu: some View {
-        // Only show effects-related options for master track
-        Button("Add Effect") {
-            // Select the master track first
-            projectViewModel.selectTrack(id: track.id)
-            
-            // Add a compressor effect directly
-            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
-                var updatedTrack = projectViewModel.tracks[trackIndex]
-                let effect = Effect(type: .compressor, name: "Compressor")
-                updatedTrack.addEffect(effect)
-                
-                // Update the track with the new effect
-                projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
-            }
+        // Mute option
+        Button(track.isMuted ? "Unmute Master" : "Mute Master") {
+            toggleMute()
         }
         
-        if track.effects.count > 0 {
+        Divider()
+        
+        // Add effect option
+        Button("Add Effect") {
+            addEffect()
+        }
+        
+        if !track.effects.isEmpty {
             Menu("Effects (\(track.effects.count))") {
                 ForEach(track.effects) { effect in
                     Button("\(effect.name)") {
@@ -99,6 +95,25 @@ struct MasterTrackView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func toggleMute() {
+        var updatedTrack = projectViewModel.masterTrack
+        updatedTrack.isMuted = !updatedTrack.isMuted
+        projectViewModel.masterTrack = updatedTrack
+    }
+    
+    private func addEffect() {
+        // Select the master track
+        projectViewModel.selectTrack(id: track.id)
+        
+        // Add a compressor effect
+        var updatedTrack = projectViewModel.masterTrack
+        let effect = Effect(type: .compressor, name: "Compressor")
+        updatedTrack.addEffect(effect)
+        projectViewModel.masterTrack = updatedTrack
     }
 }
 

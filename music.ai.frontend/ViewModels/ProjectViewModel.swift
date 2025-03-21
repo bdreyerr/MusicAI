@@ -1,6 +1,45 @@
 import SwiftUI
 import Combine
 
+/// Manager class to store and provide TrackViewModel instances
+class TrackViewModelManager {
+    // Dictionary to store track view models by track ID
+    private var trackViewModels: [UUID: TrackViewModel] = [:]
+    
+    // Reference to the project view model
+    private weak var projectViewModel: ProjectViewModel?
+    
+    init(projectViewModel: ProjectViewModel) {
+        self.projectViewModel = projectViewModel
+    }
+    
+    /// Get a TrackViewModel for a track, creating a new one if needed
+    func viewModel(for track: Track) -> TrackViewModel {
+        if let existing = trackViewModels[track.id] {
+            return existing
+        }
+        
+        // Create a new view model if none exists
+        guard let projectViewModel = projectViewModel else {
+            fatalError("ProjectViewModel is nil in TrackViewModelManager")
+        }
+        
+        let newViewModel = TrackViewModel(track: track, projectViewModel: projectViewModel)
+        trackViewModels[track.id] = newViewModel
+        return newViewModel
+    }
+    
+    /// Remove a track view model
+    func removeViewModel(for trackId: UUID) {
+        trackViewModels.removeValue(forKey: trackId)
+    }
+    
+    /// Clear all track view models
+    func clearViewModels() {
+        trackViewModels.removeAll()
+    }
+}
+
 class ProjectViewModel: ObservableObject {
     @Published var tempo: Double = 120.0
     @Published var timeSignatureBeats: Int = 4
@@ -19,6 +58,11 @@ class ProjectViewModel: ObservableObject {
     
     // Interaction manager for coordinating gestures and events
     let interactionManager = InteractionManager()
+    
+    // Track view model manager for providing track-specific view models
+    lazy var trackViewModelManager: TrackViewModelManager = {
+        return TrackViewModelManager(projectViewModel: self)
+    }()
     
     // MIDI view model for handling MIDI-related operations
     lazy var midiViewModel: MidiViewModel = {
@@ -271,24 +315,34 @@ class ProjectViewModel: ObservableObject {
         }
     }
     
-    // Remove a track
+    // Remove a track at the specified index
     func removeTrack(at index: Int) {
-        guard index >= 0 && index < tracks.count else { return }
+        guard index >= 0 && index < tracks.count else {
+            print("❌ PROJECT VM: Failed to remove track - index \(index) out of bounds")
+            return
+        }
         
         let trackToRemove = tracks[index]
+        
+        // Get the track ID before removing it
+        let trackId = trackToRemove.id
+        
+        // Clean up the track view model
+        trackViewModelManager.removeViewModel(for: trackId)
         
         // Use withAnimation for smoother track removal
         withAnimation(.easeInOut(duration: 0.2)) {
             tracks.remove(at: index)
         }
         
-        // If we removed the selected track, select another one if available
-        if trackToRemove.id == selectedTrackId {
+        // If the removed track was selected, select another track
+        if selectedTrackId == trackId {
             if !tracks.isEmpty {
-                // Select the track at the same index, or the last track if we removed the last one
+                // Select the track at the same index if possible, or the previous one
                 let newIndex = min(index, tracks.count - 1)
                 selectedTrackId = tracks[newIndex].id
             } else {
+                // No tracks left, clear selection
                 selectedTrackId = nil
             }
         }
