@@ -145,6 +145,40 @@ struct Track: Identifiable, Equatable {
         return true
     }
     
+    // Check if multiple MIDI clips can be added starting at a position
+    func canAddMidiClips(startingAt initialStartBeat: Double, clips: [MidiClip]) -> Bool {
+        // Only MIDI tracks can have MIDI clips
+        guard type == .midi else { return false }
+        
+        // For each clip, check if its position would overlap with existing clips
+        for clip in clips {
+            // Get the start and end positions of this clip
+            let startBeat = clip.startBeat
+            let endBeat = startBeat + clip.duration
+            
+            // Check for overlaps with existing clips
+            for existingClip in midiClips {
+                // If the new clip overlaps with an existing clip, return false
+                if (startBeat < existingClip.endBeat && endBeat > existingClip.startBeat) {
+                    return false
+                }
+            }
+            
+            // Also check for overlaps with other clips being added
+            for otherClip in clips where clip.id != otherClip.id {
+                let otherStartBeat = otherClip.startBeat
+                let otherEndBeat = otherStartBeat + otherClip.duration
+                
+                // If this clip overlaps with another new clip, return false
+                if (startBeat < otherEndBeat && endBeat > otherStartBeat) {
+                    return false
+                }
+            }
+        }
+        
+        return true
+    }
+    
     // Add an audio clip to the track (only applicable for audio tracks)
     mutating func addAudioClip(_ clip: AudioClip) -> Bool {
         // Only add the clip if this is an audio track
@@ -184,6 +218,40 @@ struct Track: Identifiable, Equatable {
             // If the new clip overlaps with an existing clip, return false
             if (startBeat < clip.endBeat && endBeat > clip.startBeat) {
                 return false
+            }
+        }
+        
+        return true
+    }
+    
+    // Check if multiple audio clips can be added starting at a position
+    func canAddAudioClips(startingAt initialStartBeat: Double, clips: [AudioClip]) -> Bool {
+        // Only audio tracks can have audio clips
+        guard type == .audio else { return false }
+        
+        // For each clip, check if its position would overlap with existing clips
+        for clip in clips {
+            // Get the start and end positions of this clip
+            let startBeat = clip.startBeat
+            let endBeat = startBeat + clip.duration
+            
+            // Check for overlaps with existing clips
+            for existingClip in audioClips {
+                // If the new clip overlaps with an existing clip, return false
+                if (startBeat < existingClip.endBeat && endBeat > existingClip.startBeat) {
+                    return false
+                }
+            }
+            
+            // Also check for overlaps with other clips being added
+            for otherClip in clips where clip.id != otherClip.id {
+                let otherStartBeat = otherClip.startBeat
+                let otherEndBeat = otherStartBeat + otherClip.duration
+                
+                // If this clip overlaps with another new clip, return false
+                if (startBeat < otherEndBeat && endBeat > otherStartBeat) {
+                    return false
+                }
             }
         }
         

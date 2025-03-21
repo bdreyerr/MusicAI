@@ -513,6 +513,14 @@ struct MidiClipView: View {
                     showRenameDialog = true
                 }
                 
+                Button("Copy Clip") {
+                    menuCoordinator.copySelectedClip()
+                }
+                
+                Button("Paste Clip") {
+                    menuCoordinator.pasteClip()
+                }
+                
                 Button("Delete Clip") {
                     // midiViewModel.removeMidiClip(trackId: track.id, clipId: clip.id)
                     menuCoordinator.deleteSelectedClip()

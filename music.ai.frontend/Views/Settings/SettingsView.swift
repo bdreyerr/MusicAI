@@ -85,10 +85,9 @@ struct KeyboardShortcutsView: View {
         ShortcutCategory(
             name: "Editing",
             shortcuts: [
-                ShortcutItem(name: "Rename Selected Clip", shortcut: "R"),
                 ShortcutItem(name: "Delete Selected Clip", shortcut: "⌫"),
-                ShortcutItem(name: "Edit MIDI Notes", shortcut: "E"),
-                ShortcutItem(name: "Create New Clip", shortcut: "N")
+                ShortcutItem(name: "Copy", shortcut: "⌘C"),
+                ShortcutItem(name: "Paste", shortcut: "⌘V")
             ]
         )
     ]

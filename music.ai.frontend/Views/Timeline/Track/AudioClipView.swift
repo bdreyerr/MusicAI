@@ -560,6 +560,14 @@ struct AudioClipView: View {
                     showRenameDialog = true
                 }
                 
+                Button("Copy Clip") {
+                    menuCoordinator.copySelectedClip()
+                }
+                
+                Button("Paste Clip") {
+                    menuCoordinator.pasteClip()
+                }
+                
                 Button("Delete Clip") {
                     // audioViewModel.removeAudioClip(trackId: track.id, clipId: clip.id)
                     menuCoordinator.deleteSelectedClip()

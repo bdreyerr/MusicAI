@@ -495,6 +495,11 @@ struct TimelineView: View {
                     menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "r")
                         .target = menuCoordinator
                     
+                    // Add Copy option for MIDI clips
+                    let copyItem = menu.addItem(withTitle: "Copy Clip", action: #selector(MenuCoordinator.copySelectedClip), keyEquivalent: "c")
+                    copyItem.target = menuCoordinator
+                    copyItem.keyEquivalentModifierMask = .command
+                    
                     menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                         .target = menuCoordinator
                     
@@ -507,6 +512,11 @@ struct TimelineView: View {
                     }
                     
                     if !overlappingClips.isEmpty {
+                        // Selection overlaps with clips but doesn't match exactly - show option to copy partial clip
+                        let copyItem = menu.addItem(withTitle: "Copy Partial Clip", action: #selector(MenuCoordinator.copySelectedClip), keyEquivalent: "c")
+                        copyItem.target = menuCoordinator
+                        copyItem.keyEquivalentModifierMask = .command
+                        
                         // Selection overlaps with clips but doesn't match exactly - show option to trim
                         menu.addItem(withTitle: "Trim Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                             .target = menuCoordinator
@@ -518,6 +528,11 @@ struct TimelineView: View {
                             .target = menuCoordinator
                     }
                 }
+                
+                // Add Paste option for MIDI tracks regardless of selection
+                let pasteItem = menu.addItem(withTitle: "Paste Clip", action: #selector(MenuCoordinator.pasteClip), keyEquivalent: "v")
+                pasteItem.target = menuCoordinator
+                pasteItem.keyEquivalentModifierMask = .command
                 
                 menu.addItem(NSMenuItem.separator())
             }
@@ -536,6 +551,11 @@ struct TimelineView: View {
                     menu.addItem(withTitle: "Rename Clip", action: #selector(MenuCoordinator.renameSelectedClip), keyEquivalent: "r")
                         .target = menuCoordinator
                     
+                    // Add Copy option for audio clips
+                    let copyItem = menu.addItem(withTitle: "Copy Clip", action: #selector(MenuCoordinator.copySelectedClip), keyEquivalent: "c")
+                    copyItem.target = menuCoordinator
+                    copyItem.keyEquivalentModifierMask = .command
+                    
                     menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                         .target = menuCoordinator
                     
@@ -548,6 +568,11 @@ struct TimelineView: View {
                     }
                     
                     if !overlappingClips.isEmpty {
+                        // Selection overlaps with clips but doesn't match exactly - show option to copy partial clip
+                        let copyItem = menu.addItem(withTitle: "Copy Partial Clip", action: #selector(MenuCoordinator.copySelectedClip), keyEquivalent: "c")
+                        copyItem.target = menuCoordinator
+                        copyItem.keyEquivalentModifierMask = .command
+                        
                         // Selection overlaps with clips but doesn't match exactly - show option to trim
                         menu.addItem(withTitle: "Trim Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                             .target = menuCoordinator
@@ -559,6 +584,11 @@ struct TimelineView: View {
                             .target = menuCoordinator
                     }
                 }
+                
+                // Add Paste option for audio tracks regardless of selection
+                let pasteItem = menu.addItem(withTitle: "Paste Clip", action: #selector(MenuCoordinator.pasteClip), keyEquivalent: "v")
+                pasteItem.target = menuCoordinator
+                pasteItem.keyEquivalentModifierMask = .command
                 
                 menu.addItem(NSMenuItem.separator())
             }

@@ -89,6 +89,22 @@ struct TimelineButtons: View {
             }
             .keyboardShortcut(.delete, modifiers: [])
             
+            // Copy selection (cmd C)
+            Button(action: {
+                copySelection()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut("c", modifiers: [.command])
+            
+            // Paste at current position (cmd V)
+            Button(action: {
+                pasteAtCurrentPosition()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut("v", modifiers: [.command])
+            
             // // Also support backspace key for deletion
             // Button(action: {
             //     deleteSelection()
@@ -258,6 +274,18 @@ struct TimelineButtons: View {
     private func deleteSelection() {
         // Use the MenuCoordinator's deleteSelectedClip method
         menuCoordinator.deleteSelectedClip()
+    }
+    
+    // Copy selection
+    private func copySelection() {
+        // Use the MenuCoordinator's copySelectedClip method
+        menuCoordinator.copySelectedClip()
+    }
+    
+    // Paste at current position
+    private func pasteAtCurrentPosition() {
+        // Use the MenuCoordinator's pasteClip method
+        menuCoordinator.pasteClip()
     }
 }
 
