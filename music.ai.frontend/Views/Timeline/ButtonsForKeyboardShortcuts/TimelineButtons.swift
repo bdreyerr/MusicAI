@@ -13,6 +13,9 @@ struct TimelineButtons: View {
     @ObservedObject var timelineState: TimelineStateViewModel
     @State private var menuCoordinator = MenuCoordinator()
     
+    // Event monitor for custom keyboard shortcuts
+    @State private var eventMonitor: Any?
+    
     // Initialize with required view models
     init(projectViewModel: ProjectViewModel, timelineState: TimelineStateViewModel) {
         self.projectViewModel = projectViewModel
@@ -105,6 +108,25 @@ struct TimelineButtons: View {
             }
             .keyboardShortcut("v", modifiers: [.command])
             
+            // Move playhead left (left arrow key)
+            Button(action: {
+                movePlayheadLeft()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut(.leftArrow, modifiers: [])
+            
+            // Move playhead right (right arrow key)
+            Button(action: {
+                movePlayheadRight()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut(.rightArrow, modifiers: [])
+            
+            // We're removing the A/D shortcuts and replacing with an event monitor
+            // for Shift+arrow keys
+            
             // // Also support backspace key for deletion
             // Button(action: {
             //     deleteSelection()
@@ -115,6 +137,17 @@ struct TimelineButtons: View {
         }
         .frame(width: 0, height: 0)
         .opacity(0)
+        .onAppear {
+            // Set up NSEvent monitor for custom key handling
+            setupKeyboardEventMonitor()
+        }
+        .onDisappear {
+            // Clean up event monitor
+            if let monitor = eventMonitor {
+                NSEvent.removeMonitor(monitor)
+                eventMonitor = nil
+            }
+        }
     }
     
     // MARK: - Actions
@@ -286,6 +319,185 @@ struct TimelineButtons: View {
     private func pasteAtCurrentPosition() {
         // Use the MenuCoordinator's pasteClip method
         menuCoordinator.pasteClip()
+    }
+    
+    // Move playhead left (without selection)
+    private func movePlayheadLeft() {
+        // Cancel any existing selection
+        timelineState.clearSelection()
+        
+        // Calculate new position based on grid division
+        let currentPosition = projectViewModel.currentBeat
+        var moveAmount: Double = 1.0
+        
+        // Adjust move amount based on grid division
+        switch timelineState.gridDivision {
+        case .sixteenth:
+            moveAmount = 0.25
+        case .eighth:
+            moveAmount = 0.5
+        case .quarter:
+            moveAmount = 1.0
+        case .half:
+            moveAmount = 2.0
+        case .bar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats)
+        case .twoBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 2)
+        case .fourBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 4)
+        }
+        
+        // Calculate new position (ensure we don't go below 0)
+        let newPosition = max(0, currentPosition - moveAmount)
+        
+        // Move playhead to new position
+        projectViewModel.seekToBeat(newPosition)
+    }
+    
+    // Move playhead right (without selection)
+    private func movePlayheadRight() {
+        // Cancel any existing selection
+        timelineState.clearSelection()
+        
+        // Calculate new position based on grid division
+        let currentPosition = projectViewModel.currentBeat
+        var moveAmount: Double = 1.0
+        
+        // Adjust move amount based on grid division
+        switch timelineState.gridDivision {
+        case .sixteenth:
+            moveAmount = 0.25
+        case .eighth:
+            moveAmount = 0.5
+        case .quarter:
+            moveAmount = 1.0
+        case .half:
+            moveAmount = 2.0
+        case .bar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats)
+        case .twoBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 2)
+        case .fourBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 4)
+        }
+        
+        // Calculate new position
+        let newPosition = currentPosition + moveAmount
+        
+        // Move playhead to new position
+        projectViewModel.seekToBeat(newPosition)
+    }
+    
+    // Set up keyboard event monitor to handle Shift+arrow keys
+    private func setupKeyboardEventMonitor() {
+        // Remove existing monitor if any
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        
+        // Create new monitor
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Check for Shift+Left Arrow
+            if event.keyCode == 123 && event.modifierFlags.contains(.shift) {
+                self.movePlayheadWithSelectionLeft()
+                return nil // Consume the event
+            }
+            
+            // Check for Shift+Right Arrow
+            if event.keyCode == 124 && event.modifierFlags.contains(.shift) {
+                self.movePlayheadWithSelectionRight()
+                return nil // Consume the event
+            }
+            
+            return event // Pass the event through if not handled
+        }
+    }
+    
+    // Move playhead left with selection
+    private func movePlayheadWithSelectionLeft() {
+        // Calculate new position based on grid division
+        let currentPosition = projectViewModel.currentBeat
+        var moveAmount: Double = 1.0
+        
+        // Adjust move amount based on grid division
+        switch timelineState.gridDivision {
+        case .sixteenth:
+            moveAmount = 0.25
+        case .eighth:
+            moveAmount = 0.5
+        case .quarter:
+            moveAmount = 1.0
+        case .half:
+            moveAmount = 2.0
+        case .bar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats)
+        case .twoBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 2)
+        case .fourBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 4)
+        }
+        
+        // Calculate new position (ensure we don't go below 0)
+        let newPosition = max(0, currentPosition - moveAmount)
+        
+        // If there's no selected track, we can't make a selection
+        if let selectedTrackId = projectViewModel.selectedTrackId {
+            if !timelineState.selectionActive {
+                // Start a new selection from current to new position
+                timelineState.startSelection(at: currentPosition, trackId: selectedTrackId)
+                timelineState.updateSelection(to: newPosition)
+            } else {
+                // Extend the existing selection
+                timelineState.updateSelection(to: newPosition)
+            }
+        }
+        
+        // Move playhead to new position
+        projectViewModel.seekToBeat(newPosition)
+    }
+    
+    // Move playhead right with selection
+    private func movePlayheadWithSelectionRight() {
+        // Calculate new position based on grid division
+        let currentPosition = projectViewModel.currentBeat
+        var moveAmount: Double = 1.0
+        
+        // Adjust move amount based on grid division
+        switch timelineState.gridDivision {
+        case .sixteenth:
+            moveAmount = 0.25
+        case .eighth:
+            moveAmount = 0.5
+        case .quarter:
+            moveAmount = 1.0
+        case .half:
+            moveAmount = 2.0
+        case .bar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats)
+        case .twoBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 2)
+        case .fourBar:
+            moveAmount = Double(projectViewModel.timeSignatureBeats * 4)
+        }
+        
+        // Calculate new position
+        let newPosition = currentPosition + moveAmount
+        
+        // If there's no selected track, we can't make a selection
+        if let selectedTrackId = projectViewModel.selectedTrackId {
+            if !timelineState.selectionActive {
+                // Start a new selection from current to new position
+                timelineState.startSelection(at: currentPosition, trackId: selectedTrackId)
+                timelineState.updateSelection(to: newPosition)
+            } else {
+                // Extend the existing selection
+                timelineState.updateSelection(to: newPosition)
+            }
+        }
+        
+        // Move playhead to new position
+        projectViewModel.seekToBeat(newPosition)
     }
 }
 

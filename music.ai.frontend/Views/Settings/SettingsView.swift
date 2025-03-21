@@ -73,6 +73,10 @@ struct KeyboardShortcutsView: View {
                 ShortcutItem(name: "Create MIDI Clip", shortcut: "⇧⌘M"),
                 ShortcutItem(name: "Select Track Above", shortcut: "↑"),
                 ShortcutItem(name: "Select Track Below", shortcut: "↓"),
+                ShortcutItem(name: "Move Playhead Left", shortcut: "←"),
+                ShortcutItem(name: "Move Playhead Right", shortcut: "→"),
+                ShortcutItem(name: "Move Playhead Left with Selection", shortcut: "⇧←"),
+                ShortcutItem(name: "Move Playhead Right with Selection", shortcut: "⇧→"),
             ]
         ),
         ShortcutCategory(
