@@ -16,8 +16,8 @@ struct AudioClip: Identifiable, Equatable {
     }
     
     // Create a new empty audio clip
-    static func createEmpty(name: String, startBeat: Double, duration: Double) -> AudioClip {
-        return AudioClip(name: name, startBeat: startBeat, duration: duration)
+    static func createEmpty(name: String, startBeat: Double, duration: Double, color: Color? = nil) -> AudioClip {
+        return AudioClip(name: name, startBeat: startBeat, duration: duration, color: color)
     }
     
     // Implement Equatable to help with updates

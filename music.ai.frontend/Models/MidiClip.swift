@@ -16,8 +16,8 @@ struct MidiClip: Identifiable, Equatable {
     }
     
     // Create a new empty MIDI clip
-    static func createEmpty(name: String, startBeat: Double, duration: Double) -> MidiClip {
-        return MidiClip(name: name, startBeat: startBeat, duration: duration)
+    static func createEmpty(name: String, startBeat: Double, duration: Double, color: Color? = nil) -> MidiClip {
+        return MidiClip(name: name, startBeat: startBeat, duration: duration, color: color)
     }
     
     // Implement Equatable to help with updates

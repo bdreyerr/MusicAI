@@ -77,6 +77,23 @@ class TrackViewModel: ObservableObject, Identifiable {
     
     // MARK: - Computed Properties
     
+    // Get the effective color for the track (custom color or default type color)
+    var effectiveColor: Color {
+        return customColor ?? track.type.color
+    }
+    
+    // Get the effective background color based on the theme
+    func effectiveBackgroundColor(for theme: ThemeOption) -> Color {
+        let baseColor = effectiveColor
+        
+        switch theme {
+        case .light:
+            return baseColor.opacity(0.35)
+        case .dark:
+            return baseColor.opacity(0.3)
+        }
+    }
+    
     // Formatted text for pan position display
     var panPositionText: String {
         if abs(pan - 0.5) < 0.01 {
@@ -126,7 +143,10 @@ class TrackViewModel: ObservableObject, Identifiable {
     }
     
     func updateTrackColor(_ color: Color?) {
+        // Update our local customColor first to ensure immediate UI updates
         customColor = color
+        
+        // Then update the track in the project model
         if let index = getTrackIndex() {
             projectViewModel?.updateTrackColorOnly(at: index, color: color)
         }

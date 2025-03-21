@@ -29,6 +29,8 @@ struct AudioClipView: View {
     @State private var resizeStartDuration: Double = 0 // Track the starting duration for resize
     @State private var resizeStartPosition: Double = 0 // Track the starting position for resize
     @State private var isResizingLeft: Bool = false // Track which side we're resizing from
+    @State private var showingClipColorPicker: Bool = false // Track if color picker is visible
+    @State private var currentClipColor: Color? // Track the current clip color for UI updates
     
     // Computed property to determine if resize handles should be visible
     private var showResizeHandles: Bool {
@@ -60,6 +62,9 @@ struct AudioClipView: View {
         self.state = state
         self.projectViewModel = projectViewModel
         self.trackViewModel = trackViewModel
+        
+        // Initialize the current clip color
+        self._currentClipColor = State(initialValue: clip.color)
         
         // Calculate contrasting color for waveform bars
         let baseColor = clip.color ?? track.effectiveColor
@@ -109,7 +114,7 @@ struct AudioClipView: View {
             ZStack(alignment: .topLeading) {
                 // Background
                 RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
-                    .fill(clip.color ?? track.effectiveColor)
+                    .fill(currentClipColor ?? track.effectiveColor)
                     .opacity(isSelected ? 0.9 : (isHovering ? 0.8 : 0.6))
                 
                 // Selection border
@@ -561,6 +566,10 @@ struct AudioClipView: View {
                     showRenameDialog = true
                 }
                 
+                Button("Change Color") {
+                    showingClipColorPicker = true
+                }
+                
                 Button("Copy Clip") {
                     menuCoordinator.copySelectedClip()
                 }
@@ -585,6 +594,30 @@ struct AudioClipView: View {
         .position(x: startX + width/2, y: clipHeight/2)
         .zIndex(40) // Ensure clips are above other elements for better interaction
         .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.7, blendDuration: 0.1), value: clip.startBeat) // Animate when the actual clip position changes
+        .animation(.easeInOut(duration: 0.2), value: currentClipColor) // Animate when color changes
+        .popover(isPresented: $showingClipColorPicker, arrowEdge: .top) {
+            VStack(spacing: 10) {
+                Text("Clip Color")
+                    .font(.headline)
+                    .padding(.top, 8)
+                
+                ColorPicker("Select Color", selection: Binding(
+                    get: { currentClipColor ?? track.effectiveColor },
+                    set: { newColor in
+                        updateClipColor(newColor)
+                    }
+                ))
+                .padding(.horizontal)
+                
+                Button("Reset to Track Color") {
+                    updateClipColor(nil)
+                    showingClipColorPicker = false
+                }
+                .padding(.bottom, 8)
+            }
+            .frame(width: 250)
+            .padding(8)
+        }
         .alert("Rename Clip", isPresented: $showRenameDialog) {
             TextField("Clip Name", text: $newClipName)
             
@@ -692,6 +725,22 @@ struct AudioClipView: View {
             }
         } else {
             NSCursor.arrow.set()
+        }
+    }
+    
+    // Helper method to update clip color
+    private func updateClipColor(_ newColor: Color?) {
+        // Use the AudioViewModel to update the clip color
+        let success = audioViewModel.updateAudioClipColor(trackId: track.id, clipId: clip.id, newColor: newColor)
+        
+        if success {
+            // Update our local state to force a UI refresh
+            currentClipColor = newColor
+            
+            // Close the color picker if needed
+            if newColor == nil {
+                showingClipColorPicker = false
+            }
         }
     }
 }

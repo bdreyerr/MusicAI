@@ -48,7 +48,7 @@ struct TrackControlsView: View {
                                     .padding(.top, 8)
                                 
                                 ColorPicker("Select Color", selection: Binding(
-                                    get: { trackViewModel.customColor ?? track.type.color },
+                                    get: { trackViewModel.effectiveColor },
                                     set: { newColor in
                                         trackViewModel.customColor = newColor
                                         updateTrackColor(newColor)
@@ -222,7 +222,7 @@ struct TrackControlsView: View {
                                 updateTrackPan()
                             }
                         }
-                        .accentColor(track.effectiveColor)
+                        .accentColor(trackViewModel.effectiveColor)
                         .frame(height: 16)
                         
                         // Center line indicator
@@ -255,7 +255,7 @@ struct TrackControlsView: View {
         }
         .frame(height: trackViewModel.isCollapsed ? 30 : track.height)
         .frame(minHeight: trackViewModel.isCollapsed ? 30 : 40)
-        .background(track.effectiveBackgroundColor(for: themeManager.currentTheme))
+        .background(trackViewModel.effectiveBackgroundColor(for: themeManager.currentTheme))
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
             trackViewModel.toggleCollapsed()
@@ -274,13 +274,13 @@ struct TrackControlsView: View {
                 // Selection highlight for the entire control area
                 if projectViewModel.isTrackSelected(track) {
                     Rectangle()
-                        .fill(themeManager.accentColor.opacity(0.15))
+                        .fill(trackViewModel.effectiveColor.opacity(0.15))
                         .brightness(0.1)
                         .allowsHitTesting(false)
                     
                     // Selection border
                     Rectangle()
-                        .stroke(themeManager.accentColor.opacity(0.9), lineWidth: 1.5)
+                        .stroke(trackViewModel.effectiveColor.opacity(0.9), lineWidth: 1.5)
                         .brightness(0.3)
                         .allowsHitTesting(false)
                 }
@@ -307,7 +307,7 @@ struct TrackControlsView: View {
                         .frame(maxWidth: .infinity)
                         .background(
                             isHoveringResizeHandle ?
-                            track.effectiveColor.opacity(0.5) :
+                            trackViewModel.effectiveColor.opacity(0.5) :
                                 Color.clear
                         )
                         .onHover { hovering in

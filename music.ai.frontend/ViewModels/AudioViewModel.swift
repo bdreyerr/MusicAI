@@ -59,7 +59,8 @@ class AudioViewModel: ObservableObject {
         let newClip = AudioClip(
             name: fileName,
             startBeat: startBeat,
-            duration: durationInBeats
+            duration: durationInBeats,
+            color: track.effectiveColor
         )
         
         // Add the clip to the track
@@ -115,7 +116,12 @@ class AudioViewModel: ObservableObject {
         
         // Create a new audio clip
         let clipName = "Audio \(track.audioClips.count + 1)"
-        let newClip = AudioClip.createEmpty(name: clipName, startBeat: startBeat, duration: duration)
+        let newClip = AudioClip.createEmpty(
+            name: clipName, 
+            startBeat: startBeat, 
+            duration: duration,
+            color: track.effectiveColor
+        )
         
         // Add the clip to the track
         track.addAudioClip(newClip)
@@ -386,6 +392,34 @@ class AudioViewModel: ObservableObject {
     /// Set the timeline state reference
     func setTimelineState(_ timelineState: TimelineStateViewModel) {
         self.timelineState = timelineState
+    }
+    
+    // Update Audio Clip Color
+    func updateAudioClipColor(trackId: UUID, clipId: UUID, newColor: Color?) -> Bool {
+        guard let projectViewModel = projectViewModel else {
+            print("❌ AUDIO VM: ProjectViewModel is nil, can't update clip color")
+            return false
+        }
+        
+        // Find the track index
+        guard let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+            print("❌ AUDIO VM: Can't find track with ID \(trackId)")
+            return false
+        }
+        
+        // Find the clip index within the track
+        guard let clipIndex = projectViewModel.tracks[trackIndex].audioClips.firstIndex(where: { $0.id == clipId }) else {
+            print("❌ AUDIO VM: Can't find clip with ID \(clipId) in track")
+            return false
+        }
+        
+        // Update the clip color
+        projectViewModel.tracks[trackIndex].audioClips[clipIndex].color = newColor
+        
+        // Notify observers
+        projectViewModel.objectWillChange.send()
+        
+        return true
     }
     
     // MARK: - Private Helpers

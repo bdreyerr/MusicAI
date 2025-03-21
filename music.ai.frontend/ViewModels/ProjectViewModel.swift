@@ -38,6 +38,25 @@ class TrackViewModelManager {
     func clearViewModels() {
         trackViewModels.removeAll()
     }
+    
+    /// Update a track view model from its track (by ID)
+    func updateViewModel(for trackId: UUID) {
+        // If we have this track's view model
+        if let viewModel = trackViewModels[trackId],
+           let projectViewModel = projectViewModel,
+           let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
+            // Get the updated track
+            let updatedTrack = projectViewModel.tracks[trackIndex]
+            
+            // Refresh the view model's properties from the track
+            viewModel.customColor = updatedTrack.customColor
+            
+            // Force viewModel to notify its observers
+            DispatchQueue.main.async {
+                viewModel.objectWillChange.send()
+            }
+        }
+    }
 }
 
 class ProjectViewModel: ObservableObject {
@@ -537,6 +556,10 @@ class ProjectViewModel: ObservableObject {
         
         // Update just the color directly
         tracks[index].customColor = color
+        
+        // Make sure the track view model manager updates this track's view model
+        let trackId = tracks[index].id
+        trackViewModelManager.updateViewModel(for: trackId)
         
         // Still notify observers but skip the timeline content width update
         objectWillChange.send()

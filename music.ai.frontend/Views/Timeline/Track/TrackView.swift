@@ -28,6 +28,9 @@ struct TrackView: View {
     @State private var isTargeted: Bool = false
     @State private var dropLocation: CGPoint = .zero
     
+    // State for track color picker
+    @State private var showingTrackColorPicker: Bool = false
+    
     // Initialize with track's current state
     init(track: Track, state: TimelineStateViewModel, projectViewModel: ProjectViewModel, width: CGFloat) {
         self.track = track
@@ -110,14 +113,14 @@ struct TrackView: View {
         .frame(width: width, height: trackViewModel.isCollapsed ? 30 : track.height)
         .background(Color.clear) // Make background transparent to let grid show through
         .contextMenu { trackContextMenu }
-        .popover(isPresented: $trackViewModel.showingColorPicker) {
+        .popover(isPresented: $showingTrackColorPicker) {
             VStack(spacing: 10) {
                 Text("Track Color")
                     .font(.headline)
                     .padding(.top, 8)
                 
                 ColorPicker("Select Color", selection: Binding(
-                    get: { trackViewModel.customColor ?? track.type.color },
+                    get: { trackViewModel.effectiveColor },
                     set: { newColor in
                         trackViewModel.updateTrackColor(newColor)
                     }
@@ -126,7 +129,7 @@ struct TrackView: View {
                 
                 Button("Reset to Default") {
                     trackViewModel.updateTrackColor(nil)
-                    trackViewModel.showingColorPicker = false
+                    showingTrackColorPicker = false
                 }
                 .padding(.bottom, 8)
             }
@@ -174,13 +177,13 @@ struct TrackView: View {
                 // Selection highlight with transparency
                 if projectViewModel.isTrackSelected(track) {
                     Rectangle()
-                        .fill(themeManager.accentColor.opacity(0.1))
+                        .fill(trackViewModel.effectiveColor.opacity(0.1))
                         .allowsHitTesting(false) // Important: Don't block clicks
                 }
                 
                 // Border
                 Rectangle()
-                    .stroke(projectViewModel.isTrackSelected(track) ? themeManager.accentColor : Color.clear, lineWidth: 2)
+                    .stroke(projectViewModel.isTrackSelected(track) ? trackViewModel.effectiveColor.opacity(0.8) : Color.clear, lineWidth: 2)
                     .allowsHitTesting(false) // Important: Don't block clicks
             }
         )
@@ -249,7 +252,7 @@ struct TrackView: View {
         
         // Change color option
         Button("Change Color") {
-            trackViewModel.showingColorPicker = true
+            showingTrackColorPicker = true
         }
         
         // Delete option
@@ -646,19 +649,20 @@ struct TrackView: View {
 /// View for displaying the drop target indicator
 struct DropTargetIndicator: View {
     let track: Track
+    @ObservedObject var trackViewModel: TrackViewModel
     let width: CGFloat
     let height: CGFloat
     
     var body: some View {
         Rectangle()
-            .fill(track.effectiveColor.opacity(0.3))
+            .fill(trackViewModel.effectiveColor.opacity(0.3))
             .frame(width: width, height: height)
             .overlay(
                 Rectangle()
                     .strokeBorder(
                         style: StrokeStyle(lineWidth: 2, dash: [5, 5])
                     )
-                    .foregroundColor(track.effectiveColor)
+                    .foregroundColor(trackViewModel.effectiveColor)
             )
             .allowsHitTesting(false) // Don't block other interactions
     }

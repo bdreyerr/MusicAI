@@ -52,7 +52,12 @@ class MidiViewModel: ObservableObject {
         
         // Create a new MIDI clip
         let clipName = "Clip \(track.midiClips.count + 1)"
-        let newClip = MidiClip.createEmpty(name: clipName, startBeat: startBeat, duration: duration)
+        let newClip = MidiClip.createEmpty(
+            name: clipName, 
+            startBeat: startBeat, 
+            duration: duration,
+            color: track.effectiveColor  // Use the track's effective color
+        )
         
         // Add the clip to the track
         track.addMidiClip(newClip)
@@ -323,6 +328,34 @@ class MidiViewModel: ObservableObject {
     /// Set the timeline state reference
     func setTimelineState(_ timelineState: TimelineStateViewModel) {
         self.timelineState = timelineState
+    }
+    
+    // Update MIDI Clip Color
+    func updateMidiClipColor(trackId: UUID, clipId: UUID, newColor: Color?) -> Bool {
+        guard let projectViewModel = projectViewModel else {
+            print("❌ MIDI VM: ProjectViewModel is nil, can't update clip color")
+            return false
+        }
+        
+        // Find the track index
+        guard let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+            print("❌ MIDI VM: Can't find track with ID \(trackId)")
+            return false
+        }
+        
+        // Find the clip index within the track
+        guard let clipIndex = projectViewModel.tracks[trackIndex].midiClips.firstIndex(where: { $0.id == clipId }) else {
+            print("❌ MIDI VM: Can't find clip with ID \(clipId) in track")
+            return false
+        }
+        
+        // Update the clip color
+        projectViewModel.tracks[trackIndex].midiClips[clipIndex].color = newColor
+        
+        // Notify observers
+        projectViewModel.objectWillChange.send()
+        
+        return true
     }
     
     // MARK: - Private Helpers
