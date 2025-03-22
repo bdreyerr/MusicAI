@@ -65,7 +65,7 @@ class ProjectViewModel: ObservableObject {
     @Published var timeSignatureUnit: Int = 4
     @Published var isPlaying: Bool = false
     @Published var currentBeat: Double = 0.0 // Current playback position in beats
-    @Published var tracks: [Track] = Track.samples
+    @Published var tracks: [Track] = []
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
     @Published var masterTrack: Track // Master track for final output processing
     
@@ -107,10 +107,43 @@ class ProjectViewModel: ObservableObject {
         self.masterTrack = Track(name: "Master", type: .master)
         self.masterTrack.height = 100 // Set default height
         
+        // Initialize with 4 specific tracks instead of samples
+        self.tracks = [
+            createTrackWithRandomColor(name: "1 Audio", type: .audio),
+            createTrackWithRandomColor(name: "2 Audio", type: .audio),
+            createTrackWithRandomColor(name: "3 Midi", type: .midi),
+            createTrackWithRandomColor(name: "4 Midi", type: .midi)
+        ]
+        
         // Select the first track by default if available
         if !tracks.isEmpty {
             selectedTrackId = tracks[0].id
         }
+    }
+    
+    // Helper function to create a track with a random color
+    private func createTrackWithRandomColor(name: String, type: TrackType) -> Track {
+        var track = Track(name: name, type: type)
+        track.customColor = generateRandomColor()
+        
+        // Add basic effects based on track type
+        if type == .audio {
+            track.addEffect(Effect(type: .equalizer))
+            track.addEffect(Effect(type: .compressor))
+        } else if type == .midi {
+            track.instrument = Effect(type: .instrument, name: "Default Instrument")
+            track.addEffect(Effect(type: .reverb))
+        }
+        
+        return track
+    }
+    
+    // Generate a random color for track customization
+    private func generateRandomColor() -> Color {
+        let hue = Double.random(in: 0.0...1.0)
+        let saturation = Double.random(in: 0.5...0.8)
+        let brightness = Double.random(in: 0.7...0.9)
+        return Color(hue: hue, saturation: saturation, brightness: brightness)
     }
     
     // Computed property to get time signature as a tuple
@@ -294,9 +327,15 @@ class ProjectViewModel: ObservableObject {
     }
     
     // Add a new track
-    func addTrack(name: String, type: TrackType, height: CGFloat = 100, afterIndex: Int? = nil) {
-        var newTrack = Track(name: name, type: type)
+    func addTrack(name: String? = nil, type: TrackType, height: CGFloat = 100, afterIndex: Int? = nil) {
+        // Generate a sequential track name if one wasn't provided
+        let trackName = name ?? "\(tracks.count + 1) \(type == .audio ? "Audio" : "Midi")"
+        
+        var newTrack = Track(name: trackName, type: type)
         newTrack.height = height
+        
+        // Assign a random color to new tracks by default
+        newTrack.customColor = generateRandomColor()
         
         // print("📝 PROJECT VM: Adding new \(type) track: \(name)")
         // print("📝 PROJECT VM: Current track count: \(tracks.count)")

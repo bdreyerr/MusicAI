@@ -188,13 +188,9 @@ struct TimelineButtons: View {
     
     // Add a new track (audio or MIDI)
     private func addTrack(type: TrackType) {
-        // Create a name for the new track
-        var name = type == .audio ? "Audio Track" : "MIDI Track"
         let height: CGFloat = 100 // Default height for new tracks
-        let trackNumber = projectViewModel.tracks.count + 1
-        name = "\(name) \(trackNumber)"
         
-        // print("🔍 TimelineButtons: Adding new \(type) track with name: \(name)")
+        // print("🔍 TimelineButtons: Adding new \(type) track")
         // print("🔍 TimelineButtons: Current track count: \(projectViewModel.tracks.count)")
         // print("🔍 TimelineButtons: TimelineState selection active? \(timelineState.selectionActive)")
         // print("🔍 TimelineButtons: TimelineState selectionTrackId: \(timelineState.selectionTrackId?.uuidString ?? "nil")")
@@ -205,12 +201,12 @@ struct TimelineButtons: View {
                 let selectedIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
             // If a track is selected in the project view model, add the new track after it
             // print("✅ TimelineButtons: Found selected track in ProjectViewModel at index \(selectedIndex), adding new track after it")
-            projectViewModel.addTrack(name: name, type: type, height: height, afterIndex: selectedIndex)
+            projectViewModel.addTrack(type: type, height: height, afterIndex: selectedIndex)
         }
         else {
             // If no track is selected anywhere, add to the end
             // print("⚠️ TimelineButtons: No track selected in either TimelineState or ProjectViewModel, adding to the end")
-            projectViewModel.addTrack(name: name, type: type, height: height)
+            projectViewModel.addTrack(type: type, height: height)
         }
         
         // Print tracks after adding to verify

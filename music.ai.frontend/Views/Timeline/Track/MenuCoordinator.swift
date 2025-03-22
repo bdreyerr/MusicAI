@@ -25,11 +25,11 @@ class MenuCoordinator: NSObject, ObservableObject {
     }
     
     @objc func addAudioTrack() {
-        projectViewModel?.addTrack(name: "Audio \(projectViewModel?.tracks.count ?? 0 + 1)", type: .audio, height: defaultTrackHeight)
+        projectViewModel?.addTrack(type: .audio, height: defaultTrackHeight)
     }
     
     @objc func addMidiTrack() {
-        projectViewModel?.addTrack(name: "MIDI \(projectViewModel?.tracks.count ?? 0 + 1)", type: .midi, height: defaultTrackHeight)
+        projectViewModel?.addTrack(type: .midi, height: defaultTrackHeight)
     }
     
     @objc func createMidiClip() {

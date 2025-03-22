@@ -482,7 +482,7 @@ struct TrackView: View {
         // Check if there's already an audio track
         if projectViewModel.tracks.first(where: { $0.type == .audio }) == nil {
             // Create a new audio track if none exists
-            projectViewModel.addTrack(name: "Audio", type: .audio)
+            projectViewModel.addTrack(type: .audio)
         }
     }
     
