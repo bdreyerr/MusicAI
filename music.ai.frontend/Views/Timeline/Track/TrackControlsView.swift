@@ -94,10 +94,11 @@ struct TrackControlsView: View {
                     
                     // Collapse/expand indicator
                     Image(systemName: trackViewModel.isCollapsed ? "chevron.down" : "chevron.up")
-                        .font(.system(size: 10))
+                        .font(.system(size: 13))
                         .foregroundColor(themeManager.primaryTextColor.opacity(0.7))
                         .padding(.trailing, 8)
                         .onTapGesture {
+//                            print("tapped chevron")
                             trackViewModel.toggleCollapsed()
                         }
                         .help(trackViewModel.isCollapsed ? "Expand track" : "Collapse track")
@@ -226,17 +227,12 @@ struct TrackControlsView: View {
                         .frame(height: 16)
                         
                         // Center line indicator
-                        Rectangle()
-                            .fill(themeManager.primaryTextColor.opacity(0.5))
-                            .frame(width: 1, height: 12)
+//                        Rectangle()
+//                            .fill(themeManager.primaryTextColor.opacity(0.5))
+//                            .frame(width: 1, height: 12)
                     }
                     // Double-click to reset to center
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        // Reset to center (0.5)
-                        trackViewModel.pan = 0.5
-                        updateTrackPan()
-                    }
                     
                     Text("R")
                         .font(.caption)
@@ -247,6 +243,11 @@ struct TrackControlsView: View {
                         .font(.caption)
                         .foregroundColor(themeManager.primaryTextColor)
                         .frame(width: 32, alignment: .trailing)
+                        .onTapGesture(count: 2) {
+                            // Reset to center (0.5)
+                            trackViewModel.pan = 0.5
+                            updateTrackPan()
+                        }
                 }
                 .padding(.horizontal, 8)
                 .padding(.top, 2)

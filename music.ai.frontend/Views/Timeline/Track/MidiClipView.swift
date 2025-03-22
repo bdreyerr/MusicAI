@@ -524,6 +524,28 @@ struct MidiClipView: View {
                     }
             )
             .contextMenu {
+
+                Button("Copy Clip") {
+                    menuCoordinator.copySelectedClip()
+                }
+                .keyboardShortcut("c", modifiers: .command)
+
+                Button("Paste Clip") {
+                    menuCoordinator.pasteClip()
+                }
+                .keyboardShortcut("v", modifiers: .command)
+
+                Button("Duplicate Clip") {
+                    menuCoordinator.duplicateSelectedClip()
+                }
+                .keyboardShortcut("d", modifiers: .command)
+
+                Button("Delete Clip") {
+                    // midiViewModel.removeMidiClip(trackId: track.id, clipId: clip.id)
+                    menuCoordinator.deleteSelectedClip()
+                }
+                .keyboardShortcut(.delete)
+
                 Button("Rename Clip") {
                     newClipName = clip.name
                     showRenameDialog = true
@@ -531,25 +553,6 @@ struct MidiClipView: View {
                 
                 Button("Change Color") {
                     showingClipColorPicker = true
-                }
-                
-                Button("Copy Clip") {
-                    menuCoordinator.copySelectedClip()
-                }
-                
-                Button("Paste Clip") {
-                    menuCoordinator.pasteClip()
-                }
-                
-                Button("Delete Clip") {
-                    // midiViewModel.removeMidiClip(trackId: track.id, clipId: clip.id)
-                    menuCoordinator.deleteSelectedClip()
-                }
-                
-                Divider()
-                
-                Button("Edit Notes") {
-                    // print("Edit notes functionality will be implemented later")
                 }
             }
         }

@@ -561,6 +561,29 @@ struct AudioClipView: View {
                     }
             )
             .contextMenu {
+                Button("Copy Clip") {
+                    menuCoordinator.copySelectedClip()
+                }
+                .keyboardShortcut("c", modifiers: .command)
+
+                Button("Paste Clip") {
+                    menuCoordinator.pasteClip()
+                }
+                .keyboardShortcut("v", modifiers: .command)
+
+                Button("Duplicate Clip") {
+                    menuCoordinator.duplicateSelectedClip()
+                }
+                .keyboardShortcut("d", modifiers: .command)
+
+                Button("Delete Clip") {
+                    // audioViewModel.removeAudioClip(trackId: track.id, clipId: clip.id)
+                    menuCoordinator.deleteSelectedClip()
+                }
+                .keyboardShortcut(.delete)
+
+                Divider()
+
                 Button("Rename Clip") {
                     newClipName = clip.name
                     showRenameDialog = true
@@ -568,25 +591,6 @@ struct AudioClipView: View {
                 
                 Button("Change Color") {
                     showingClipColorPicker = true
-                }
-                
-                Button("Copy Clip") {
-                    menuCoordinator.copySelectedClip()
-                }
-                
-                Button("Paste Clip") {
-                    menuCoordinator.pasteClip()
-                }
-                
-                Button("Delete Clip") {
-                    // audioViewModel.removeAudioClip(trackId: track.id, clipId: clip.id)
-                    menuCoordinator.deleteSelectedClip()
-                }
-                
-                Divider()
-                
-                Button("Edit Audio") {
-                    // print("Edit audio functionality will be implemented later")
                 }
             }
         }

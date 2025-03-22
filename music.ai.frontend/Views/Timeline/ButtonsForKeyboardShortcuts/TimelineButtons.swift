@@ -124,16 +124,14 @@ struct TimelineButtons: View {
             }
             .keyboardShortcut(.rightArrow, modifiers: [])
             
-            // We're removing the A/D shortcuts and replacing with an event monitor
-            // for Shift+arrow keys
-            
-            // // Also support backspace key for deletion
-            // Button(action: {
-            //     deleteSelection()
-            // }) {
-            //     EmptyView()
-            // }
-            // .keyboardShortcut(.init("\u{8}"), modifiers: [])
+            // Duplicate Clips / Selection (cmd d)
+            Button(action: {
+                duplicateSelection()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut("d", modifiers: [.command])
+
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -498,6 +496,10 @@ struct TimelineButtons: View {
         
         // Move playhead to new position
         projectViewModel.seekToBeat(newPosition)
+    }
+
+    private func duplicateSelection() {
+        menuCoordinator.duplicateSelectedClip()
     }
 }
 

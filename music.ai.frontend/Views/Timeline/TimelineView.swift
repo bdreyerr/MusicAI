@@ -500,6 +500,11 @@ struct TimelineView: View {
                     copyItem.target = menuCoordinator
                     copyItem.keyEquivalentModifierMask = .command
                     
+                    // Add Duplicate option for MIDI clips
+                    let duplicateItem = menu.addItem(withTitle: "Duplicate Clip", action: #selector(MenuCoordinator.duplicateSelectedClip), keyEquivalent: "d")
+                    duplicateItem.target = menuCoordinator
+                    duplicateItem.keyEquivalentModifierMask = .command
+                    
                     menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                         .target = menuCoordinator
                     
@@ -555,6 +560,11 @@ struct TimelineView: View {
                     let copyItem = menu.addItem(withTitle: "Copy Clip", action: #selector(MenuCoordinator.copySelectedClip), keyEquivalent: "c")
                     copyItem.target = menuCoordinator
                     copyItem.keyEquivalentModifierMask = .command
+                    
+                    // Add Duplicate option for audio clips
+                    let duplicateItem = menu.addItem(withTitle: "Duplicate Clip", action: #selector(MenuCoordinator.duplicateSelectedClip), keyEquivalent: "d")
+                    duplicateItem.target = menuCoordinator
+                    duplicateItem.keyEquivalentModifierMask = .command
                     
                     menu.addItem(withTitle: "Delete Clip", action: #selector(MenuCoordinator.deleteSelectedClip), keyEquivalent: "\u{8}") // Backspace key
                         .target = menuCoordinator
