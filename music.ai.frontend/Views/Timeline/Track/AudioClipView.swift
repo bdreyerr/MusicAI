@@ -31,6 +31,8 @@ struct AudioClipView: View {
     @State private var isResizingLeft: Bool = false // Track which side we're resizing from
     @State private var showingClipColorPicker: Bool = false // Track if color picker is visible
     @State private var currentClipColor: Color? // Track the current clip color for UI updates
+    @State private var isOptionDragging: Bool = false // Track if we're option-dragging for duplication
+    @State private var originalClipVisible: Bool = true // Track if the original clip should be visible during drag
     
     // Computed property to determine if resize handles should be visible
     private var showResizeHandles: Bool {
@@ -122,6 +124,7 @@ struct AudioClipView: View {
                 RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
                     .fill(currentClipColor ?? track.effectiveColor)
                     .opacity(isSelected ? 0.9 : (isHovering ? 0.8 : 0.6))
+                    .opacity((!originalClipVisible && isDragging) ? 0 : 1) // Hide original clip during non-option drag
                 
                 // Selection border
                 RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
@@ -309,7 +312,10 @@ struct AudioClipView: View {
                             isHoveringRightResizeArea = false
                             
                             if hovering && !isResizing && !isDragging {
-                                if isSelected {
+                                // Check if option key is held
+                                if NSEvent.modifierFlags.contains(.option) {
+                                    NSCursor.dragCopy.set()
+                                } else if isSelected {
                                     NSCursor.openHand.set()
                                 } else {
                                     NSCursor.pointingHand.set()
@@ -338,14 +344,39 @@ struct AudioClipView: View {
                                             return
                                         }
                                         
+                                        // Check if option key is held at the start of drag
+                                        isOptionDragging = NSEvent.modifierFlags.contains(.option)
+                                        
                                         // Inform the interaction manager that we're starting a clip drag
                                         if projectViewModel.interactionManager.startClipDrag() {
                                             dragStartBeat = clip.startBeat
                                             dragStartLocation = value.startLocation
                                             isDragging = true
-                                            NSCursor.closedHand.set()
+                                            
+                                            // Set appropriate cursor
+                                            if isOptionDragging {
+                                                NSCursor.dragCopy.set()
+                                                originalClipVisible = true
+                                            } else {
+                                                NSCursor.closedHand.set()
+                                                originalClipVisible = false
+                                            }
                                         } else {
                                             return
+                                        }
+                                    }
+                                    
+                                    // Check if option key state has changed during drag
+                                    let isOptionHeld = NSEvent.modifierFlags.contains(.option)
+                                    if isOptionHeld != isOptionDragging {
+                                        isOptionDragging = isOptionHeld
+                                        originalClipVisible = isOptionHeld
+                                        
+                                        // Update cursor
+                                        if isOptionHeld {
+                                            NSCursor.dragCopy.set()
+                                        } else {
+                                            NSCursor.closedHand.set()
                                         }
                                     }
                                     
@@ -388,19 +419,65 @@ struct AudioClipView: View {
                                     
                                     // Only move if the position actually changed
                                     if abs(finalPosition - clip.startBeat) > 0.001 {
-                                        // Move the clip to the new position using the Audio view model
-                                        let success = audioViewModel.moveAudioClip(
-                                            trackId: track.id,
-                                            clipId: clip.id,
-                                            newStartBeat: finalPosition
-                                        )
+                                        // Check for overlaps at the target position
+                                        let wouldOverlap = track.audioClips.contains { otherClip in
+                                            // When option-dragging (duplicating), also check overlap with original clip
+                                            if isOptionDragging {
+                                                let newEndBeat = finalPosition + clip.duration
+                                                return finalPosition < otherClip.endBeat && newEndBeat > otherClip.startBeat
+                                            } else {
+                                                // For regular dragging, ignore the clip being dragged
+                                                guard otherClip.id != clip.id else { return false }
+                                                let newEndBeat = finalPosition + clip.duration
+                                                return finalPosition < otherClip.endBeat && newEndBeat > otherClip.startBeat
+                                            }
+                                        }
                                         
-                                        if success {
-                                            // Update the selection to match the new clip position
-                                            state.startSelection(at: finalPosition, trackId: track.id)
-                                            state.updateSelection(to: finalPosition + clip.duration)
+                                        if !wouldOverlap {
+                                            if isOptionDragging {
+                                                // Create a duplicate clip at the new position
+                                                let duplicateClip = AudioClip(
+                                                    name: clip.name,
+                                                    startBeat: finalPosition,
+                                                    duration: clip.duration,
+                                                    color: clip.color,
+                                                    waveformData: clip.waveformData
+                                                )
+                                                
+                                                // Add the duplicate clip to the track
+                                                var trackCopy = track
+                                                trackCopy.addAudioClip(duplicateClip)
+                                                
+                                                // Update the track in the project
+                                                if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+                                                    projectViewModel.updateTrack(at: trackIndex, with: trackCopy)
+                                                }
+                                                
+                                                // Update selection to the new clip
+                                                state.clearSelectedClips()
+                                                state.addClipToSelection(clipId: duplicateClip.id)
+                                                state.startSelection(at: finalPosition, trackId: track.id)
+                                                state.updateSelection(to: finalPosition + clip.duration)
+                                            } else {
+                                                // Move the original clip to the new position
+                                                let success = audioViewModel.moveAudioClip(
+                                                    trackId: track.id,
+                                                    clipId: clip.id,
+                                                    newStartBeat: finalPosition
+                                                )
+                                                
+                                                if success {
+                                                    // Update the selection to match the new clip position
+                                                    state.startSelection(at: finalPosition, trackId: track.id)
+                                                    state.updateSelection(to: finalPosition + clip.duration)
+                                                } else {
+                                                    // Reset the selection to the original clip position
+                                                    state.startSelection(at: clip.startBeat, trackId: track.id)
+                                                    state.updateSelection(to: clip.endBeat)
+                                                }
+                                            }
                                         } else {
-                                            // Reset the selection to the original clip position
+                                            // Reset selection to original position if there would be an overlap
                                             state.startSelection(at: clip.startBeat, trackId: track.id)
                                             state.updateSelection(to: clip.endBeat)
                                         }
@@ -415,11 +492,17 @@ struct AudioClipView: View {
                                     
                                     // Reset drag state
                                     isDragging = false
+                                    isOptionDragging = false
+                                    originalClipVisible = true
                                     dragStartLocation = .zero
                                     
                                     // Reset cursor based on hover state
                                     if isHovering {
-                                        NSCursor.openHand.set()
+                                        if NSEvent.modifierFlags.contains(.option) {
+                                            NSCursor.dragCopy.set()
+                                        } else {
+                                            NSCursor.openHand.set()
+                                        }
                                     } else {
                                         NSCursor.arrow.set()
                                     }
