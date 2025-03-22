@@ -171,6 +171,14 @@ struct TrackView: View {
             
             return result
         }
+        .contentShape(Rectangle())
+        .onTapGesture { location in
+            // Clear any multi-selection when clicking empty space
+            state.clearSelectedClips()
+            
+            // Treat this as normal selection handling
+            handleTrackClick(location: location)
+        }
         // Apply highlight if this track is selected but keep background transparent
         .overlay(
             ZStack {
@@ -643,6 +651,33 @@ struct TrackView: View {
                 return (barIndex + 1) * beatsPerBar
             }
         }
+    }
+    
+    // Handle clicks on empty areas of the track
+    private func handleTrackClick(location: CGPoint) {
+        // Convert the click location to beats
+        let clickBeat = Double(location.x) / state.effectivePixelsPerBeat
+        
+        // Select the track
+        projectViewModel.selectTrack(id: track.id)
+        
+        // If shift key is pressed, extend or start selection
+        if NSEvent.modifierFlags.contains(.shift) {
+            if !state.selectionActive {
+                // Start a new selection from the click position
+                state.startSelection(at: clickBeat, trackId: track.id)
+            } else {
+                // Extend the existing selection to the click position
+                state.updateSelection(to: clickBeat)
+            }
+        } else {
+            // Start a new selection at the click position
+            state.startSelection(at: clickBeat, trackId: track.id)
+            state.updateSelection(to: clickBeat)
+        }
+        
+        // Move playhead to click position
+        projectViewModel.seekToBeat(clickBeat)
     }
 }
 

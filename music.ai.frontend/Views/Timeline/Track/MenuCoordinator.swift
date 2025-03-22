@@ -109,222 +109,184 @@ class MenuCoordinator: NSObject, ObservableObject {
         }
     }
     
-    // Note this function may delete multiple clips
     @objc func deleteSelectedClip() {
         guard let projectViewModel = projectViewModel,
               let timelineState = projectViewModel.timelineState,
-              timelineState.selectionActive,
               let trackId = projectViewModel.selectedTrackId,
               let track = projectViewModel.tracks.first(where: { $0.id == trackId }) else {
             return
         }
         
-        // Get the selection range
-        let (selStart, selEnd) = timelineState.normalizedSelectionRange
+        // Get any multi-selected clips
+        let selectedClipIds = timelineState.selectedClipIds
         
         if track.type == .midi {
-            // Get all MIDI clips that overlap with the selection
-            let overlappingClips = track.midiClips.filter { clip in
-                // Check if the selection overlaps with this clip
-                selStart < clip.endBeat && selEnd > clip.startBeat
-            }
-            
-            if overlappingClips.isEmpty {
-                // No clips to delete or trim
-                return
-            }
-            
-            // Separate fully contained clips from partially overlapping ones
-            let fullyContainedClips = overlappingClips.filter { clip in
-                selStart <= clip.startBeat && selEnd >= clip.endBeat
-            }
-            
-            let partiallyOverlappingClips = overlappingClips.filter { clip in
-                !(selStart <= clip.startBeat && selEnd >= clip.endBeat)
-            }
-            
-            // If we're deleting any full clips, show a confirmation dialog
-            if !fullyContainedClips.isEmpty {
-                let clipWord = fullyContainedClips.count == 1 ? "clip" : "clips"
-                let alert = NSAlert()
-                alert.messageText = "Delete \(fullyContainedClips.count) MIDI \(clipWord)"
-                alert.informativeText = "Are you sure you want to delete \(fullyContainedClips.count) MIDI \(clipWord)? This action cannot be undone."
-                alert.alertStyle = .warning
+            // Check if we have multi-selected clips
+            if !selectedClipIds.isEmpty {
+                // Get all selected clips from this track
+                let selectedClips = track.midiClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
+                }
                 
-                alert.addButton(withTitle: "Delete")
-                alert.addButton(withTitle: "Cancel")
+                if !selectedClips.isEmpty {
+                    // Delete all selected clips
+                    for clip in selectedClips {
+                        _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: clip.id)
+                    }
+                    
+                    // Clear the selection
+                    timelineState.clearSelection()
+                    return
+                }
+            }
+            
+            // If no multi-selection, check for clips in the selection range
+            if timelineState.selectionActive {
+                // Get the selection range
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
                 
-                let response = alert.runModal()
-                if response != .alertFirstButtonReturn {
-                    return // User canceled the deletion
+                // Find any clips that overlap with the selection
+                let overlappingClips = track.midiClips.filter { clip in
+                    selStart < clip.endBeat && selEnd > clip.startBeat
                 }
-            }
-            
-            // Delete all fully contained clips
-            for clip in fullyContainedClips {
-                _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: clip.id)
-            }
-            
-            // Process partial clips (trim or split)
-            for clip in partiallyOverlappingClips {
-                // Check if selection is at the beginning of the clip
-                if selStart <= clip.startBeat && selEnd < clip.endBeat {
-                    // Selection is at the beginning of the clip - keep the end part
-                    let newStartBeat = selEnd
-                    let newDuration = clip.endBeat - selEnd
-                    
-                    // Move the clip to the new start and update duration
-                    _ = midiViewModel?.moveMidiClip(trackId: trackId, clipId: clip.id, newStartBeat: newStartBeat)
-                    _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                }
-                // Check if selection is at the end of the clip
-                else if selStart > clip.startBeat && selEnd >= clip.endBeat {
-                    // Selection is at the end of the clip - keep the beginning part
-                    let newDuration = selStart - clip.startBeat
-                    
-                    // Update clip duration
-                    _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                }
-                // Check if selection is in the middle of the clip
-                else if selStart > clip.startBeat && selEnd < clip.endBeat {
-                    // Selection is in the middle of the clip - split into two clips
-                    
-                    // First, create a new clip for the end portion
-                    let endClipDuration = clip.endBeat - selEnd
-                    
-                    // Adjust the original clip to be just the beginning portion
-                    let beginningClipDuration = selStart - clip.startBeat
-                    
-                    // Now resize the original clip to be the beginning portion
-                    _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: beginningClipDuration)
-                    
-                    // Create a new clip for the end portion if it has meaningful duration
-                    if endClipDuration > 0.01 {
-                        // We need to create a duplicate of the original clip
-                        var endClip = MidiClip(
-                            name: clip.name + " (split)",
-                            startBeat: selEnd,
-                            duration: endClipDuration,
-                            color: clip.color,
-                            notes: [] // Note: this doesn't copy the notes - would need more complex logic to handle that
-                        )
-                        
-                        // Create a mutable copy of the track
-                        var mutableTrack = track
-                        
-                        // Add the clip to the track
-                        _ = mutableTrack.addMidiClip(endClip)
-                        
-                        // Update the track in the project view model
-                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
-                            projectViewModel.updateTrack(at: trackIndex, with: mutableTrack)
+                
+                if !overlappingClips.isEmpty {
+                    // Process each overlapping clip
+                    for clip in overlappingClips {
+                        if selStart <= clip.startBeat && selEnd >= clip.endBeat {
+                            // Full clip is within selection - delete it
+                            _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: clip.id)
+                        } else if selStart > clip.startBeat && selEnd < clip.endBeat {
+                            // Selection is in the middle - split into two clips
+                            // First part - from start to selStart
+                            let firstPartDuration = selStart - clip.startBeat
+                            _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: firstPartDuration)
+                            
+                            // Second part - from selEnd to end
+                            let secondPartName = "\(clip.name) (2)"
+                            let secondPartStartBeat = selEnd
+                            let secondPartDuration = clip.endBeat - selEnd
+                            
+                            // Create a new clip for the second part
+                            let secondPart = MidiClip(
+                                name: secondPartName,
+                                startBeat: secondPartStartBeat,
+                                duration: secondPartDuration,
+                                color: clip.color,
+                                notes: clip.notes
+                            )
+                            
+                            // Add the second part to the track
+                            var trackCopy = track
+                            trackCopy.addMidiClip(secondPart)
+                            
+                            // Update the track in the project
+                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
+                                projectViewModel.updateTrack(at: trackIndex, with: trackCopy)
+                            }
+                        } else if selStart <= clip.startBeat && selEnd < clip.endBeat {
+                            // Selection cuts the beginning - resize and move
+                            let newStartBeat = selEnd
+                            let newDuration = clip.endBeat - selEnd
+                            
+                            // Move the clip to the new position
+                            _ = midiViewModel?.moveMidiClip(trackId: trackId, clipId: clip.id, newStartBeat: newStartBeat)
+                            _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
+                        } else if selStart > clip.startBeat && selEnd >= clip.endBeat {
+                            // Selection cuts the end - just resize
+                            let newDuration = selStart - clip.startBeat
+                            _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
                         }
                     }
+                    
+                    // Clear the selection after processing
+                    timelineState.clearSelection()
                 }
             }
         } else if track.type == .audio {
-            // Get all audio clips that overlap with the selection
-            let overlappingClips = track.audioClips.filter { clip in
-                // Check if the selection overlaps with this clip
-                selStart < clip.endBeat && selEnd > clip.startBeat
-            }
-            
-            if overlappingClips.isEmpty {
-                // No clips to delete or trim
-                return
-            }
-            
-            // Separate fully contained clips from partially overlapping ones
-            let fullyContainedClips = overlappingClips.filter { clip in
-                selStart <= clip.startBeat && selEnd >= clip.endBeat
-            }
-            
-            let partiallyOverlappingClips = overlappingClips.filter { clip in
-                !(selStart <= clip.startBeat && selEnd >= clip.endBeat)
-            }
-            
-            // If we're deleting any full clips, show a confirmation dialog
-            if !fullyContainedClips.isEmpty {
-                let clipWord = fullyContainedClips.count == 1 ? "clip" : "clips"
-                let alert = NSAlert()
-                alert.messageText = "Delete \(fullyContainedClips.count) Audio \(clipWord)"
-                alert.informativeText = "Are you sure you want to delete \(fullyContainedClips.count) audio \(clipWord)? This action cannot be undone."
-                alert.alertStyle = .warning
+            // Check if we have multi-selected clips
+            if !selectedClipIds.isEmpty {
+                // Get all selected clips from this track
+                let selectedClips = track.audioClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
+                }
                 
-                alert.addButton(withTitle: "Delete")
-                alert.addButton(withTitle: "Cancel")
+                if !selectedClips.isEmpty {
+                    // Delete all selected clips
+                    for clip in selectedClips {
+                        _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
+                    }
+                    
+                    // Clear the selection
+                    timelineState.clearSelection()
+                    return
+                }
+            }
+            
+            // If no multi-selection, check for clips in the selection range
+            if timelineState.selectionActive {
+                // Get the selection range
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
                 
-                let response = alert.runModal()
-                if response != .alertFirstButtonReturn {
-                    return // User canceled the deletion
+                // Find any clips that overlap with the selection
+                let overlappingClips = track.audioClips.filter { clip in
+                    selStart < clip.endBeat && selEnd > clip.startBeat
                 }
-            }
-            
-            // Delete all fully contained clips
-            for clip in fullyContainedClips {
-                _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
-            }
-            
-            // Process partial clips (trim or split)
-            for clip in partiallyOverlappingClips {
-                // Check if selection is at the beginning of the clip
-                if selStart <= clip.startBeat && selEnd < clip.endBeat {
-                    // Selection is at the beginning of the clip - keep the end part
-                    let newStartBeat = selEnd
-                    let newDuration = clip.endBeat - selEnd
-                    
-                    // Move the clip to the new start and update duration
-                    _ = audioViewModel?.moveAudioClip(trackId: trackId, clipId: clip.id, newStartBeat: newStartBeat)
-                    _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                }
-                // Check if selection is at the end of the clip
-                else if selStart > clip.startBeat && selEnd >= clip.endBeat {
-                    // Selection is at the end of the clip - keep the beginning part
-                    let newDuration = selStart - clip.startBeat
-                    
-                    // Update clip duration
-                    _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                }
-                // Check if selection is in the middle of the clip
-                else if selStart > clip.startBeat && selEnd < clip.endBeat {
-                    // Selection is in the middle of the clip - split into two clips
-                    
-                    // First, create a new clip for the end portion
-                    let endClipDuration = clip.endBeat - selEnd
-                    
-                    // Adjust the original clip to be just the beginning portion
-                    let beginningClipDuration = selStart - clip.startBeat
-                    
-                    // Now resize the original clip to be the beginning portion
-                    _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: beginningClipDuration)
-                    
-                    // Create a new clip for the end portion if it has meaningful duration
-                    if endClipDuration > 0.01 {
-                        // We need to create a duplicate of the original clip
-                        var endClip = AudioClip(
-                            name: clip.name + " (split)",
-                            startBeat: selEnd,
-                            duration: endClipDuration,
-                            color: clip.color
-                        )
-                        
-                        // Create a mutable copy of the track
-                        var mutableTrack = track
-                        
-                        // Add the clip to the track
-                        _ = mutableTrack.addAudioClip(endClip)
-                        
-                        // Update the track in the project view model
-                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
-                            projectViewModel.updateTrack(at: trackIndex, with: mutableTrack)
+                
+                if !overlappingClips.isEmpty {
+                    // Process each overlapping clip
+                    for clip in overlappingClips {
+                        if selStart <= clip.startBeat && selEnd >= clip.endBeat {
+                            // Full clip is within selection - delete it
+                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
+                        } else if selStart > clip.startBeat && selEnd < clip.endBeat {
+                            // Selection is in the middle - split into two clips
+                            // First part - from start to selStart
+                            let firstPartDuration = selStart - clip.startBeat
+                            _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: firstPartDuration)
+                            
+                            // Second part - from selEnd to end
+                            let secondPartName = "\(clip.name) (2)"
+                            let secondPartStartBeat = selEnd
+                            let secondPartDuration = clip.endBeat - selEnd
+                            
+                            // Create a new clip for the second part
+                            let secondPart = AudioClip(
+                                name: secondPartName,
+                                startBeat: secondPartStartBeat,
+                                duration: secondPartDuration,
+                                color: clip.color,
+                                waveformData: clip.waveformData
+                            )
+                            
+                            // Add the second part to the track
+                            var trackCopy = track
+                            trackCopy.addAudioClip(secondPart)
+                            
+                            // Update the track in the project
+                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
+                                projectViewModel.updateTrack(at: trackIndex, with: trackCopy)
+                            }
+                        } else if selStart <= clip.startBeat && selEnd < clip.endBeat {
+                            // Selection cuts the beginning - resize and move
+                            let newStartBeat = selEnd
+                            let newDuration = clip.endBeat - selEnd
+                            
+                            // Move the clip to the new position
+                            _ = audioViewModel?.moveAudioClip(trackId: trackId, clipId: clip.id, newStartBeat: newStartBeat)
+                            _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
+                        } else if selStart > clip.startBeat && selEnd >= clip.endBeat {
+                            // Selection cuts the end - just resize
+                            let newDuration = selStart - clip.startBeat
+                            _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
                         }
                     }
+                    
+                    // Clear the selection after processing
+                    timelineState.clearSelection()
                 }
             }
         }
-        
-        // Clear the selection since we've performed the operation
-        timelineState.clearSelection()
     }
     
     @objc func editClipNotes() {
@@ -342,110 +304,164 @@ class MenuCoordinator: NSObject, ObservableObject {
     @objc func copySelectedClip() {
         guard let projectViewModel = projectViewModel,
               let timelineState = projectViewModel.timelineState,
-              timelineState.selectionActive,
               let trackId = projectViewModel.selectedTrackId,
               let track = projectViewModel.tracks.first(where: { $0.id == trackId }) else {
             return
         }
         
-        // Get the selection range
-        let (selStart, selEnd) = timelineState.normalizedSelectionRange
+        // Get any multi-selected clips
+        let selectedClipIds = timelineState.selectedClipIds
         
         if track.type == .midi {
             // Clear any existing clipboard data
             clipboardAudioClips = nil
             
-            // Get all MIDI clips that overlap with the selection
-            let overlappingClips = track.midiClips.filter { clip in
-                // Check if the selection overlaps with this clip
-                selStart < clip.endBeat && selEnd > clip.startBeat
-            }
-            
-            if overlappingClips.isEmpty {
-                // No clips to copy - do nothing and return
-                return
-            }
-            
             // Initialize array to store copied clips
             var clipsToCopy: [(MidiClip, Double, Double)] = []
             
-            // Check if we have an exact clip match (fully selected clip)
-            let fullyContainedClips = overlappingClips.filter { clip in
-                abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
-            }
-            
-            if !fullyContainedClips.isEmpty {
-                // Full clips selected, add all to clipboard
-                for clip in fullyContainedClips {
-                    clipsToCopy.append((clip, 0.0, 0.0))
+            // Check if we have multi-selected clips
+            if !selectedClipIds.isEmpty {
+                // Get all selected clips from this track
+                let selectedClips = track.midiClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
                 }
                 
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString("MIDI Clips: \(fullyContainedClips.count)", forType: .string)
-            } else {
-                // Handle partial clips
-                for clip in overlappingClips {
-                    // Calculate offsets (how much of the clip we're copying)
-                    let startOffset = max(0, selStart - clip.startBeat)
-                    let endOffset = max(0, clip.endBeat - selEnd)
+                if !selectedClips.isEmpty {
+                    // Add all selected clips to clipboard with no offsets
+                    for clip in selectedClips {
+                        clipsToCopy.append((clip, 0.0, 0.0))
+                    }
                     
-                    clipsToCopy.append((clip, startOffset, endOffset))
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("MIDI Clips: \(selectedClips.count)", forType: .string)
+                    
+                    // Store the copied clips
+                    clipboardMidiClips = clipsToCopy
+                    return
                 }
-                
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString("Partial MIDI Clips: \(overlappingClips.count)", forType: .string)
             }
             
-            // Store the copied clips
-            clipboardMidiClips = clipsToCopy
-            
+            // If no multi-selection, fall back to the regular selection
+            if timelineState.selectionActive {
+                // Get the selection range
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Get all MIDI clips that overlap with the selection
+                let overlappingClips = track.midiClips.filter { clip in
+                    // Check if the selection overlaps with this clip
+                    selStart < clip.endBeat && selEnd > clip.startBeat
+                }
+                
+                if overlappingClips.isEmpty {
+                    // No clips to copy - do nothing and return
+                    return
+                }
+                
+                // Check if we have an exact clip match (fully selected clip)
+                let fullyContainedClips = overlappingClips.filter { clip in
+                    abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
+                }
+                
+                if !fullyContainedClips.isEmpty {
+                    // Full clips selected, add all to clipboard
+                    for clip in fullyContainedClips {
+                        clipsToCopy.append((clip, 0.0, 0.0))
+                    }
+                    
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("MIDI Clips: \(fullyContainedClips.count)", forType: .string)
+                } else {
+                    // Handle partial clips
+                    for clip in overlappingClips {
+                        // Calculate offsets (how much of the clip we're copying)
+                        let startOffset = max(0, selStart - clip.startBeat)
+                        let endOffset = max(0, clip.endBeat - selEnd)
+                        
+                        clipsToCopy.append((clip, startOffset, endOffset))
+                    }
+                    
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("Partial MIDI Clips: \(overlappingClips.count)", forType: .string)
+                }
+                
+                // Store the copied clips
+                clipboardMidiClips = clipsToCopy
+            }
         } else if track.type == .audio {
             // Clear any existing clipboard data
             clipboardMidiClips = nil
             
-            // Get all audio clips that overlap with the selection
-            let overlappingClips = track.audioClips.filter { clip in
-                // Check if the selection overlaps with this clip
-                selStart < clip.endBeat && selEnd > clip.startBeat
-            }
-            
-            if overlappingClips.isEmpty {
-                // No clips to copy - do nothing and return
-                return
-            }
-            
             // Initialize array to store copied clips
             var clipsToCopy: [(AudioClip, Double, Double)] = []
             
-            // Check if we have exact clip matches (fully selected clips)
-            let fullyContainedClips = overlappingClips.filter { clip in
-                abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
-            }
-            
-            if !fullyContainedClips.isEmpty {
-                // Full clips selected, add all to clipboard
-                for clip in fullyContainedClips {
-                    clipsToCopy.append((clip, 0.0, 0.0))
+            // Check if we have multi-selected clips
+            if !selectedClipIds.isEmpty {
+                // Get all selected clips from this track
+                let selectedClips = track.audioClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
                 }
                 
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString("Audio Clips: \(fullyContainedClips.count)", forType: .string)
-            } else {
-                // Handle partial clips
-                for clip in overlappingClips {
-                    // Calculate offsets (how much of the clip we're copying)
-                    let startOffset = max(0, selStart - clip.startBeat)
-                    let endOffset = max(0, clip.endBeat - selEnd)
+                if !selectedClips.isEmpty {
+                    // Add all selected clips to clipboard with no offsets
+                    for clip in selectedClips {
+                        clipsToCopy.append((clip, 0.0, 0.0))
+                    }
                     
-                    clipsToCopy.append((clip, startOffset, endOffset))
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("Audio Clips: \(selectedClips.count)", forType: .string)
+                    
+                    // Store the copied clips
+                    clipboardAudioClips = clipsToCopy
+                    return
                 }
-                
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString("Partial Audio Clips: \(overlappingClips.count)", forType: .string)
             }
             
-            // Store the copied clips
-            clipboardAudioClips = clipsToCopy
+            // If no multi-selection, fall back to the regular selection
+            if timelineState.selectionActive {
+                // Get the selection range
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Get all audio clips that overlap with the selection
+                let overlappingClips = track.audioClips.filter { clip in
+                    // Check if the selection overlaps with this clip
+                    selStart < clip.endBeat && selEnd > clip.startBeat
+                }
+                
+                if overlappingClips.isEmpty {
+                    // No clips to copy - do nothing and return
+                    return
+                }
+                
+                // Check if we have an exact clip match (fully selected clip)
+                let fullyContainedClips = overlappingClips.filter { clip in
+                    abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
+                }
+                
+                if !fullyContainedClips.isEmpty {
+                    // Full clips selected, add all to clipboard
+                    for clip in fullyContainedClips {
+                        clipsToCopy.append((clip, 0.0, 0.0))
+                    }
+                    
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("Audio Clips: \(fullyContainedClips.count)", forType: .string)
+                } else {
+                    // Handle partial clips
+                    for clip in overlappingClips {
+                        // Calculate offsets (how much of the clip we're copying)
+                        let startOffset = max(0, selStart - clip.startBeat)
+                        let endOffset = max(0, clip.endBeat - selEnd)
+                        
+                        clipsToCopy.append((clip, startOffset, endOffset))
+                    }
+                    
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("Partial Audio Clips: \(overlappingClips.count)", forType: .string)
+                }
+                
+                // Store the copied clips
+                clipboardAudioClips = clipsToCopy
+            }
         }
     }
     
@@ -639,382 +655,63 @@ class MenuCoordinator: NSObject, ObservableObject {
     }
     
     @objc func duplicateSelectedClip() {
+        // First copy the selected clips
+        copySelectedClip()
+        
+        // Then paste them right after the existing clips
         guard let projectViewModel = projectViewModel,
               let timelineState = projectViewModel.timelineState,
-              timelineState.selectionActive,
               let trackId = projectViewModel.selectedTrackId,
-              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+              let track = projectViewModel.tracks.first(where: { $0.id == trackId }) else {
             return
         }
         
-        var track = projectViewModel.tracks[trackIndex]
+        // Get any multi-selected clips
+        let selectedClipIds = timelineState.selectedClipIds
         
-        // Get the selection range
-        let (selStart, selEnd) = timelineState.normalizedSelectionRange
-        let selectionDuration = selEnd - selStart
-        
-        // Exit if we don't have a valid selection duration
-        guard selectionDuration > 0 else { return }
-        
-        // The paste/duplicate position is at the end of the current selection
-        let duplicatePosition = selEnd
-        
-        if track.type == .midi {
-            // Get all MIDI clips that overlap with the selection
-            let overlappingClips = track.midiClips.filter { clip in
-                // Check if the selection overlaps with this clip
-                selStart < clip.endBeat && selEnd > clip.startBeat
+        if !selectedClipIds.isEmpty {
+            // Figure out the end beat of the last selected clip
+            var lastEndBeat: Double = 0
+            
+            if track.type == .midi {
+                // Get all selected MIDI clips
+                let selectedClips = track.midiClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
+                }
+                
+                // Find the rightmost end beat
+                lastEndBeat = selectedClips.map { $0.endBeat }.max() ?? 0
+            } else if track.type == .audio {
+                // Get all selected audio clips
+                let selectedClips = track.audioClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
+                }
+                
+                // Find the rightmost end beat
+                lastEndBeat = selectedClips.map { $0.endBeat }.max() ?? 0
             }
             
-            if overlappingClips.isEmpty {
-                // No clips to duplicate - do nothing and return
+            if lastEndBeat > 0 {
+                // Move the playhead to the end position for pasting
+                projectViewModel.seekToBeat(lastEndBeat)
+                
+                // Now paste the clips
+                pasteClip()
+                
                 return
             }
+        }
+        
+        // If no multi-selection, fall back to regular selection
+        if timelineState.selectionActive {
+            // Get the selection range to find the end of selected clip
+            let (_, selEnd) = timelineState.normalizedSelectionRange
             
-            // Initialize array to store clips to duplicate
-            var clipsToDuplicate: [(MidiClip, Double, Double)] = []
-            var clipsToAdd: [MidiClip] = []
-            var clipsToRemove: [UUID] = []
+            // Move the playhead to the end of the selection
+            projectViewModel.seekToBeat(selEnd)
             
-            // Check if we have exact clip matches (fully selected clips)
-            let fullyContainedClips = overlappingClips.filter { clip in
-                abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
-            }
-            
-            if !fullyContainedClips.isEmpty {
-                // Full clips selected - just duplicate these clips
-                for clip in fullyContainedClips {
-                    clipsToDuplicate.append((clip, 0.0, 0.0))
-                }
-            } else {
-                // Handle partial clips - collect all fragments in the selection
-                for clip in overlappingClips {
-                    // Calculate how much of the clip is in the selection
-                    let clipStart = clip.startBeat
-                    let clipEnd = clip.endBeat
-                    
-                    if selStart <= clipStart && selEnd >= clipEnd {
-                        // Clip fully contained in selection
-                        clipsToDuplicate.append((clip, 0.0, 0.0))
-                    } else {
-                        // Calculate offsets (how much of the clip we're copying)
-                        let startOffset = max(0, selStart - clipStart)
-                        let endOffset = max(0, clipEnd - selEnd)
-                        
-                        clipsToDuplicate.append((clip, startOffset, endOffset))
-                        
-                        // If the selection only covers part of a clip, we need to modify the original clip
-                        if selStart > clipStart || selEnd < clipEnd {
-                            if selStart > clipStart && selEnd < clipEnd {
-                                // Selection is in the middle - split into two clips
-                                // The original clip will be resized to the part before selection
-                                let firstPartDuration = selStart - clipStart
-                                
-                                // Create a new clip for the part after selection
-                                let thirdPartStartBeat = selEnd
-                                let thirdPartDuration = clipEnd - selEnd
-                                
-                                // Only add the third part if it has meaningful duration
-                                if thirdPartDuration > 0.01 {
-                                    let newClipName = "\(clip.name) (part 2)"
-                                    var thirdPart = MidiClip(
-                                        name: newClipName,
-                                        startBeat: thirdPartStartBeat,
-                                        duration: thirdPartDuration,
-                                        color: clip.color
-                                    )
-                                    
-                                    // Copy relevant notes
-                                    for note in clip.notes {
-                                        let noteStart = note.startBeat + clipStart
-                                        if noteStart >= selEnd && noteStart < clipEnd {
-                                            // This note belongs in the third part
-                                            let newNote = MidiNote(
-                                                pitch: note.pitch,
-                                                startBeat: note.startBeat - (selEnd - clipStart),
-                                                duration: note.duration,
-                                                velocity: note.velocity
-                                            )
-                                            thirdPart.notes.append(newNote)
-                                        }
-                                    }
-                                    
-                                    clipsToAdd.append(thirdPart)
-                                }
-                                
-                                // Resize the original clip
-                                _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: firstPartDuration)
-                            } else if selStart <= clipStart && selEnd < clipEnd {
-                                // Selection covers beginning of clip - modify original to keep only the end
-                                let newStartBeat = selEnd
-                                let newDuration = clipEnd - selEnd
-                                
-                                if newDuration > 0.01 {
-                                    _ = midiViewModel?.moveMidiClip(trackId: trackId, clipId: clip.id, newStartBeat: newStartBeat)
-                                    _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                                } else {
-                                    // If the remaining clip is too small, just remove it
-                                    clipsToRemove.append(clip.id)
-                                }
-                            } else if selStart > clipStart && selEnd >= clipEnd {
-                                // Selection covers end of clip - keep only the beginning
-                                let newDuration = selStart - clipStart
-                                
-                                if newDuration > 0.01 {
-                                    _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                                } else {
-                                    // If the remaining clip is too small, just remove it
-                                    clipsToRemove.append(clip.id)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Remove any clips marked for removal
-            for clipId in clipsToRemove {
-                _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: clipId)
-            }
-            
-            // Now create the duplicated clips at the paste position
-            for (originalClip, startOffset, endOffset) in clipsToDuplicate {
-                // Calculate the duration of the clip to duplicate
-                let originalDuration = originalClip.duration
-                let newDuration = min(originalDuration - startOffset - endOffset, selectionDuration)
-                
-                // Get the clip name with proper numbering
-                let baseName = originalClip.name.replacingOccurrences(of: " \\(copy \\d+\\)$", with: "", options: .regularExpression)
-                let copyCount = getNextCopyCount(for: baseName)
-                let newName = "\(baseName) (copy \(copyCount))"
-                
-                // Calculate the relative position within the selection
-                let clipStartInSelection = max(0, originalClip.startBeat - selStart)
-                let newStartBeat = duplicatePosition + clipStartInSelection
-                
-                // Create a new clip with adjusted timing
-                var newClip = MidiClip(
-                    name: newName,
-                    startBeat: newStartBeat,
-                    duration: newDuration,
-                    color: originalClip.color
-                )
-                
-                // Copy notes from the original clip
-                if startOffset == 0 && endOffset == 0 {
-                    // Full clip duplicate - copy all notes with position adjustments
-                    for note in originalClip.notes {
-                        let newNote = MidiNote(
-                            pitch: note.pitch,
-                            startBeat: note.startBeat,
-                            duration: note.duration,
-                            velocity: note.velocity
-                        )
-                        newClip.notes.append(newNote)
-                    }
-                } else {
-                    // Partial clip duplicate - copy only the notes in the selected range
-                    for note in originalClip.notes {
-                        // Check if the note is in the duplicated range
-                        let absoluteNoteStart = originalClip.startBeat + note.startBeat
-                        let absoluteNoteEnd = absoluteNoteStart + note.duration
-                        
-                        if absoluteNoteStart >= selStart && absoluteNoteEnd <= selEnd {
-                            // Note is fully within the selection
-                            let relativeStart = absoluteNoteStart - selStart
-                            let newNote = MidiNote(
-                                pitch: note.pitch,
-                                startBeat: relativeStart,
-                                duration: note.duration,
-                                velocity: note.velocity
-                            )
-                            newClip.notes.append(newNote)
-                        }
-                    }
-                }
-                
-                clipsToAdd.append(newClip)
-            }
-            
-            // Check if we can add all clips (no overlaps)
-            let totalSpan = selectionDuration
-            let canAddClips = track.canAddMidiClips(startingAt: duplicatePosition, clips: clipsToAdd)
-            
-            if canAddClips {
-                // Add all clips
-                for clip in clipsToAdd {
-                    track.addMidiClip(clip)
-                }
-                
-                // Update the track in the project
-                projectViewModel.updateTrack(at: trackIndex, with: track)
-                
-                // Select the duplicated area
-                timelineState.startSelection(at: duplicatePosition, trackId: trackId)
-                timelineState.updateSelection(to: duplicatePosition + totalSpan)
-            } else {
-                // Show error alert - can't duplicate here due to overlapping clips
-                let alert = NSAlert()
-                alert.messageText = "Cannot Duplicate Clips"
-                alert.informativeText = "The clips cannot be duplicated because they would overlap with existing clips."
-                alert.alertStyle = .warning
-                alert.runModal()
-            }
-        } else if track.type == .audio {
-            // Get all audio clips that overlap with the selection
-            let overlappingClips = track.audioClips.filter { clip in
-                // Check if the selection overlaps with this clip
-                selStart < clip.endBeat && selEnd > clip.startBeat
-            }
-            
-            if overlappingClips.isEmpty {
-                // No clips to duplicate - do nothing and return
-                return
-            }
-            
-            // Initialize array to store clips to duplicate
-            var clipsToDuplicate: [(AudioClip, Double, Double)] = []
-            var clipsToAdd: [AudioClip] = []
-            var clipsToRemove: [UUID] = []
-            
-            // Check if we have exact clip matches (fully selected clips)
-            let fullyContainedClips = overlappingClips.filter { clip in
-                abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
-            }
-            
-            if !fullyContainedClips.isEmpty {
-                // Full clips selected - just duplicate these clips
-                for clip in fullyContainedClips {
-                    clipsToDuplicate.append((clip, 0.0, 0.0))
-                }
-            } else {
-                // Handle partial clips - collect all fragments in the selection
-                for clip in overlappingClips {
-                    // Calculate how much of the clip is in the selection
-                    let clipStart = clip.startBeat
-                    let clipEnd = clip.endBeat
-                    
-                    if selStart <= clipStart && selEnd >= clipEnd {
-                        // Clip fully contained in selection
-                        clipsToDuplicate.append((clip, 0.0, 0.0))
-                    } else {
-                        // Calculate offsets (how much of the clip we're copying)
-                        let startOffset = max(0, selStart - clipStart)
-                        let endOffset = max(0, clipEnd - selEnd)
-                        
-                        clipsToDuplicate.append((clip, startOffset, endOffset))
-                        
-                        // If the selection only covers part of a clip, we need to modify the original clip
-                        if selStart > clipStart || selEnd < clipEnd {
-                            if selStart > clipStart && selEnd < clipEnd {
-                                // Selection is in the middle - split into two clips
-                                // The original clip will be resized to the part before selection
-                                let firstPartDuration = selStart - clipStart
-                                
-                                // Create a new clip for the part after selection
-                                let thirdPartStartBeat = selEnd
-                                let thirdPartDuration = clipEnd - selEnd
-                                
-                                // Only add the third part if it has meaningful duration
-                                if thirdPartDuration > 0.01 {
-                                    let newClipName = "\(clip.name) (part 2)"
-                                    var thirdPart = AudioClip(
-                                        name: newClipName,
-                                        startBeat: thirdPartStartBeat,
-                                        duration: thirdPartDuration,
-                                        color: clip.color,
-                                        waveformData: clip.waveformData
-                                    )
-                                    
-                                    clipsToAdd.append(thirdPart)
-                                }
-                                
-                                // Resize the original clip
-                                _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: firstPartDuration)
-                            } else if selStart <= clipStart && selEnd < clipEnd {
-                                // Selection covers beginning of clip - modify original to keep only the end
-                                let newStartBeat = selEnd
-                                let newDuration = clipEnd - selEnd
-                                
-                                if newDuration > 0.01 {
-                                    _ = audioViewModel?.moveAudioClip(trackId: trackId, clipId: clip.id, newStartBeat: newStartBeat)
-                                    _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                                } else {
-                                    // If the remaining clip is too small, just remove it
-                                    clipsToRemove.append(clip.id)
-                                }
-                            } else if selStart > clipStart && selEnd >= clipEnd {
-                                // Selection covers end of clip - keep only the beginning
-                                let newDuration = selStart - clipStart
-                                
-                                if newDuration > 0.01 {
-                                    _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                                } else {
-                                    // If the remaining clip is too small, just remove it
-                                    clipsToRemove.append(clip.id)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Remove any clips marked for removal
-            for clipId in clipsToRemove {
-                _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clipId)
-            }
-            
-            // Now create the duplicated clips at the paste position
-            for (originalClip, startOffset, endOffset) in clipsToDuplicate {
-                // Calculate the duration of the clip to duplicate
-                let originalDuration = originalClip.duration
-                let newDuration = min(originalDuration - startOffset - endOffset, selectionDuration)
-                
-                // Get the clip name with proper numbering
-                let baseName = originalClip.name.replacingOccurrences(of: " \\(copy \\d+\\)$", with: "", options: .regularExpression)
-                let copyCount = getNextCopyCount(for: baseName)
-                let newName = "\(baseName) (copy \(copyCount))"
-                
-                // Calculate the relative position within the selection
-                let clipStartInSelection = max(0, originalClip.startBeat - selStart)
-                let newStartBeat = duplicatePosition + clipStartInSelection
-                
-                // Create a new clip with adjusted timing
-                var newClip = AudioClip(
-                    name: newName,
-                    startBeat: newStartBeat,
-                    duration: newDuration,
-                    color: originalClip.color,
-                    waveformData: originalClip.waveformData
-                )
-                
-                clipsToAdd.append(newClip)
-            }
-            
-            // Check if we can add all clips (no overlaps)
-            let totalSpan = selectionDuration
-            let canAddClips = track.canAddAudioClips(startingAt: duplicatePosition, clips: clipsToAdd)
-            
-            if canAddClips {
-                // Add all clips
-                for clip in clipsToAdd {
-                    track.addAudioClip(clip)
-                }
-                
-                // Update the track in the project
-                projectViewModel.updateTrack(at: trackIndex, with: track)
-                
-                // Select the duplicated area
-                timelineState.startSelection(at: duplicatePosition, trackId: trackId)
-                timelineState.updateSelection(to: duplicatePosition + totalSpan)
-            } else {
-                // Show error alert - can't duplicate here due to overlapping clips
-                let alert = NSAlert()
-                alert.messageText = "Cannot Duplicate Clips"
-                alert.informativeText = "The clips cannot be duplicated because they would overlap with existing clips."
-                alert.alertStyle = .warning
-                alert.runModal()
-            }
+            // Paste the clip at the new position
+            pasteClip()
         }
     }
     

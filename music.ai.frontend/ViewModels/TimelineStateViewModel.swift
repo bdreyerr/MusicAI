@@ -100,6 +100,9 @@ class TimelineStateViewModel: ObservableObject {
     @Published var selectionStartBeat: Double = 0.0
     @Published var selectionEndBeat: Double = 0.0
     
+    // Multi-selection state
+    @Published var selectedClipIds: Set<UUID> = []
+    
     // Fixed 81 bars minimum for the timeline
     private let minimumBarsToShow: Int = 81
     
@@ -350,6 +353,9 @@ class TimelineStateViewModel: ObservableObject {
             self.selectionActive = false
             self.selectionStartBeat = 0.0
             self.selectionEndBeat = 0.0
+            
+            // Also clear the multi-selection
+            self.clearSelectedClips()
         }
     }
     
@@ -699,5 +705,53 @@ class TimelineStateViewModel: ObservableObject {
         }
         
         return hasSelection(trackId: trackId, projectViewModel: projectViewModel)
+    }
+    
+    // MARK: - Multiple Clip Selection Methods
+    
+    /// Add a clip to the multi-selection
+    func addClipToSelection(clipId: UUID) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.selectedClipIds.insert(clipId)
+        }
+    }
+    
+    /// Remove a clip from the multi-selection
+    func removeClipFromSelection(clipId: UUID) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.selectedClipIds.remove(clipId)
+        }
+    }
+    
+    /// Toggle a clip's selection state
+    func toggleClipSelection(clipId: UUID) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if self.selectedClipIds.contains(clipId) {
+                self.selectedClipIds.remove(clipId)
+            } else {
+                self.selectedClipIds.insert(clipId)
+            }
+        }
+    }
+    
+    /// Clear all selected clips
+    func clearSelectedClips() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.selectedClipIds.removeAll()
+        }
+    }
+    
+    /// Check if a clip is in the multi-selection
+    func isClipSelected(clipId: UUID) -> Bool {
+        return selectedClipIds.contains(clipId)
+    }
+    
+    /// Get the number of selected clips
+    var selectedClipCount: Int {
+        return selectedClipIds.count
     }
 } 

@@ -44,6 +44,12 @@ struct AudioClipView: View {
     
     // Computed property to check if this clip is selected
     private var isSelected: Bool {
+        // First check if this clip is in the multi-selection
+        if state.isClipSelected(clipId: clip.id) {
+            return true
+        }
+        
+        // If not in multi-selection, check traditional selection
         guard state.selectionActive,
                 projectViewModel.selectedTrackId == track.id else {
             return false
@@ -640,18 +646,44 @@ struct AudioClipView: View {
     
     // Function to select this clip
     private func selectThisClip() {
-        // Select the track
-        projectViewModel.selectTrack(id: track.id)
+        // Check if shift or command key is pressed for multi-selection
+        let isShiftKeyPressed = NSEvent.modifierFlags.contains(.shift)
+        let isCommandKeyPressed = NSEvent.modifierFlags.contains(.command)
         
-        // Create a selection that matches the clip's duration
-        state.startSelection(at: clip.startBeat, trackId: track.id)
-        state.updateSelection(to: clip.endBeat)
-        
-        // Move playhead to the start of the clip
-        projectViewModel.seekToBeat(clip.startBeat)
-        
-        // Print debug info
-        //        print("Clip selected: \(clip.name) from \(clip.startBeat) to \(clip.endBeat)")
+        if isShiftKeyPressed || isCommandKeyPressed {
+            // Toggle this clip in the multiple selection
+            state.toggleClipSelection(clipId: clip.id)
+            
+            // If this is the first clip in the selection, also select the track
+            if state.selectedClipCount == 1 {
+                projectViewModel.selectTrack(id: track.id)
+            }
+            
+            // If the clip was just added to selection, also update the timeline selection
+            if state.isClipSelected(clipId: clip.id) {
+                state.startSelection(at: clip.startBeat, trackId: track.id)
+                state.updateSelection(to: clip.endBeat)
+                
+                // Move playhead to the start of the clip
+                projectViewModel.seekToBeat(clip.startBeat)
+            }
+        } else {
+            // Clear any existing multi-selection
+            state.clearSelectedClips()
+            
+            // Add just this clip to the selection
+            state.addClipToSelection(clipId: clip.id)
+            
+            // Select the track
+            projectViewModel.selectTrack(id: track.id)
+            
+            // Create a selection that matches the clip's duration
+            state.startSelection(at: clip.startBeat, trackId: track.id)
+            state.updateSelection(to: clip.endBeat)
+            
+            // Move playhead to the start of the clip
+            projectViewModel.seekToBeat(clip.startBeat)
+        }
     }
     
     // Rename the clip
