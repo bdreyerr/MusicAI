@@ -9,17 +9,22 @@ struct BottomSectionView: View {
     @State private var selectedTab: Int = 0 // 0 = Waveform/Piano Roll, 1 = Effects
     
     // State for resizing
-    @State private var sectionHeight: CGFloat = 200 // Increased default height
+    @State private var sectionHeight: CGFloat = 300
     @State private var isHoveringResizeArea: Bool = false
     @State private var isDraggingResize: Bool = false
     @State private var dragStartY: CGFloat = 0
     @State private var dragStartHeight: CGFloat = 0
+    @State private var lastDragLocation: CGFloat = 0 // Track last drag location to prevent jitter
     
     // Minimum heights
     private let collapsedHeight: CGFloat = 40
     private let minExpandedHeight: CGFloat = 160
-    private let maxExpandedHeight: CGFloat = 400
+    private let maxExpandedHeight: CGFloat = 600
     private let resizeAreaHeight: CGFloat = 8
+    
+    // Animation settings
+    private let resizeAnimation = Animation.interpolatingSpring(mass: 0.1, stiffness: 170, damping: 18, initialVelocity: 0)
+    private let expandCollapseAnimation = Animation.spring(response: 0.3, dampingFraction: 0.7)
     
     var body: some View {
         VStack(spacing: 0) {
@@ -28,32 +33,48 @@ struct BottomSectionView: View {
                 .fill(Color.clear)
                 .frame(height: resizeAreaHeight)
                 .background(isHoveringResizeArea ? themeManager.tertiaryBackgroundColor.opacity(0.5) : Color.clear)
+                .contentShape(Rectangle()) // Improve drag gesture detection
                 .onHover { hovering in
                     isHoveringResizeArea = hovering
-                    if hovering {
+                    if hovering && !isDraggingResize {
                         NSCursor.resizeUpDown.set()
                     } else if !isDraggingResize {
                         NSCursor.arrow.set()
                     }
                 }
                 .gesture(
-                    DragGesture(minimumDistance: 0)
+                    DragGesture(minimumDistance: 2, coordinateSpace: .global)
                         .onChanged { value in
+                            // Set initial state on first detection
                             if !isDraggingResize {
                                 isDraggingResize = true
                                 dragStartY = value.startLocation.y
                                 dragStartHeight = sectionHeight
+                                lastDragLocation = value.location.y
                                 NSCursor.resizeUpDown.set()
                             }
                             
-                            // Calculate new height (drag up = increase height)
-                            let dragDelta = dragStartY - value.location.y
-                            let newHeight = max(minExpandedHeight, min(maxExpandedHeight, dragStartHeight + dragDelta))
-                            sectionHeight = newHeight
+                            // Calculate movement delta - check if movement is significant to avoid micro-jitters
+                            let currentY = value.location.y
+                            let dragDelta = dragStartY - currentY
+                            
+                            // Only update if movement is significant enough (prevents micro-jitters)
+                            if abs(lastDragLocation - currentY) > 0.5 {
+                                let newHeight = max(minExpandedHeight, min(maxExpandedHeight, dragStartHeight + dragDelta))
+                                
+                                // Apply animation when not dragging for smoother transitions
+                                withAnimation(isDraggingResize ? nil : resizeAnimation) {
+                                    sectionHeight = newHeight
+                                }
+                                lastDragLocation = currentY
+                            }
                         }
                         .onEnded { _ in
+                            // Reset state
                             isDraggingResize = false
-                            if !isHoveringResizeArea {
+                            if isHoveringResizeArea {
+                                NSCursor.resizeUpDown.set()
+                            } else {
                                 NSCursor.arrow.set()
                             }
                         }
@@ -62,15 +83,59 @@ struct BottomSectionView: View {
             
             // Header bar with toggle
             HStack {
-                Text("Track Inspector")
+                Text("\(projectViewModel.selectedTrack?.name ?? "Track Inspector")")
                     .font(.headline)
                     .foregroundColor(themeManager.primaryTextColor)
                 
                 Spacer()
                 
+                if let selectedTrack = projectViewModel.selectedTrack {
+                    if selectedTrack.type != .master {
+                        // Custom tab bar at the bottom right
+                        HStack(spacing: 0) {
+                            Spacer()
+                            
+                            // Tab buttons container
+                            HStack(spacing: 1) {
+                                // First tab button
+                                TabButton(
+                                    title: selectedTrack.type == .audio ? "Waveform" : "Piano Roll",
+                                    systemImage: selectedTrack.type == .audio ? "waveform" : "pianokeys",
+                                    isSelected: selectedTab == 0,
+                                    action: {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            selectedTab = 0
+                                        }
+                                    }
+                                )
+                                
+                                // Second tab button
+                                TabButton(
+                                    title: "Effects",
+                                    systemImage: "slider.horizontal.3",
+                                    isSelected: selectedTab == 1,
+                                    action: {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            selectedTab = 1
+                                        }
+                                    }
+                                )
+                            }
+                            .frame(width: 300)
+                            .background(themeManager.tertiaryBackgroundColor)
+                            .cornerRadius(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(themeManager.secondaryBorderColor, lineWidth: 1)
+                            )
+                            .padding(8)
+                        }
+                    }
+                }
+                
                 // Toggle to expand/collapse the bottom section
                 Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(expandCollapseAnimation) {
                         isExpanded.toggle()
                     }
                 }) {
@@ -107,46 +172,6 @@ struct BottomSectionView: View {
                                 // Second tab: Effects
                                 EffectsRackView(projectViewModel: projectViewModel)
                                     .opacity(selectedTab == 1 ? 1 : 0)
-                                
-                                // Custom tab bar at the bottom right
-                                HStack(spacing: 0) {
-                                    Spacer()
-                                    
-                                    // Tab buttons container
-                                    HStack(spacing: 1) {
-                                        // First tab button
-                                        TabButton(
-                                            title: selectedTrack.type == .audio ? "Waveform" : "Piano Roll",
-                                            systemImage: selectedTrack.type == .audio ? "waveform" : "pianokeys",
-                                            isSelected: selectedTab == 0,
-                                            action: { 
-                                                withAnimation(.easeInOut(duration: 0.2)) {
-                                                    selectedTab = 0 
-                                                }
-                                            }
-                                        )
-                                        
-                                        // Second tab button
-                                        TabButton(
-                                            title: "Effects",
-                                            systemImage: "slider.horizontal.3",
-                                            isSelected: selectedTab == 1,
-                                            action: { 
-                                                withAnimation(.easeInOut(duration: 0.2)) {
-                                                    selectedTab = 1
-                                                }
-                                            }
-                                        )
-                                    }
-                                    .frame(width: 300)
-                                    .background(themeManager.tertiaryBackgroundColor)
-                                    .cornerRadius(6)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(themeManager.secondaryBorderColor, lineWidth: 1)
-                                    )
-                                    .padding(8)
-                                }
                             }
                         } else {
                             // Master track only shows effects
@@ -175,6 +200,8 @@ struct BottomSectionView: View {
                 .offset(y: -0.25),
             alignment: .top
         )
+        .animation(isDraggingResize ? nil : resizeAnimation, value: sectionHeight)
+        .animation(expandCollapseAnimation, value: isExpanded)
     }
 }
 
@@ -363,41 +390,27 @@ struct MIDIPianoRollView: View {
             if projectViewModel.midiViewModel.isMidiClipSelected(trackId: track.id),
                let clip = selectedClip {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Clip name and info
-                    HStack {
-                        Text(clip.name)
-                            .font(.headline)
-                            .foregroundColor(themeManager.primaryTextColor)
-                        
-                        Spacer()
-                        
-                        Text("Duration: \(String(format: "%.2f", clip.duration)) beats")
-                            .font(.caption)
-                            .foregroundColor(themeManager.secondaryTextColor)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 8)
+                    // TODO: Find a way to add back clip name and length
                     
-                    // Piano roll placeholder
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            Image(systemName: "pianokeys")
-                                .font(.system(size: 32))
-                                .foregroundColor(themeManager.secondaryTextColor)
-                            Text("Piano Roll Editor")
-                                .font(.headline)
-                                .foregroundColor(themeManager.secondaryTextColor)
-                            Spacer()
-                        }
-                        Text("Coming Soon")
-                            .font(.subheadline)
-                            .foregroundColor(themeManager.secondaryTextColor.opacity(0.8))
-                        Spacer()
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Piano roll editor (Previous)
+                    // HStack(spacing: 0) {
+                    //     // Piano roll on the left
+                    //     PianoRoll(midiClip: clip)
+                    //         .frame(width: 100) // Increased width to accommodate zoom controls and labels
+                        
+                    //     // Space for future MIDI notes editor
+                    //     ZStack {
+                    //         Rectangle()
+                    //             .fill(themeManager.secondaryBackgroundColor)
+                            
+                    //         Text("MIDI Notes Editor")
+                    //             .font(.headline)
+                    //             .foregroundColor(themeManager.secondaryTextColor)
+                    //     }
+                    // }
+                    // .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    MidiClipEditorContainerView(midiClip: clip)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(themeManager.secondaryBackgroundColor)
@@ -432,4 +445,4 @@ struct MIDIPianoRollView: View {
 #Preview {
     BottomSectionView(projectViewModel: ProjectViewModel())
         .environmentObject(ThemeManager())
-} 
+}
