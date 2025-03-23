@@ -134,6 +134,15 @@ struct TimelineButtons: View {
                 EmptyView()
             }
             .keyboardShortcut("d", modifiers: [.command])
+            
+            // Split Clips (cmd e)
+            Button(action: {
+                print("splitting")
+                splitClip()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut("e", modifiers: [.command])
 
         }
         .frame(width: 0, height: 0)
@@ -499,6 +508,12 @@ struct TimelineButtons: View {
 
     private func duplicateSelection() {
         menuCoordinator.duplicateSelectedClip()
+    }
+
+    // Split clips at playhead or selection
+    private func splitClip() {
+        // Use the MenuCoordinator's splitClip method
+        menuCoordinator.splitClip()
     }
 }
 

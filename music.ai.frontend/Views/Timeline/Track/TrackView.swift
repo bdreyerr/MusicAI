@@ -233,6 +233,14 @@ struct TrackView: View {
             }
         }
         
+        // Add Split option when there's a clip under playhead or a selection
+        if (track.type == .midi && !track.midiClips.isEmpty) || (track.type == .audio && !track.audioClips.isEmpty) {
+            Button("Split") {
+                menuCoordinator.splitClip()
+            }
+            .keyboardShortcut("e", modifiers: .command)
+        }
+        
         Divider()
         
         // Enable/Disable option

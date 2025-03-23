@@ -849,6 +849,569 @@ class MenuCoordinator: NSObject, ObservableObject {
         }
     }
     
+    @objc func splitClip() {
+        guard let projectViewModel = projectViewModel,
+              let timelineState = projectViewModel.timelineState,
+              let trackId = projectViewModel.selectedTrackId,
+              let track = projectViewModel.tracks.first(where: { $0.id == trackId }) else {
+            return
+        }
+        
+        if track.type == .midi {
+            // Check if we have a selection
+            if timelineState.selectionActive {
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Find clips that overlap with the selection
+                let overlappingClips = track.midiClips.filter { clip in
+                    selStart < clip.endBeat && selEnd > clip.startBeat
+                }
+                
+                if !overlappingClips.isEmpty {
+                    // Process each overlapping clip
+                    for clip in overlappingClips {
+                        print("DEBUG: Splitting MIDI clip at selection - clipId: \(clip.id), clipName: \(clip.name)")
+                        print("DEBUG: Selection range: \(selStart) to \(selEnd)")
+                        print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
+                        
+                        // Store the original clip data
+                        let originalClipId = clip.id
+                        let originalStartBeat = clip.startBeat
+                        let originalEndBeat = clip.endBeat
+                        let originalDuration = clip.duration
+                        let originalNotes = clip.notes
+                        let originalColor = clip.color
+                        let originalName = clip.name
+                        
+                        // Variables to track which parts to create
+                        let createFirstPart = selStart > originalStartBeat
+                        let createMiddlePart = selStart < originalEndBeat && selEnd > originalStartBeat
+                        let createLastPart = selEnd < originalEndBeat
+                        
+                        // IMPORTANT FIX: First remove the original clip using the view model directly
+                        print("DEBUG: Removing original clip before creating split clips")
+                        _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: originalClipId)
+                        
+                        // Get the track AFTER the clip has been removed
+                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                           var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                            
+                            print("DEBUG: Current clip count after removing original: \(updatedTrack.midiClips.count)")
+                            var clipsToAdd = [MidiClip]()
+                            var clipNumber = 1
+                            
+                            // FIRST PART: Before selection
+                            if createFirstPart {
+                                let firstPartName = "\(originalName) (\(clipNumber))"
+                                clipNumber += 1
+                                let firstPartStartBeat = originalStartBeat
+                                let firstPartDuration = selStart - originalStartBeat
+                                print("DEBUG: Creating first MIDI part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
+                                
+                                // Filter notes for the first part
+                                let firstPartNotes = originalNotes.compactMap { note -> MidiNote? in
+                                    let noteStartBeat = note.startBeat
+                                    let noteEndBeat = noteStartBeat + note.duration
+                                    
+                                    // Only keep notes that end before the selection
+                                    if noteEndBeat <= (selStart - originalStartBeat) {
+                                        return note
+                                    }
+                                    // If note crosses the boundary
+                                    else if noteStartBeat < (selStart - originalStartBeat) && noteEndBeat > (selStart - originalStartBeat) {
+                                        // Truncate the note at selection start
+                                        let newDuration = selStart - originalStartBeat - noteStartBeat
+                                        return MidiNote(
+                                            pitch: note.pitch,
+                                            startBeat: noteStartBeat,
+                                            duration: newDuration,
+                                            velocity: note.velocity
+                                        )
+                                    }
+                                    return nil
+                                }
+                                
+                                // Create the first clip
+                                let firstPart = MidiClip(
+                                    name: firstPartName,
+                                    startBeat: firstPartStartBeat,
+                                    duration: firstPartDuration,
+                                    color: originalColor,
+                                    notes: firstPartNotes
+                                )
+                                
+                                clipsToAdd.append(firstPart)
+                            }
+                            
+                            // MIDDLE PART: The selection itself (only for selection mode, not playhead mode)
+                            if createMiddlePart && selStart != selEnd {
+                                let middlePartName = "\(originalName) (\(clipNumber))"
+                                clipNumber += 1
+                                let middlePartStartBeat = selStart
+                                let middlePartDuration = selEnd - selStart
+                                print("DEBUG: Creating middle MIDI part - name: \(middlePartName), startBeat: \(middlePartStartBeat), duration: \(middlePartDuration)")
+                                
+                                // Filter notes for the middle part
+                                let middlePartNotes = originalNotes.compactMap { note -> MidiNote? in
+                                    let noteStartBeat = originalStartBeat + note.startBeat
+                                    let noteEndBeat = noteStartBeat + note.duration
+                                    
+                                    // If note is entirely within the selection
+                                    if noteStartBeat >= selStart && noteEndBeat <= selEnd {
+                                        return MidiNote(
+                                            pitch: note.pitch,
+                                            startBeat: noteStartBeat - selStart,
+                                            duration: note.duration,
+                                            velocity: note.velocity
+                                        )
+                                    }
+                                    // If note starts before selection but extends into it
+                                    else if noteStartBeat < selStart && noteEndBeat > selStart && noteEndBeat <= selEnd {
+                                        let newStartBeat = 0.0
+                                        let newDuration = noteEndBeat - selStart
+                                        return MidiNote(
+                                            pitch: note.pitch,
+                                            startBeat: newStartBeat,
+                                            duration: newDuration,
+                                            velocity: note.velocity
+                                        )
+                                    }
+                                    // If note starts in selection but extends past it
+                                    else if noteStartBeat >= selStart && noteStartBeat < selEnd && noteEndBeat > selEnd {
+                                        let newStartBeat = noteStartBeat - selStart
+                                        let newDuration = selEnd - noteStartBeat
+                                        return MidiNote(
+                                            pitch: note.pitch,
+                                            startBeat: newStartBeat,
+                                            duration: newDuration,
+                                            velocity: note.velocity
+                                        )
+                                    }
+                                    // If note spans the entire selection
+                                    else if noteStartBeat < selStart && noteEndBeat > selEnd {
+                                        let newStartBeat = 0.0
+                                        let newDuration = middlePartDuration
+                                        return MidiNote(
+                                            pitch: note.pitch,
+                                            startBeat: newStartBeat,
+                                            duration: newDuration,
+                                            velocity: note.velocity
+                                        )
+                                    }
+                                    return nil
+                                }
+                                
+                                // Create the middle clip
+                                let middlePart = MidiClip(
+                                    name: middlePartName,
+                                    startBeat: middlePartStartBeat,
+                                    duration: middlePartDuration,
+                                    color: originalColor,
+                                    notes: middlePartNotes
+                                )
+                                
+                                clipsToAdd.append(middlePart)
+                            }
+                            
+                            // LAST PART: After selection
+                            if createLastPart {
+                                let lastPartName = "\(originalName) (\(clipNumber))"
+                                let lastPartStartBeat = selEnd
+                                let lastPartDuration = originalEndBeat - selEnd
+                                print("DEBUG: Creating last MIDI part - name: \(lastPartName), startBeat: \(lastPartStartBeat), duration: \(lastPartDuration)")
+                                
+                                // Filter notes for the last part
+                                let lastPartNotes = originalNotes.compactMap { note -> MidiNote? in
+                                    let noteStartBeat = originalStartBeat + note.startBeat
+                                    let noteEndBeat = noteStartBeat + note.duration
+                                    
+                                    // If note is entirely after the selection
+                                    if noteStartBeat >= selEnd {
+                                        return MidiNote(
+                                            pitch: note.pitch,
+                                            startBeat: noteStartBeat - selEnd,
+                                            duration: note.duration,
+                                            velocity: note.velocity
+                                        )
+                                    }
+                                    // If note crosses the selection end boundary
+                                    else if noteStartBeat < selEnd && noteEndBeat > selEnd {
+                                        let newStartBeat = 0.0
+                                        let newDuration = noteEndBeat - selEnd
+                                        return MidiNote(
+                                            pitch: note.pitch,
+                                            startBeat: newStartBeat,
+                                            duration: newDuration,
+                                            velocity: note.velocity
+                                        )
+                                    }
+                                    return nil
+                                }
+                                
+                                // Create the last clip
+                                let lastPart = MidiClip(
+                                    name: lastPartName,
+                                    startBeat: lastPartStartBeat,
+                                    duration: lastPartDuration,
+                                    color: originalColor,
+                                    notes: lastPartNotes
+                                )
+                                
+                                clipsToAdd.append(lastPart)
+                            }
+                            
+                            // Add all clips to the track
+                            for newClip in clipsToAdd {
+                                updatedTrack.addMidiClip(newClip)
+                                print("DEBUG: Added \(newClip.name) at \(newClip.startBeat) with duration \(newClip.duration)")
+                            }
+                            
+                            // Update the track in the project with a single operation
+                            projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            print("DEBUG: Split operation complete - added \(clipsToAdd.count) new clips")
+                        }
+                    }
+                    
+                    // Clear the selection after processing
+                    timelineState.clearSelection()
+                }
+            } else {
+                // No selection - split at playhead position
+                let playheadPosition = projectViewModel.currentBeat
+                
+                // Find clips that contain the playhead position
+                let overlappingClips = track.midiClips.filter { clip in
+                    playheadPosition > clip.startBeat && playheadPosition < clip.endBeat
+                }
+                
+                if !overlappingClips.isEmpty {
+                    // Process each overlapping clip
+                    for clip in overlappingClips {
+                        print("DEBUG: Splitting MIDI clip at playhead - clipId: \(clip.id), clipName: \(clip.name)")
+                        print("DEBUG: Playhead position: \(playheadPosition)")
+                        print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
+                        
+                        // Store the original clip data
+                        let originalClipId = clip.id
+                        let originalStartBeat = clip.startBeat
+                        let originalEndBeat = clip.endBeat
+                        let originalDuration = clip.duration
+                        let originalNotes = clip.notes
+                        let originalColor = clip.color
+                        let originalName = clip.name
+                        
+                        // IMPORTANT FIX: First remove the original clip using the view model directly
+                        print("DEBUG: Removing original clip before creating split clips")
+                        _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: originalClipId)
+                        
+                        // Get the track AFTER the clip has been removed
+                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                           var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                            
+                            print("DEBUG: Current clip count after removing original: \(updatedTrack.midiClips.count)")
+                            var clipsToAdd = [MidiClip]()
+                            
+                            // First part - from original start to playhead
+                            let firstPartName = "\(originalName) (1)"
+                            let firstPartStartBeat = originalStartBeat
+                            let firstPartDuration = playheadPosition - originalStartBeat
+                            print("DEBUG: Creating first part at playhead - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
+                            
+                            // Filter notes for the first part
+                            let firstPartNotes = originalNotes.compactMap { note -> MidiNote? in
+                                let noteStartBeat = note.startBeat
+                                let noteEndBeat = noteStartBeat + note.duration
+                                
+                                // Only keep notes that end before the playhead
+                                if noteEndBeat <= (playheadPosition - originalStartBeat) {
+                                    return note
+                                }
+                                // If note crosses the playhead
+                                else if noteStartBeat < (playheadPosition - originalStartBeat) && noteEndBeat > (playheadPosition - originalStartBeat) {
+                                    // Truncate the note at playhead
+                                    let newDuration = playheadPosition - originalStartBeat - noteStartBeat
+                                    return MidiNote(
+                                        pitch: note.pitch,
+                                        startBeat: noteStartBeat,
+                                        duration: newDuration,
+                                        velocity: note.velocity
+                                    )
+                                }
+                                return nil
+                            }
+                            
+                            // Create the first clip
+                            let firstPart = MidiClip(
+                                name: firstPartName,
+                                startBeat: firstPartStartBeat,
+                                duration: firstPartDuration,
+                                color: originalColor,
+                                notes: firstPartNotes
+                            )
+                            
+                            clipsToAdd.append(firstPart)
+                            
+                            // Second part - from playhead to original end
+                            let secondPartName = "\(originalName) (1)"
+                            let secondPartStartBeat = playheadPosition
+                            let secondPartDuration = originalEndBeat - playheadPosition
+                            print("DEBUG: Creating second part at playhead - name: \(secondPartName), startBeat: \(secondPartStartBeat), duration: \(secondPartDuration)")
+                            
+                            // Filter notes for the second part
+                            let secondPartNotes = originalNotes.compactMap { note -> MidiNote? in
+                                let noteStartBeat = originalStartBeat + note.startBeat
+                                let noteEndBeat = noteStartBeat + note.duration
+                                
+                                // If note is entirely after the playhead
+                                if noteStartBeat >= playheadPosition {
+                                    return MidiNote(
+                                        pitch: note.pitch,
+                                        startBeat: noteStartBeat - playheadPosition,
+                                        duration: note.duration,
+                                        velocity: note.velocity
+                                    )
+                                }
+                                // If note crosses the playhead
+                                else if noteStartBeat < playheadPosition && noteEndBeat > playheadPosition {
+                                    let newStartBeat = 0.0
+                                    let newDuration = noteEndBeat - playheadPosition
+                                    return MidiNote(
+                                        pitch: note.pitch,
+                                        startBeat: newStartBeat,
+                                        duration: newDuration,
+                                        velocity: note.velocity
+                                    )
+                                }
+                                return nil
+                            }
+                            
+                            // Create the second clip
+                            let secondPart = MidiClip(
+                                name: secondPartName,
+                                startBeat: secondPartStartBeat,
+                                duration: secondPartDuration,
+                                color: originalColor,
+                                notes: secondPartNotes
+                            )
+                            
+                            clipsToAdd.append(secondPart)
+                            
+                            // Add all clips to the track
+                            for newClip in clipsToAdd {
+                                updatedTrack.addMidiClip(newClip)
+                                print("DEBUG: Added \(newClip.name) at \(newClip.startBeat) with duration \(newClip.duration)")
+                            }
+                            
+                            // Update the track in the project with a single operation
+                            projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            print("DEBUG: Split at playhead operation complete - added \(clipsToAdd.count) new clips")
+                        }
+                    }
+                }
+            }
+        } else if track.type == .audio {
+            // Check if we have a selection
+            if timelineState.selectionActive {
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Find clips that overlap with the selection
+                let overlappingClips = track.audioClips.filter { clip in
+                    selStart < clip.endBeat && selEnd > clip.startBeat
+                }
+                
+                if !overlappingClips.isEmpty {
+                    // Process each overlapping clip
+                    for clip in overlappingClips {
+                        print("DEBUG: Splitting Audio clip at selection - clipId: \(clip.id), clipName: \(clip.name)")
+                        print("DEBUG: Selection range: \(selStart) to \(selEnd)")
+                        print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
+                        
+                        // Store the original clip data
+                        let originalClipId = clip.id
+                        let originalStartBeat = clip.startBeat
+                        let originalEndBeat = clip.endBeat
+                        let originalDuration = clip.duration
+                        let originalWaveformData = clip.waveformData
+                        let originalColor = clip.color
+                        let originalClipName = clip.name
+                        
+                        // Variables to track which parts to create
+                        let createFirstPart = selStart > originalStartBeat
+                        let createMiddlePart = selStart < originalEndBeat && selEnd > originalStartBeat
+                        let createLastPart = selEnd < originalEndBeat
+                        
+                        // IMPORTANT FIX: First remove the original clip using the view model directly
+                        print("DEBUG: Removing original audio clip before creating split clips")
+                        _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
+                        
+                        // Get the track AFTER the clip has been removed
+                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                           var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                            
+                            print("DEBUG: Current audio clip count after removing original: \(updatedTrack.audioClips.count)")
+                            var clipsToAdd = [AudioClip]()
+                            
+                            var clipNumber = 1
+                            // FIRST PART: Before selection
+                            if createFirstPart {
+                                let firstPartName = "\(originalClipName) (\(clipNumber))"
+                                clipNumber += 1
+                                let firstPartStartBeat = originalStartBeat
+                                let firstPartDuration = selStart - originalStartBeat
+                                print("DEBUG: Creating first Audio part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
+                                
+                                // Create the first clip
+                                let firstPart = AudioClip(
+                                    name: firstPartName,
+                                    startBeat: firstPartStartBeat,
+                                    duration: firstPartDuration,
+                                    color: originalColor,
+                                    waveformData: originalWaveformData
+                                )
+                                
+                                clipsToAdd.append(firstPart)
+                            }
+                            
+                            // MIDDLE PART: The selection itself (only for selection mode, not playhead mode)
+                            if createMiddlePart && selStart != selEnd {
+                                let middlePartName = "\(originalClipName) (\(clipNumber))"
+                                clipNumber += 1
+                                let middlePartStartBeat = selStart
+                                let middlePartDuration = selEnd - selStart
+                                print("DEBUG: Creating middle Audio part - name: \(middlePartName), startBeat: \(middlePartStartBeat), duration: \(middlePartDuration)")
+                                
+                                // Create the middle clip
+                                let middlePart = AudioClip(
+                                    name: middlePartName,
+                                    startBeat: middlePartStartBeat,
+                                    duration: middlePartDuration,
+                                    color: originalColor,
+                                    waveformData: originalWaveformData
+                                )
+                                
+                                clipsToAdd.append(middlePart)
+                            }
+                            
+                            // LAST PART: After selection
+                            if createLastPart {
+                                let lastPartName = "\(originalClipName) (\(clipNumber))"
+                                let lastPartStartBeat = selEnd
+                                let lastPartDuration = originalEndBeat - selEnd
+                                print("DEBUG: Creating last Audio part - name: \(lastPartName), startBeat: \(lastPartStartBeat), duration: \(lastPartDuration)")
+                                
+                                // Create the last clip
+                                let lastPart = AudioClip(
+                                    name: lastPartName,
+                                    startBeat: lastPartStartBeat,
+                                    duration: lastPartDuration,
+                                    color: originalColor,
+                                    waveformData: originalWaveformData
+                                )
+                                
+                                clipsToAdd.append(lastPart)
+                            }
+                            
+                            // Add all clips to the track
+                            for newClip in clipsToAdd {
+                                updatedTrack.addAudioClip(newClip)
+                                print("DEBUG: Added \(newClip.name) at \(newClip.startBeat) with duration \(newClip.duration)")
+                            }
+                            
+                            // Update the track in the project with a single operation
+                            projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            print("DEBUG: Audio split operation complete - added \(clipsToAdd.count) new clips")
+                        }
+                    }
+                    
+                    // Clear the selection after processing
+                    timelineState.clearSelection()
+                }
+            } else {
+                // No selection - split at playhead position
+                let playheadPosition = projectViewModel.currentBeat
+                
+                // Find clips that contain the playhead position
+                let overlappingClips = track.audioClips.filter { clip in
+                    playheadPosition > clip.startBeat && playheadPosition < clip.endBeat
+                }
+                
+                if !overlappingClips.isEmpty {
+                    // Process each overlapping clip
+                    for clip in overlappingClips {
+                        print("DEBUG: Splitting Audio clip at playhead - clipId: \(clip.id), clipName: \(clip.name)")
+                        print("DEBUG: Playhead position: \(playheadPosition)")
+                        print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
+                        
+                        // Store the original clip data
+                        let originalClipId = clip.id
+                        let originalStartBeat = clip.startBeat
+                        let originalEndBeat = clip.endBeat
+                        let originalDuration = clip.duration
+                        let originalWaveformData = clip.waveformData
+                        let originalColor = clip.color
+                        let originalName = clip.name
+                        
+                        // IMPORTANT FIX: First remove the original clip using the view model directly
+                        print("DEBUG: Removing original audio clip before creating split clips")
+                        _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
+                        
+                        // Get the track AFTER the clip has been removed
+                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                           var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                            
+                            print("DEBUG: Current audio clip count after removing original: \(updatedTrack.audioClips.count)")
+                            var clipsToAdd = [AudioClip]()
+                            
+                            // First part - from original start to playhead
+                            let firstPartName = "\(originalName) (1)"
+                            let firstPartStartBeat = originalStartBeat
+                            let firstPartDuration = playheadPosition - originalStartBeat
+                            print("DEBUG: Creating first audio part at playhead - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
+                            
+                            // Create the first clip
+                            let firstPart = AudioClip(
+                                name: firstPartName,
+                                startBeat: firstPartStartBeat,
+                                duration: firstPartDuration,
+                                color: originalColor,
+                                waveformData: originalWaveformData
+                            )
+                            
+                            clipsToAdd.append(firstPart)
+                            
+                            // Second part - from playhead to original end
+                            let secondPartName = "\(originalName) (2)"
+                            let secondPartStartBeat = playheadPosition
+                            let secondPartDuration = originalEndBeat - playheadPosition
+                            print("DEBUG: Creating second audio part at playhead - name: \(secondPartName), startBeat: \(secondPartStartBeat), duration: \(secondPartDuration)")
+                            
+                            // Create the second clip
+                            let secondPart = AudioClip(
+                                name: secondPartName,
+                                startBeat: secondPartStartBeat,
+                                duration: secondPartDuration,
+                                color: originalColor,
+                                waveformData: originalWaveformData
+                            )
+                            
+                            clipsToAdd.append(secondPart)
+                            
+                            // Add all clips to the track
+                            for newClip in clipsToAdd {
+                                updatedTrack.addAudioClip(newClip)
+                                print("DEBUG: Added \(newClip.name) at \(newClip.startBeat) with duration \(newClip.duration)")
+                            }
+                            
+                            // Update the track in the project with a single operation
+                            projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            print("DEBUG: Audio split at playhead operation complete - added \(clipsToAdd.count) new clips")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     // Helper method to get the next copy count for a clip name
     private func getNextCopyCount(for baseName: String) -> Int {
         let count = copyCounts[baseName] ?? 0
