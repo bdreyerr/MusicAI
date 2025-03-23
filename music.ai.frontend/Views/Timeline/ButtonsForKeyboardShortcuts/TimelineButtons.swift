@@ -102,7 +102,9 @@ struct TimelineButtons: View {
             
             // Paste at current position (cmd V)
             Button(action: {
+                print("pasting")
                 pasteAtCurrentPosition()
+                
             }) {
                 EmptyView()
             }
@@ -126,6 +128,7 @@ struct TimelineButtons: View {
             
             // Duplicate Clips / Selection (cmd d)
             Button(action: {
+                print("duplicating")
                 duplicateSelection()
             }) {
                 EmptyView()

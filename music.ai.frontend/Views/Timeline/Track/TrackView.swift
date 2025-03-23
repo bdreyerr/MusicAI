@@ -202,20 +202,20 @@ struct TrackView: View {
     @ViewBuilder
     private var trackContextMenu: some View {
         // Copy and paste options
-        Button("Copy") {
-            menuCoordinator.copySelectedClip()
-        }
-        .keyboardShortcut("c", modifiers: .command)
-        
-        Button("Duplicate") {
-            menuCoordinator.duplicateSelectedClip()
-        }
-        .keyboardShortcut("d", modifiers: .command)
-        
-        Button("Paste") {
-            menuCoordinator.pasteClip()
-        }
-        .keyboardShortcut("v", modifiers: .command)
+//        Button("Copy") {
+//            menuCoordinator.copySelectedClip()
+//        }
+//        .keyboardShortcut("c", modifiers: .command)
+//        
+//        Button("Duplicate") {
+//            menuCoordinator.duplicateSelectedClip()
+//        }
+//        .keyboardShortcut("d", modifiers: .command)
+//        
+//        Button("Paste") {
+//            menuCoordinator.pasteClip()
+//        }
+//        .keyboardShortcut("v", modifiers: .command)
         
         Divider()
         

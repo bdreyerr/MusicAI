@@ -157,32 +157,125 @@ class MenuCoordinator: NSObject, ObservableObject {
                             // Full clip is within selection - delete it
                             _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: clip.id)
                         } else if selStart > clip.startBeat && selEnd < clip.endBeat {
-                            // Selection is in the middle - split into two clips
-                            // First part - from start to selStart
-                            let firstPartDuration = selStart - clip.startBeat
-                            _ = midiViewModel?.resizeMidiClip(trackId: trackId, clipId: clip.id, newDuration: firstPartDuration)
+                            // Selection is completely in the middle of the clip - split into two clips
+                            print("DEBUG: Processing selection within MIDI clip - clipId: \(clip.id), clipName: \(clip.name)")
+                            print("DEBUG: Selection range: \(selStart) to \(selEnd)")
+                            print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
                             
-                            // Second part - from selEnd to end
+                            // Store the original clip data before modifications
+                            let originalClipId = clip.id
+                            let originalStartBeat = clip.startBeat
+                            let originalEndBeat = clip.endBeat
+                            let originalDuration = clip.duration
+                            let originalNotes = clip.notes
+                            let originalColor = clip.color
+                            
+                            // STEP 1: REMOVE THE ORIGINAL CLIP
+                            // This is the key change - we need to remove the original clip completely, then add two new clips
+                            print("DEBUG: Removing original clip before creating new clips")
+                            _ = midiViewModel?.removeMidiClip(trackId: trackId, clipId: originalClipId)
+                            
+                            // STEP 2: CREATE THE FIRST (LEFT) CLIP
+                            // First part - from original start to selStart
+                            let firstPartName = clip.name
+                            let firstPartStartBeat = originalStartBeat
+                            let firstPartDuration = selStart - originalStartBeat
+                            print("DEBUG: Creating first part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
+                            
+                            // Filter notes that should be in the first part (before the selection)
+                            let firstPartNotes = originalNotes.compactMap { note -> MidiNote? in
+                                let noteStartBeat = note.startBeat
+                                let noteEndBeat = noteStartBeat + note.duration
+                                
+                                // Only keep notes that end before the selection
+                                if noteEndBeat <= (selStart - originalStartBeat) {
+                                    return note
+                                }
+                                // If note crosses the start boundary
+                                else if noteStartBeat < (selStart - originalStartBeat) && noteEndBeat > (selStart - originalStartBeat) {
+                                    // Truncate the note at selection start
+                                    let newDuration = selStart - originalStartBeat - noteStartBeat
+                                    return MidiNote(
+                                        pitch: note.pitch,
+                                        startBeat: noteStartBeat,
+                                        duration: newDuration,
+                                        velocity: note.velocity
+                                    )
+                                }
+                                return nil
+                            }
+                            
+                            // Create the first clip
+                            let firstPart = MidiClip(
+                                name: firstPartName,
+                                startBeat: firstPartStartBeat,
+                                duration: firstPartDuration,
+                                color: originalColor,
+                                notes: firstPartNotes
+                            )
+                            
+                            // STEP 3: CREATE THE SECOND (RIGHT) CLIP
+                            // Second part - from selEnd to original end
                             let secondPartName = "\(clip.name) (2)"
                             let secondPartStartBeat = selEnd
-                            let secondPartDuration = clip.endBeat - selEnd
+                            let secondPartDuration = originalEndBeat - selEnd
+                            print("DEBUG: Creating second part - name: \(secondPartName), startBeat: \(secondPartStartBeat), duration: \(secondPartDuration)")
                             
-                            // Create a new clip for the second part
+                            // Filter notes that belong in the second part (after the selection)
+                            let secondPartNotes = originalNotes.compactMap { note -> MidiNote? in
+                                let noteStartBeat = originalStartBeat + note.startBeat
+                                let noteEndBeat = noteStartBeat + note.duration
+                                
+                                // If note is entirely after the selection
+                                if noteStartBeat >= selEnd {
+                                    // Create a new note with adjusted position relative to the new clip start
+                                    return MidiNote(
+                                        pitch: note.pitch, 
+                                        startBeat: noteStartBeat - selEnd, // Adjust position relative to new clip
+                                        duration: note.duration,
+                                        velocity: note.velocity
+                                    )
+                                // If note crosses the selection end boundary
+                                } else if noteEndBeat > selEnd {
+                                    // Only keep the portion after selection, with adjusted start/duration
+                                    let newStartBeat = 0.0 // Start at beginning of new clip
+                                    let newDuration = noteEndBeat - selEnd
+                                    return MidiNote(
+                                        pitch: note.pitch,
+                                        startBeat: newStartBeat,
+                                        duration: newDuration,
+                                        velocity: note.velocity
+                                    )
+                                }
+                                return nil
+                            }
+                            
+                            // Create the second clip
                             let secondPart = MidiClip(
                                 name: secondPartName,
                                 startBeat: secondPartStartBeat,
                                 duration: secondPartDuration,
-                                color: clip.color,
-                                notes: clip.notes
+                                color: originalColor,
+                                notes: secondPartNotes
                             )
                             
-                            // Add the second part to the track
-                            var trackCopy = track
-                            trackCopy.addMidiClip(secondPart)
-                            
-                            // Update the track in the project
-                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
-                                projectViewModel.updateTrack(at: trackIndex, with: trackCopy)
+                            // STEP 4: ADD BOTH CLIPS TO THE TRACK
+                            // Get a fresh copy of the track (which should now have the original clip removed)
+                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                               var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                                
+                                print("DEBUG: Current clip count before adding new clips: \(updatedTrack.midiClips.count)")
+                                
+                                // Add both new clips
+                                updatedTrack.addMidiClip(firstPart)
+                                updatedTrack.addMidiClip(secondPart)
+                                
+                                // Update the track in the project with a single operation
+                                print("DEBUG: Adding both new clips to track. Adding \(firstPartName) at \(firstPartStartBeat) and \(secondPartName) at \(secondPartStartBeat)")
+                                projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                                print("DEBUG: Split operation complete - created two clips with empty space between them")
+                            } else {
+                                print("ERROR: Could not find track to update after removing original clip")
                             }
                         } else if selStart <= clip.startBeat && selEnd < clip.endBeat {
                             // Selection cuts the beginning - resize and move
@@ -241,31 +334,72 @@ class MenuCoordinator: NSObject, ObservableObject {
                             _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
                         } else if selStart > clip.startBeat && selEnd < clip.endBeat {
                             // Selection is in the middle - split into two clips
-                            // First part - from start to selStart
-                            let firstPartDuration = selStart - clip.startBeat
-                            _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: firstPartDuration)
+                            print("DEBUG: Processing selection within Audio clip - clipId: \(clip.id), clipName: \(clip.name)")
+                            print("DEBUG: Selection range: \(selStart) to \(selEnd)")
+                            print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
                             
-                            // Second part - from selEnd to end
+                            // Store the original clip data before modifications
+                            let originalClipId = clip.id
+                            let originalStartBeat = clip.startBeat
+                            let originalEndBeat = clip.endBeat
+                            let originalDuration = clip.duration
+                            let originalWaveformData = clip.waveformData
+                            let originalColor = clip.color
+                            
+                            // STEP 1: REMOVE THE ORIGINAL CLIP
+                            // This is the key change - we need to remove the original clip completely, then add two new clips
+                            print("DEBUG: Removing original audio clip before creating new clips")
+                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
+                            
+                            // STEP 2: CREATE THE FIRST (LEFT) CLIP
+                            // First part - from original start to selStart
+                            let firstPartName = clip.name
+                            let firstPartStartBeat = originalStartBeat
+                            let firstPartDuration = selStart - originalStartBeat
+                            print("DEBUG: Creating first audio part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
+                            
+                            // Create the first clip
+                            let firstPart = AudioClip(
+                                name: firstPartName,
+                                startBeat: firstPartStartBeat,
+                                duration: firstPartDuration,
+                                color: originalColor,
+                                waveformData: originalWaveformData
+                            )
+                            
+                            // STEP 3: CREATE THE SECOND (RIGHT) CLIP
+                            // Second part - from selEnd to original end
                             let secondPartName = "\(clip.name) (2)"
                             let secondPartStartBeat = selEnd
-                            let secondPartDuration = clip.endBeat - selEnd
+                            let secondPartDuration = originalEndBeat - selEnd
+                            print("DEBUG: Creating second audio part - name: \(secondPartName), startBeat: \(secondPartStartBeat), duration: \(secondPartDuration)")
                             
-                            // Create a new clip for the second part
+                            // Create the second clip
                             let secondPart = AudioClip(
                                 name: secondPartName,
                                 startBeat: secondPartStartBeat,
                                 duration: secondPartDuration,
-                                color: clip.color,
-                                waveformData: clip.waveformData
+                                color: originalColor,
+                                waveformData: originalWaveformData
                             )
                             
-                            // Add the second part to the track
-                            var trackCopy = track
-                            trackCopy.addAudioClip(secondPart)
-                            
-                            // Update the track in the project
-                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) {
-                                projectViewModel.updateTrack(at: trackIndex, with: trackCopy)
+                            // STEP 4: ADD BOTH CLIPS TO THE TRACK
+                            // Get a fresh copy of the track (which should now have the original clip removed)
+                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                               var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                                
+                                print("DEBUG: Current audio clip count before adding new clips: \(updatedTrack.audioClips.count)")
+                                
+                                // Add both new clips
+                                updatedTrack.addAudioClip(firstPart)
+                                updatedTrack.addAudioClip(secondPart)
+                                
+                                // Update the track in the project with a single operation
+                                print("DEBUG: Adding both new audio clips to track. Adding \(firstPartName) at \(firstPartStartBeat) and \(secondPartName) at \(secondPartStartBeat)")
+                                projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                                print("DEBUG: Audio clip split operation complete - created two clips with empty space between them")
+                            } else {
+                                print("ERROR: Could not find track to update after removing original audio clip")
                             }
                         } else if selStart <= clip.startBeat && selEnd < clip.endBeat {
                             // Selection cuts the beginning - resize and move

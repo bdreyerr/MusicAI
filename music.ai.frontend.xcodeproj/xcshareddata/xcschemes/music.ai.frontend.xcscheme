@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "1A273D702D8293A5008EE3FA"
-               BuildableName = "music.ai.frontend.app"
+               BuildableName = "Glitch.app"
                BlueprintName = "music.ai.frontend"
                ReferencedContainer = "container:music.ai.frontend.xcodeproj">
             </BuildableReference>
@@ -58,7 +58,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1A273D702D8293A5008EE3FA"
-            BuildableName = "music.ai.frontend.app"
+            BuildableName = "Glitch.app"
             BlueprintName = "music.ai.frontend"
             ReferencedContainer = "container:music.ai.frontend.xcodeproj">
          </BuildableReference>
@@ -75,7 +75,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "1A273D702D8293A5008EE3FA"
-            BuildableName = "music.ai.frontend.app"
+            BuildableName = "Glitch.app"
             BlueprintName = "music.ai.frontend"
             ReferencedContainer = "container:music.ai.frontend.xcodeproj">
          </BuildableReference>
