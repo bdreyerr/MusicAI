@@ -10,6 +10,9 @@ class MidiEditorViewModel: ObservableObject {
     
     // MARK: - Piano Roll Properties
     
+    /// Draw mode state
+    @Published var isDrawModeEnabled: Bool = false
+    
     /// Current zoom level index (0-based)
     @Published var zoomLevel: Int = 1 {
         didSet {

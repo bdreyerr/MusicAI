@@ -4,6 +4,8 @@ struct MidiGridEditorView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject var viewModel: MidiEditorViewModel
     @State private var showDebugOverlay: Bool = false // For development only
+    @State private var isDragging: Bool = false
+    @State private var currentDragColumn: Int? = nil // Track which column we're currently drawing in
     
     // Track and clip IDs for looking up the clip
     let trackId: UUID
@@ -24,6 +26,96 @@ struct MidiGridEditorView: View {
         self.viewModel = viewModel
         self.trackId = trackId
         self.clipId = clipId
+    }
+    
+    // Helper function to calculate note position from a point
+    private func getNotePosition(from point: CGPoint, in nsView: NSView, scrollView: NSScrollView) -> (pitch: Int, beat: Double)? {
+        let contentOffset = scrollView.contentView.bounds.origin
+        
+        // Adjust for scroll position and convert to grid coordinates
+        let adjustedX = point.x + contentOffset.x
+        
+        // Calculate Y position relative to the grid
+        let visibleY = point.y
+        let adjustedY = visibleY + contentOffset.y
+        
+        // Calculate beat position with adjusted X
+        let rawBeatPosition = viewModel.xToBeat(x: adjustedX)
+        // Always snap to the nearest beat on the left
+        let snappedBeatPosition = floor(rawBeatPosition * Double(viewModel.gridDivision.divisionsPerBeat)) / Double(viewModel.gridDivision.divisionsPerBeat)
+        
+        // Calculate pitch from adjusted Y position
+        let keyHeight = viewModel.getKeyHeight()
+        
+        // Calculate note index from Y position
+        // Flip the Y coordinate system (subtract from view height)
+        let flippedY = nsView.bounds.height - adjustedY
+        let noteIndex = Int(flippedY / keyHeight)
+        // Calculate pitch (MIDI note number)
+        let pitch = viewModel.fullStartNote + noteIndex
+        
+        // Validate pitch range
+        guard pitch >= viewModel.fullStartNote && pitch <= viewModel.fullEndNote else {
+            return nil
+        }
+        
+        return (pitch, snappedBeatPosition)
+    }
+    
+    // Helper function to add or update note
+    private func addOrUpdateNote(at position: (pitch: Int, beat: Double), in clip: MidiClip) {
+        // Get the grid column for the current beat position
+        let column = Int(position.beat * Double(viewModel.gridDivision.divisionsPerBeat))
+        
+        // If we're already drawing in this column and it's not a new column, return
+        if let currentColumn = currentDragColumn, currentColumn == column {
+            // Update the existing note's pitch
+            if let existingNote = clip.notes.first(where: { Int($0.startBeat * Double(viewModel.gridDivision.divisionsPerBeat)) == column }) {
+                var updatedClip = clip
+                if let noteIndex = updatedClip.notes.firstIndex(where: { $0.id == existingNote.id }) {
+                    updatedClip.notes[noteIndex].pitch = position.pitch
+                    if let projectViewModel = viewModel.projectViewModel {
+                        projectViewModel.updateMidiClip(updatedClip)
+                    }
+                }
+            }
+            return
+        }
+        
+        // Set current column
+        currentDragColumn = column
+        
+        // Check if there's already a note at this exact position and pitch
+        let existingNoteAtPosition = clip.notes.first { note in
+            let noteColumn = Int(note.startBeat * Double(viewModel.gridDivision.divisionsPerBeat))
+            return noteColumn == column && note.pitch == position.pitch
+        }
+        
+        // If there's already a note at this position and pitch, don't add a new one
+        if existingNoteAtPosition != nil {
+            print("DEBUG - Note already exists at position \(position.beat) with pitch \(position.pitch)")
+            return
+        }
+        
+        // Remove any existing note in this column with a different pitch
+        var updatedClip = clip
+        updatedClip.notes.removeAll { note in
+            Int(note.startBeat * Double(viewModel.gridDivision.divisionsPerBeat)) == column
+        }
+        
+        // Add the new note
+        let defaultDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+        let updatedClipWithNewNote = viewModel.addNoteToClip(
+            updatedClip,
+            pitch: position.pitch,
+            startBeat: position.beat,
+            duration: defaultDuration
+        )
+        
+        // Update the clip in the project
+        if let projectViewModel = viewModel.projectViewModel {
+            projectViewModel.updateMidiClip(updatedClipWithNewNote)
+        }
     }
     
     var body: some View {
@@ -142,89 +234,100 @@ struct MidiGridEditorView: View {
                 if let clip = midiClip {
                     Color.clear
                         .contentShape(Rectangle())
+                        .gesture(
+                            viewModel.isDrawModeEnabled ?
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    print("DEBUG - Draw mode drag detected")
+                                    isDragging = true
+                                    
+                                    // Get mouse location in screen coordinates
+                                    let mouseLocation = NSEvent.mouseLocation
+                                    print("DEBUG - Mouse Location (screen): \(mouseLocation)")
+                                    
+                                    // Convert screen coordinates to window coordinates
+                                    if let window = NSApp.keyWindow {
+                                        let windowPoint = window.convertPoint(fromScreen: mouseLocation)
+                                        print("DEBUG - Window Point: \(windowPoint)")
+                                        
+                                        // Convert window coordinates to view coordinates
+                                        if let nsView = window.contentView?.hitTest(windowPoint),
+                                           let scrollView = nsView.enclosingScrollView {
+                                            let viewPoint = nsView.convert(windowPoint, from: nil)
+                                            print("DEBUG - View Point: \(viewPoint)")
+                                            
+                                            // Calculate the note position
+                                            if let position = getNotePosition(
+                                                from: viewPoint,
+                                                in: nsView,
+                                                scrollView: scrollView
+                                            ) {
+                                                print("DEBUG - Adding/updating note at pitch: \(position.pitch), beat: \(position.beat)")
+                                                addOrUpdateNote(at: position, in: clip)
+                                            }
+                                        }
+                                    }
+                                }
+                                .onEnded { _ in
+                                    print("DEBUG - Draw mode drag ended")
+                                    isDragging = false
+                                    currentDragColumn = nil
+                                }
+                            : nil
+                        )
                         .onTapGesture(count: 2) { location in
-                            if let event = NSApp.currentEvent {
-                                // Get the location in the window
-                                let windowLocation = event.locationInWindow
-                                print("DEBUG - Window Location: \(windowLocation)")
+                            guard !viewModel.isDrawModeEnabled else { return }
+                            print("DEBUG - Double tap detected in normal mode")
+                            
+                            // Get mouse location in screen coordinates
+                            let mouseLocation = NSEvent.mouseLocation
+                            print("DEBUG - Mouse Location (screen): \(mouseLocation)")
+                            
+                            // Convert screen coordinates to window coordinates
+                            if let window = NSApp.keyWindow {
+                                let windowPoint = window.convertPoint(fromScreen: mouseLocation)
+                                print("DEBUG - Window Point: \(windowPoint)")
                                 
                                 // Convert window coordinates to view coordinates
-                                if let nsView = NSApp.keyWindow?.contentView?.hitTest(windowLocation) {
-                                    let viewLocation = nsView.convert(windowLocation, from: nil)
-                                    print("DEBUG - View Location: \(viewLocation)")
+                                if let nsView = window.contentView?.hitTest(windowPoint),
+                                   let scrollView = nsView.enclosingScrollView {
+                                    let viewPoint = nsView.convert(windowPoint, from: nil)
+                                    print("DEBUG - View Point: \(viewPoint)")
                                     
-                                    // Get the scroll view's content offset
-                                    if let scrollView = nsView.enclosingScrollView {
-                                        let contentOffset = scrollView.contentView.bounds.origin
-                                        print("DEBUG - Scroll Offset: \(contentOffset)")
+                                    // Calculate note position directly
+                                    if let position = getNotePosition(
+                                        from: viewPoint,
+                                        in: nsView,
+                                        scrollView: scrollView
+                                    ) {
+                                        print("DEBUG - Adding note at pitch: \(position.pitch), beat: \(position.beat)")
                                         
-                                        // Get the scroll view's content insets
-                                        let contentInsets = scrollView.contentInsets
-                                        print("DEBUG - Content Insets: \(contentInsets)")
+                                        // Check if there's already a note at this position and pitch
+                                        let column = Int(position.beat * Double(viewModel.gridDivision.divisionsPerBeat))
+                                        let existingNoteAtPosition = clip.notes.first { note in
+                                            let noteColumn = Int(note.startBeat * Double(viewModel.gridDivision.divisionsPerBeat))
+                                            return noteColumn == column && note.pitch == position.pitch
+                                        }
                                         
-                                        // Get the geometry of the view
-                                        if let gridView = nsView as? NSView {
-                                            let bounds = gridView.bounds
-                                            print("DEBUG - View Bounds: \(bounds)")
-                                            
-                                            // Adjust for scroll position and convert to grid coordinates
-                                            let adjustedX = viewLocation.x + contentOffset.x
-                                            
-                                            // Calculate Y position relative to the grid
-                                            // First, get position within the visible area
-                                            let visibleY = viewLocation.y
-                                            // Add scroll offset to get true position in grid
-                                            let adjustedY = visibleY + contentOffset.y
-                                            
-                                            print("DEBUG - Raw Y: \(visibleY)")
-                                            print("DEBUG - Adjusted Y: \(adjustedY)")
-                                            print("DEBUG - View Height: \(bounds.height)")
-                                            
-                                            // Calculate beat position with adjusted X
-                                            let rawBeatPosition = viewModel.xToBeat(x: adjustedX)
-                                            // Always snap to the nearest beat on the left
-                                            let snappedBeatPosition = floor(rawBeatPosition * Double(viewModel.gridDivision.divisionsPerBeat)) / Double(viewModel.gridDivision.divisionsPerBeat)
-                                            print("DEBUG - Beat Position: raw=\(rawBeatPosition), snapped=\(snappedBeatPosition)")
-                                            
-                                            // Calculate pitch from adjusted Y position
-                                            let keyHeight = viewModel.getKeyHeight()
-                                            print("DEBUG - Key Height: \(keyHeight)")
-                                            
-                                            // Calculate note index from Y position
-                                            // Flip the Y coordinate system (subtract from view height)
-                                            let flippedY = bounds.height - adjustedY
-                                            let noteIndex = Int(flippedY / keyHeight)
-                                            // Calculate pitch (MIDI note number)
-                                            let pitch = viewModel.fullStartNote + noteIndex
-                                            
-                                            print("DEBUG - Flipped Y: \(flippedY)")
-                                            print("DEBUG - Full Note Range: \(viewModel.fullStartNote) to \(viewModel.fullEndNote)")
-                                            print("DEBUG - Note Index: \(noteIndex)")
-                                            print("DEBUG - Calculated Pitch: \(pitch)")
-                                            print("DEBUG - Expected C3 MIDI number: 48")
-                                            
-                                            // Only add note if pitch is in valid range
-                                            if pitch >= viewModel.fullStartNote && pitch <= viewModel.fullEndNote {
-                                                // Set duration based on grid division
-                                                let defaultDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
-                                                print("DEBUG - Grid Division: \(viewModel.gridDivision), Duration: \(defaultDuration)")
-                                                
-                                                let updatedClip = viewModel.addNoteToClip(
-                                                    clip,
-                                                    pitch: pitch,
-                                                    startBeat: snappedBeatPosition,
-                                                    duration: defaultDuration
-                                                )
-                                                
-                                                // Update the clip in the project
-                                                if let projectViewModel = viewModel.projectViewModel {
-                                                    projectViewModel.updateMidiClip(updatedClip)
-                                                }
-                                                
-                                                print("DEBUG - Added note: pitch=\(pitch), beat=\(snappedBeatPosition), duration=\(defaultDuration)")
-                                            } else {
-                                                print("DEBUG - Note out of range: pitch=\(pitch), valid range=\(viewModel.fullStartNote)...\(viewModel.fullEndNote)")
-                                            }
+                                        // If there's already a note at this position and pitch, don't add a new one
+                                        if existingNoteAtPosition != nil {
+                                            print("DEBUG - Note already exists at position \(position.beat) with pitch \(position.pitch)")
+                                            return
+                                        }
+                                        
+                                        // Set duration based on grid division
+                                        let defaultDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+                                        
+                                        let updatedClip = viewModel.addNoteToClip(
+                                            clip,
+                                            pitch: position.pitch,
+                                            startBeat: position.beat,
+                                            duration: defaultDuration
+                                        )
+                                        
+                                        // Update the clip in the project
+                                        if let projectViewModel = viewModel.projectViewModel {
+                                            projectViewModel.updateMidiClip(updatedClip)
                                         }
                                     }
                                 }

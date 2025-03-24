@@ -44,7 +44,7 @@ struct MidiClipEditorContainerView: View {
             ZStack {
                 VStack(spacing: 0) {
                     // Top control area with zoom and grid controls
-                    HStack {
+                    HStack {                        
                         // Zoom controls
                         HStack(spacing: 4) {
                             Button(action: midiEditorViewModel.zoomOut) {
@@ -69,6 +69,27 @@ struct MidiClipEditorContainerView: View {
                         }
                         
                         Spacer()
+
+                        // Draw mode button
+                        Button(action: {
+                            midiEditorViewModel.isDrawModeEnabled.toggle()
+                        }) {
+                            Image(systemName: "pencil")
+                                .foregroundColor(midiEditorViewModel.isDrawModeEnabled ? themeManager.accentColor : themeManager.primaryTextColor)
+                                .frame(width: 24, height: 24)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(midiEditorViewModel.isDrawModeEnabled ? themeManager.accentColor.opacity(0.2) : Color.clear)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .stroke(midiEditorViewModel.isDrawModeEnabled ? themeManager.accentColor : themeManager.secondaryBorderColor, lineWidth: 1)
+                                        )
+                                )
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                        .help("Toggle Draw Mode")
+                        .padding(.horizontal, 4)
+                        .keyboardShortcut("b", modifiers: [])
                         
                         // Horizontal zoom controls for the grid
                         HStack(spacing: 4) {
