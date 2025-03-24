@@ -11,7 +11,11 @@ class MidiEditorViewModel: ObservableObject {
     // MARK: - Piano Roll Properties
     
     /// Current zoom level index (0-based)
-    @Published var zoomLevel: Int = 1
+    @Published var zoomLevel: Int = 1 {
+        didSet {
+            objectWillChange.send() // Explicitly notify observers of change
+        }
+    }
     
     /// Available zoom multipliers for the piano roll
     let zoomMultipliers: [CGFloat] = [0.7, 1.0, 1.5]
@@ -44,7 +48,11 @@ class MidiEditorViewModel: ObservableObject {
     // MARK: - Grid Properties
     
     /// Horizontal grid zoom level (0-based)
-    @Published var horizontalZoomLevel: Int = 1
+    @Published var horizontalZoomLevel: Int = 1 {
+        didSet {
+            objectWillChange.send() // Explicitly notify observers of change
+        }
+    }
     
     /// Available horizontal zoom multipliers for grid
     let horizontalZoomMultipliers: [CGFloat] = [0.5, 1.0, 1.5, 2.0]
@@ -125,7 +133,9 @@ class MidiEditorViewModel: ObservableObject {
             if let hoveredKey = hoveredKey {
                 lastCenteredNote = hoveredKey
             }
-            zoomLevel += 1
+            withAnimation(.easeInOut(duration: 0.2)) {
+                zoomLevel += 1
+            }
         }
     }
     
@@ -136,21 +146,27 @@ class MidiEditorViewModel: ObservableObject {
             if let hoveredKey = hoveredKey {
                 lastCenteredNote = hoveredKey
             }
-            zoomLevel -= 1
+            withAnimation(.easeInOut(duration: 0.2)) {
+                zoomLevel -= 1
+            }
         }
     }
     
     /// Increases the horizontal zoom level if not at maximum
     func horizontalZoomIn() {
         if horizontalZoomLevel < horizontalZoomMultipliers.count - 1 {
-            horizontalZoomLevel += 1
+            withAnimation(.easeInOut(duration: 0.2)) {
+                horizontalZoomLevel += 1
+            }
         }
     }
     
     /// Decreases the horizontal zoom level if not at minimum
     func horizontalZoomOut() {
         if horizontalZoomLevel > 0 {
-            horizontalZoomLevel -= 1
+            withAnimation(.easeInOut(duration: 0.2)) {
+                horizontalZoomLevel -= 1
+            }
         }
     }
     

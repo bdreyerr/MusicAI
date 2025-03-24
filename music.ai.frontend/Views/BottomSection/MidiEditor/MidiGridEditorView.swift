@@ -146,34 +146,85 @@ struct MidiGridEditorView: View {
                             if let event = NSApp.currentEvent {
                                 // Get the location in the window
                                 let windowLocation = event.locationInWindow
+                                print("DEBUG - Window Location: \(windowLocation)")
                                 
                                 // Convert window coordinates to view coordinates
                                 if let nsView = NSApp.keyWindow?.contentView?.hitTest(windowLocation) {
                                     let viewLocation = nsView.convert(windowLocation, from: nil)
+                                    print("DEBUG - View Location: \(viewLocation)")
                                     
-                                    // Calculate beat position
-                                    let rawBeatPosition = viewModel.xToBeat(x: CGFloat(viewLocation.x))
-                                    let snappedBeatPosition = viewModel.snapToBeat(beat: rawBeatPosition)
-                                    
-                                    // Calculate pitch from y position
-                                    let keyHeight = viewModel.getKeyHeight()
-                                    let noteIndex = Int(viewLocation.y / keyHeight)
-                                    let pitch = viewModel.fullEndNote - noteIndex
-                                    
-                                    // Only add note if pitch is in valid range
-                                    if pitch >= viewModel.fullStartNote && pitch <= viewModel.fullEndNote {
-                                        // Add a note with default duration of 1 beat
-                                        let defaultDuration = 1.0
-                                        let updatedClip = viewModel.addNoteToClip(
-                                            clip,
-                                            pitch: pitch,
-                                            startBeat: snappedBeatPosition,
-                                            duration: defaultDuration
-                                        )
+                                    // Get the scroll view's content offset
+                                    if let scrollView = nsView.enclosingScrollView {
+                                        let contentOffset = scrollView.contentView.bounds.origin
+                                        print("DEBUG - Scroll Offset: \(contentOffset)")
                                         
-                                        // Update the clip in the project
-                                        if let projectViewModel = viewModel.projectViewModel {
-                                            projectViewModel.updateMidiClip(updatedClip)
+                                        // Get the scroll view's content insets
+                                        let contentInsets = scrollView.contentInsets
+                                        print("DEBUG - Content Insets: \(contentInsets)")
+                                        
+                                        // Get the geometry of the view
+                                        if let gridView = nsView as? NSView {
+                                            let bounds = gridView.bounds
+                                            print("DEBUG - View Bounds: \(bounds)")
+                                            
+                                            // Adjust for scroll position and convert to grid coordinates
+                                            let adjustedX = viewLocation.x + contentOffset.x
+                                            
+                                            // Calculate Y position relative to the grid
+                                            // First, get position within the visible area
+                                            let visibleY = viewLocation.y
+                                            // Add scroll offset to get true position in grid
+                                            let adjustedY = visibleY + contentOffset.y
+                                            
+                                            print("DEBUG - Raw Y: \(visibleY)")
+                                            print("DEBUG - Adjusted Y: \(adjustedY)")
+                                            print("DEBUG - View Height: \(bounds.height)")
+                                            
+                                            // Calculate beat position with adjusted X
+                                            let rawBeatPosition = viewModel.xToBeat(x: adjustedX)
+                                            // Always snap to the nearest beat on the left
+                                            let snappedBeatPosition = floor(rawBeatPosition * Double(viewModel.gridDivision.divisionsPerBeat)) / Double(viewModel.gridDivision.divisionsPerBeat)
+                                            print("DEBUG - Beat Position: raw=\(rawBeatPosition), snapped=\(snappedBeatPosition)")
+                                            
+                                            // Calculate pitch from adjusted Y position
+                                            let keyHeight = viewModel.getKeyHeight()
+                                            print("DEBUG - Key Height: \(keyHeight)")
+                                            
+                                            // Calculate note index from Y position
+                                            // Flip the Y coordinate system (subtract from view height)
+                                            let flippedY = bounds.height - adjustedY
+                                            let noteIndex = Int(flippedY / keyHeight)
+                                            // Calculate pitch (MIDI note number)
+                                            let pitch = viewModel.fullStartNote + noteIndex
+                                            
+                                            print("DEBUG - Flipped Y: \(flippedY)")
+                                            print("DEBUG - Full Note Range: \(viewModel.fullStartNote) to \(viewModel.fullEndNote)")
+                                            print("DEBUG - Note Index: \(noteIndex)")
+                                            print("DEBUG - Calculated Pitch: \(pitch)")
+                                            print("DEBUG - Expected C3 MIDI number: 48")
+                                            
+                                            // Only add note if pitch is in valid range
+                                            if pitch >= viewModel.fullStartNote && pitch <= viewModel.fullEndNote {
+                                                // Set duration based on grid division
+                                                let defaultDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+                                                print("DEBUG - Grid Division: \(viewModel.gridDivision), Duration: \(defaultDuration)")
+                                                
+                                                let updatedClip = viewModel.addNoteToClip(
+                                                    clip,
+                                                    pitch: pitch,
+                                                    startBeat: snappedBeatPosition,
+                                                    duration: defaultDuration
+                                                )
+                                                
+                                                // Update the clip in the project
+                                                if let projectViewModel = viewModel.projectViewModel {
+                                                    projectViewModel.updateMidiClip(updatedClip)
+                                                }
+                                                
+                                                print("DEBUG - Added note: pitch=\(pitch), beat=\(snappedBeatPosition), duration=\(defaultDuration)")
+                                            } else {
+                                                print("DEBUG - Note out of range: pitch=\(pitch), valid range=\(viewModel.fullStartNote)...\(viewModel.fullEndNote)")
+                                            }
                                         }
                                     }
                                 }
@@ -193,7 +244,7 @@ struct MidiGridEditorView: View {
 
 struct MidiNoteView: View {
     let note: MidiNote
-    let viewModel: MidiEditorViewModel
+    @ObservedObject var viewModel: MidiEditorViewModel
     @EnvironmentObject var themeManager: ThemeManager
     
     var body: some View {
@@ -204,19 +255,21 @@ struct MidiNoteView: View {
         // Width is the difference between end and start
         let width = endX - startX
         
-        // Calculate vertical position
+        // Calculate vertical position based on current zoom level
         let keyHeight = viewModel.getKeyHeight()
         let y = CGFloat(viewModel.fullEndNote - note.pitch) * keyHeight
-        let height = keyHeight - 2 // Slight padding
         
-        RoundedRectangle(cornerRadius: 4)
+        RoundedRectangle(cornerRadius: min(4, keyHeight * 0.3))
             .fill(themeManager.accentColor.opacity(0.7))
-            .frame(width: width, height: height)
+            .frame(width: width, height: max(1, keyHeight - 2)) // Ensure minimum height of 1
             .overlay(
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: min(4, keyHeight * 0.3))
                     .stroke(themeManager.accentColor, lineWidth: 1)
             )
-            .position(x: startX + width/2, y: y + height/2)
+            .position(x: startX + width/2, y: y + keyHeight/2)
+            // Observe both zoom levels for animations
+            .animation(.easeInOut(duration: 0.2), value: viewModel.zoomLevel)
+            .animation(.easeInOut(duration: 0.2), value: viewModel.horizontalZoomLevel)
     }
 }
 
