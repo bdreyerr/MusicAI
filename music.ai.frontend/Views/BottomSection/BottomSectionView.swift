@@ -4,7 +4,7 @@ import AppKit
 /// Main container view for the bottom section of the application
 struct BottomSectionView: View {
     @ObservedObject var projectViewModel: ProjectViewModel
-    @StateObject var midiEditorViewModel = MidiEditorViewModel()
+    @StateObject private var midiEditorViewModel: MidiEditorViewModel
     @EnvironmentObject var themeManager: ThemeManager
     @State private var isExpanded: Bool = true
     @State private var selectedTab: Int = 0 // 0 = Waveform/Piano Roll, 1 = Effects
@@ -20,12 +20,20 @@ struct BottomSectionView: View {
     // Minimum heights
     private let collapsedHeight: CGFloat = 40
     private let minExpandedHeight: CGFloat = 160
-    private let maxExpandedHeight: CGFloat = 600
+    private let maxExpandedHeight: CGFloat = 800
     private let resizeAreaHeight: CGFloat = 8
     
     // Animation settings
     private let resizeAnimation = Animation.interpolatingSpring(mass: 0.1, stiffness: 170, damping: 18, initialVelocity: 0)
     private let expandCollapseAnimation = Animation.spring(response: 0.3, dampingFraction: 0.7)
+    
+    // Initialize the view and set up the MidiEditorViewModel with projectViewModel
+    init(projectViewModel: ProjectViewModel) {
+        self.projectViewModel = projectViewModel
+        let viewModel = MidiEditorViewModel()
+        viewModel.projectViewModel = projectViewModel
+        self._midiEditorViewModel = StateObject(wrappedValue: viewModel)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -447,7 +455,7 @@ struct MIDIPianoRollView: View {
                     // }
                     // .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    MidiClipEditorContainerView(midiClip: clip)
+                    MidiClipEditorContainerView(trackId: track.id, clipId: clip.id)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(themeManager.secondaryBackgroundColor)

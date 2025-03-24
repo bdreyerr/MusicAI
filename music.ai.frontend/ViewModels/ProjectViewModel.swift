@@ -604,6 +604,25 @@ class ProjectViewModel: ObservableObject {
         objectWillChange.send()
     }
     
+    // MARK: - MIDI Clip Operations
+    
+    /// Update a MIDI clip in the project
+    func updateMidiClip(_ updatedClip: MidiClip) {
+        // Find the track containing the clip
+        if let trackIndex = tracks.firstIndex(where: { track in
+            track.midiClips.contains(where: { $0.id == updatedClip.id })
+        }) {
+            // Find the clip within the track
+            if let clipIndex = tracks[trackIndex].midiClips.firstIndex(where: { $0.id == updatedClip.id }) {
+                // Update the clip
+                tracks[trackIndex].midiClips[clipIndex] = updatedClip
+                
+                // Notify observers
+                objectWillChange.send()
+            }
+        }
+    }
+    
     // MARK: - Private
     
     private var playbackTimer: Timer?

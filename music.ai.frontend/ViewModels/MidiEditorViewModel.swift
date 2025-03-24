@@ -3,6 +3,11 @@ import Combine
 
 /// ViewModel for managing the state of the MIDI editor components
 class MidiEditorViewModel: ObservableObject {
+    // MARK: - Properties
+    
+    /// Reference to the project view model for updating clips
+    weak var projectViewModel: ProjectViewModel?
+    
     // MARK: - Piano Roll Properties
     
     /// Current zoom level index (0-based)
@@ -204,7 +209,6 @@ class MidiEditorViewModel: ObservableObject {
               startBeat >= 0 && startBeat < clip.duration,
               duration > 0 && startBeat + duration <= clip.duration,
               velocity >= 0 && velocity <= 127 else {
-            print("⚠️ Invalid note parameters, not adding note")
             return clip
         }
         
@@ -219,7 +223,6 @@ class MidiEditorViewModel: ObservableObject {
         // Create a new clip with the note added
         var updatedClip = clip
         updatedClip.notes.append(newNote)
-        print("✅ Added note: pitch=\(pitch), start=\(startBeat), duration=\(duration)")
         
         // Signal the update
         midiClipDidUpdate = !midiClipDidUpdate

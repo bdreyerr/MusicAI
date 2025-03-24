@@ -11,8 +11,19 @@ struct MidiClipEditorContainerView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var midiEditorViewModel: MidiEditorViewModel
     
-    // MIDI clip to be edited
-    var midiClip: MidiClip?
+    // Track and clip IDs for looking up the clip
+    let trackId: UUID
+    let clipId: UUID
+    
+    // Computed property to get the current clip from the project
+    private var midiClip: MidiClip? {
+        guard let projectViewModel = midiEditorViewModel.projectViewModel,
+              let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
+              let clip = track.midiClips.first(where: { $0.id == clipId }) else {
+            return nil
+        }
+        return clip
+    }
     
     // Scroll position state
     @State private var verticalScrollOffset: CGFloat = 0
@@ -22,6 +33,11 @@ struct MidiClipEditorContainerView: View {
     private let pianoRollWidth: CGFloat = 100
     private let velocityEditorHeight: CGFloat = 60
     private let controlsHeight: CGFloat = 30
+    
+    init(trackId: UUID, clipId: UUID) {
+        self.trackId = trackId
+        self.clipId = clipId
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -102,7 +118,7 @@ struct MidiClipEditorContainerView: View {
                     .background(themeManager.tertiaryBackgroundColor)
                 
                     // Main content area with piano roll and grid in shared scroll view
-                    ScrollView(.vertical, showsIndicators: true) {
+                    ScrollView(.vertical, showsIndicators: false) {
                         HStack(spacing: 0) {
                             // Piano roll keys with top label placeholder
                             VStack(spacing: 0) {
@@ -111,45 +127,32 @@ struct MidiClipEditorContainerView: View {
                                     .fill(themeManager.tertiaryBackgroundColor)
                                     .frame(height: controlsHeight)
                                     .border(themeManager.secondaryBorderColor, width: 0.5)
+
                                 
                                 // Piano roll keys
                                 PianoRollKeysOnly(
-                                    viewModel: midiEditorViewModel, midiClip: midiClip
+                                    viewModel: midiEditorViewModel
                                 )
+                                .border(Color.red, width: 0)
+                                .layoutPriority(1) // Ensure this takes up all available space
                             }
-                            .frame(width: pianoRollWidth)
+                            .frame(width: pianoRollWidth, alignment: .top) // Add top alignment
+                            .border(themeManager.secondaryBorderColor, width: 0.5)
                             
                             // Grid area (horizontal scroll only)
                             ScrollViewReader { horizontalProxy in
-                                ScrollView(.horizontal, showsIndicators: true) {
+                                ScrollView(.horizontal, showsIndicators: false) {
                                     VStack(spacing: 0) {
                                         // Grid ruler
                                         GridRulerView(viewModel: midiEditorViewModel, midiClip: midiClip)
                                             .frame(height: controlsHeight)
                                             .border(themeManager.secondaryBorderColor, width: 0.5)
                                         
-                                        // Grid content matching piano roll height - no padding or extra space
-                                        GridContentView(viewModel: midiEditorViewModel, midiClip: midiClip)
-                                            .frame(
-                                                width: midiClip != nil 
-                                                    ? midiEditorViewModel.calculateGridWidth(clipDuration: midiClip!.duration)
-                                                    : 600,
-                                                height: midiEditorViewModel.calculatePianoRollContentHeight()
-                                            )
-                                            // Add beat markers every 4 beats for scrolling
-                                            .overlay(
-                                                GeometryReader { geo in
-                                                    ForEach(0..<40) { beatIndex in
-                                                        Color.clear
-                                                            .frame(width: 1, height: 1)
-                                                            .position(
-                                                                x: CGFloat(beatIndex) * midiEditorViewModel.pixelsPerBeat,
-                                                                y: 0
-                                                            )
-                                                            .id("beat_\(beatIndex)")
-                                                    }
-                                                }
-                                            )
+                                        // Grid content matching piano roll height
+                                        if let clip = midiClip {
+                                            MidiGridEditorView(viewModel: midiEditorViewModel, trackId: trackId, clipId: clipId)
+                                                .border(themeManager.secondaryBorderColor, width: 0.5)
+                                        }
                                     }
                                 }
                                 .onChange(of: midiEditorViewModel.horizontalZoomLevel) { oldValue, newValue in
@@ -294,7 +297,7 @@ struct PianoRollKeysOnly: View {
             )
             
             // Piano keys
-            ZStack(alignment: .topLeading) {
+            ZStack(alignment: .top) {
                 // Background
                 Rectangle()
                     .fill(themeManager.tertiaryBackgroundColor)
@@ -357,8 +360,10 @@ struct PianoRollKeysOnly: View {
             }
             .frame(width: 60)
         }
-        .frame(height: totalContentHeight)
-        .onChange(of: viewModel.zoomLevel) { _, _ in
+        .frame(height: totalContentHeight, alignment: .top)
+        .background(themeManager.tertiaryBackgroundColor)
+        .clipped()
+        .onChange(of: viewModel.zoomLevel) { _, _ in 
             // Scroll container will handle this via ancestors
         }
         // Empty handler to avoid unnecessary updates
@@ -390,7 +395,7 @@ struct MidiEditorScrollOffsetPreferenceKey: PreferenceKey {
 }
 
 #Preview {
-    MidiClipEditorContainerView()
+    MidiClipEditorContainerView(trackId: UUID(), clipId: UUID())
         .environmentObject(ThemeManager())
         .frame(width: 800, height: 600)
 }
