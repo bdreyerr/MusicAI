@@ -264,7 +264,7 @@ struct PianoRoll: View {
                         .id(noteNumber) // For scroll positioning
                         .onTapGesture {
                             // When tapped, update both hover and last centered
-                            viewModel.hoveredKey = noteNumber
+                            viewModel.updateHoveredKey(noteNumber)
                             viewModel.lastCenteredNote = noteNumber
                         }
                 }
@@ -285,11 +285,12 @@ struct PianoRoll: View {
                             
                             // Ensure we're in valid range
                             if calculatedNote >= viewModel.fullStartNote && calculatedNote <= viewModel.fullEndNote {
-                                viewModel.hoveredKey = calculatedNote
+                                // Prevent multiple updates in the same frame
+                                viewModel.updateHoveredKey(calculatedNote)
                                 // Don't update lastCenteredNote during hover to prevent jumping
                             }
                         case .ended:
-                            viewModel.hoveredKey = nil
+                            viewModel.updateHoveredKey(nil)
                         }
                     }
             )

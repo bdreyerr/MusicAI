@@ -14,9 +14,26 @@ struct KeyboardShortcutsBottomSection: View {
     var body: some View {
         // Invisible buttons for keyboard shortcuts
         VStack {
-            // Zoom controls
+            // Grid Zoom in
             
-            // Zoom in (simply +)
+            // FOR SOME REASON THIS ONE DOESN'T WORK? IDK WHY LOL, it's like mac is not letting me press this or it's not recognizing it or something
+            Button(action: {
+                print("TEST ZOOM IN")
+                midiEditorViewModel.horizontalZoomIn()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut("+", modifiers: [.option])
+            
+            // Grid Zoom out
+            Button(action: {
+                midiEditorViewModel.horizontalZoomOut()
+            }) {
+                EmptyView()
+            }
+            .keyboardShortcut("-", modifiers: [.option])
+            
+            // Piano Roll Zoom in (simply +)
             Button(action: {
                 midiEditorViewModel.zoomIn()
             }) {
@@ -24,7 +41,7 @@ struct KeyboardShortcutsBottomSection: View {
             }
             .keyboardShortcut("+", modifiers: [])
             
-            // Zoom out (simply -)
+            // Piano Roll Zoom out (simply -)
             Button(action: {
                 midiEditorViewModel.zoomOut()
             }) {

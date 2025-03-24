@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// ViewModel for managing the state of the MIDI editor components
 class MidiEditorViewModel: ObservableObject {
@@ -19,6 +20,11 @@ class MidiEditorViewModel: ObservableObject {
     /// The note being currently hovered in the piano roll
     @Published var hoveredKey: Int? = nil
     
+    /// Debounce the hoveredKey updates
+    private var hoveredKeyDebouncer: AnyCancellable?
+    private var pendingHoveredKey: Int? = nil
+    private let debounceDelay: TimeInterval = 0.01 // 50ms
+    
     /// The last note that was centered in the view (for restoring position after zoom)
     @Published var lastCenteredNote: Int = 60 // Middle C by default
     
@@ -32,8 +38,19 @@ class MidiEditorViewModel: ObservableObject {
     
     // MARK: - Grid Properties
     
-    /// Pixels per beat (quarter note) at the default grid zoom level
-    let pixelsPerBeat: CGFloat = 40
+    /// Horizontal grid zoom level (0-based)
+    @Published var horizontalZoomLevel: Int = 1
+    
+    /// Available horizontal zoom multipliers for grid
+    let horizontalZoomMultipliers: [CGFloat] = [0.5, 1.0, 1.5, 2.0]
+    
+    /// Base value for pixels per beat at zoom level 1
+    let basePixelsPerBeat: CGFloat = 40
+    
+    /// Pixels per beat (quarter note) at the current horizontal zoom level
+    var pixelsPerBeat: CGFloat {
+        return basePixelsPerBeat * horizontalZoomMultipliers[horizontalZoomLevel]
+    }
     
     /// Number of beats per bar (assuming 4/4 time signature for now)
     let beatsPerBar: Int = 4
@@ -74,6 +91,28 @@ class MidiEditorViewModel: ObservableObject {
     
     // MARK: - Zoom Methods
     
+    /// Updates hoveredKey with debouncing to prevent multiple updates per frame
+    func updateHoveredKey(_ newValue: Int?) {
+        // Skip if no change
+        if newValue == hoveredKey { return }
+        
+        // Store the pending update
+        pendingHoveredKey = newValue
+        
+        // Cancel existing debouncer
+        hoveredKeyDebouncer?.cancel()
+        
+        // Create new debouncer
+        hoveredKeyDebouncer = Just(())
+            .delay(for: .seconds(debounceDelay), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.hoveredKey = self.pendingHoveredKey
+                }
+            }
+    }
+    
     /// Increases the zoom level if not at maximum
     func zoomIn() {
         if zoomLevel < zoomMultipliers.count - 1 {
@@ -93,6 +132,20 @@ class MidiEditorViewModel: ObservableObject {
                 lastCenteredNote = hoveredKey
             }
             zoomLevel -= 1
+        }
+    }
+    
+    /// Increases the horizontal zoom level if not at maximum
+    func horizontalZoomIn() {
+        if horizontalZoomLevel < horizontalZoomMultipliers.count - 1 {
+            horizontalZoomLevel += 1
+        }
+    }
+    
+    /// Decreases the horizontal zoom level if not at minimum
+    func horizontalZoomOut() {
+        if horizontalZoomLevel > 0 {
+            horizontalZoomLevel -= 1
         }
     }
     
@@ -189,7 +242,7 @@ class MidiEditorViewModel: ObservableObject {
     
     /// Sets the current hovered note to middle C (C4, MIDI note 60)
     func goToMiddleC() {
-        hoveredKey = 60
+        updateHoveredKey(60)
         lastCenteredNote = 60
     }
     
@@ -201,7 +254,7 @@ class MidiEditorViewModel: ObservableObject {
         
         // Make sure we're in range
         if midiNote >= fullStartNote && midiNote <= fullEndNote {
-            hoveredKey = midiNote
+            updateHoveredKey(midiNote)
             lastCenteredNote = midiNote
         }
     }
@@ -218,7 +271,7 @@ class MidiEditorViewModel: ObservableObject {
         
         // Make sure we're in range
         if nextCNote <= fullEndNote {
-            hoveredKey = nextCNote
+            updateHoveredKey(nextCNote)
             lastCenteredNote = nextCNote
         }
     }
@@ -235,7 +288,7 @@ class MidiEditorViewModel: ObservableObject {
         
         // Make sure we're in range
         if previousCNote >= fullStartNote {
-            hoveredKey = previousCNote
+            updateHoveredKey(previousCNote)
             lastCenteredNote = previousCNote
         }
     }
@@ -244,7 +297,7 @@ class MidiEditorViewModel: ObservableObject {
     func moveHoverUp() {
         let currentNote = hoveredKey ?? lastCenteredNote
         if currentNote < fullEndNote {
-            hoveredKey = currentNote + 1
+            updateHoveredKey(currentNote + 1)
             lastCenteredNote = currentNote + 1
         }
     }
@@ -253,7 +306,7 @@ class MidiEditorViewModel: ObservableObject {
     func moveHoverDown() {
         let currentNote = hoveredKey ?? lastCenteredNote
         if currentNote > fullStartNote {
-            hoveredKey = currentNote - 1
+            updateHoveredKey(currentNote - 1)
             lastCenteredNote = currentNote - 1
         }
     }
