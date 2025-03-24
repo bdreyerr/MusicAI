@@ -617,8 +617,15 @@ class ProjectViewModel: ObservableObject {
                 // Update the clip
                 tracks[trackIndex].midiClips[clipIndex] = updatedClip
                 
+                // Force a UI update by modifying the tracks array
+                let updatedTracks = tracks
+                tracks = updatedTracks
+                
                 // Notify observers
                 objectWillChange.send()
+                
+                // Update the track view model if needed
+                trackViewModelManager.updateViewModel(for: tracks[trackIndex].id)
             }
         }
     }

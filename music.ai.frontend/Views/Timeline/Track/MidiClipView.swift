@@ -11,9 +11,22 @@ struct MidiClipView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var menuCoordinator: MenuCoordinator
     
+    // Add observation of MidiEditorViewModel's clip updates
+    @State private var clipUpdateTrigger: Bool = false
+    
     // Computed property to access the MIDI view model
     private var midiViewModel: MidiViewModel {
         return projectViewModel.midiViewModel
+    }
+    
+    // Add computed property to get current clip state
+    private var currentClip: MidiClip {
+        // Find the most up-to-date version of the clip from the project
+        if let updatedTrack = projectViewModel.tracks.first(where: { $0.id == track.id }),
+           let updatedClip = updatedTrack.midiClips.first(where: { $0.id == clip.id }) {
+            return updatedClip
+        }
+        return clip
     }
     
     // State for hover and selection
@@ -33,6 +46,38 @@ struct MidiClipView: View {
     @State private var currentClipColor: Color? // Track the current clip color for UI updates
     @State private var isOptionDragging: Bool = false // Track if we're option-dragging for duplication
     @State private var originalClipVisible: Bool = true // Track if the original clip should be visible during drag
+    
+    // Helper function to calculate high contrast color for notes
+    private func getNotesColor(_ baseColor: Color) -> Color {
+        // Convert the Color to NSColor to access components
+        let nsColor = NSColor(baseColor)
+        
+        // Get color components
+        guard let rgb = nsColor.usingColorSpace(.sRGB) else {
+            return .white // Fallback to white if conversion fails
+        }
+        
+        // Calculate perceived brightness using standard luminance formula
+        let brightness = (rgb.redComponent * 0.299 + rgb.greenComponent * 0.587 + rgb.blueComponent * 0.114)
+        
+        if brightness < 0.6 {
+            // For darker colors, use white with a tint of the base color
+            return Color(
+                NSColor(red: min(1, rgb.redComponent + 0.7),
+                       green: min(1, rgb.greenComponent + 0.7),
+                       blue: min(1, rgb.blueComponent + 0.7),
+                       alpha: 1.0)
+            )
+        } else {
+            // For lighter colors, use black with a tint of the base color
+            return Color(
+                NSColor(red: max(0, rgb.redComponent - 0.7),
+                       green: max(0, rgb.greenComponent - 0.7),
+                       blue: max(0, rgb.blueComponent - 0.7),
+                       alpha: 1.0)
+            )
+        }
+    }
     
     // Computed property to determine if resize handles should be visible
     private var showResizeHandles: Bool {
@@ -72,8 +117,8 @@ struct MidiClipView: View {
     
     var body: some View {
         // Calculate position and size based on timeline state
-        let startX = CGFloat(clip.startBeat * state.effectivePixelsPerBeat)
-        let width = CGFloat(clip.duration * state.effectivePixelsPerBeat)
+        let startX = CGFloat(currentClip.startBeat * state.effectivePixelsPerBeat)
+        let width = CGFloat(currentClip.duration * state.effectivePixelsPerBeat)
         let clipHeight = trackViewModel.isCollapsed ? 26 : track.height - 4 // Use fixed 26px for collapsed state
         
         // Use a ZStack to position the clip correctly
@@ -113,12 +158,52 @@ struct MidiClipView: View {
                 }
                 
                 // Notes visualization (placeholder for now)
-                if !trackViewModel.isCollapsed && clip.notes.isEmpty {
+                if !trackViewModel.isCollapsed && currentClip.notes.isEmpty {
                     //                    Text("Empty clip")
                     //                        .font(.caption2)
                     //                        .foregroundColor(.white.opacity(0.7))
                     //                        .padding(.top, 24)
                     //                        .padding(.leading, 6)
+                } else if !trackViewModel.isCollapsed && !currentClip.notes.isEmpty {
+                    // Draw note preview
+                    Canvas { context, size in
+                        // Calculate dimensions for note preview
+                        let previewHeight = clipHeight - 30 // Leave space for title bar
+                        let previewY = 25.0 // Start below title bar
+                        
+                        // Find pitch range in the clip
+                        let pitches = currentClip.notes.map { $0.pitch }
+                        let minPitch = pitches.min() ?? 0
+                        let maxPitch = pitches.max() ?? 127
+                        let pitchRange = max(maxPitch - minPitch, 12) // At least one octave range
+                        
+                        // Calculate vertical scaling
+                        let noteHeight = previewHeight / CGFloat(pitchRange)
+                        
+                        // Draw each note
+                        for note in currentClip.notes {
+                            // Calculate horizontal position and width
+                            let noteStartX = (note.startBeat / currentClip.duration) * size.width
+                            let noteWidth = (note.duration / currentClip.duration) * size.width
+                            
+                            // Calculate vertical position (invert pitch to draw from bottom up)
+                            let normalizedPitch = CGFloat(note.pitch - minPitch)
+                            let noteY = previewY + (previewHeight - (normalizedPitch * noteHeight) - noteHeight)
+                            
+                            // Create note rectangle
+                            let noteRect = Path(roundedRect: CGRect(
+                                x: noteStartX,
+                                y: noteY,
+                                width: max(2, noteWidth), // Minimum width of 2 pixels
+                                height: max(2, noteHeight - 1) // Leave 1 pixel gap between notes
+                            ), cornerRadius: 1)
+                            
+                            // Use high contrast color for notes
+                            let baseColor = currentClipColor ?? track.effectiveColor
+                            let notesColor = getNotesColor(baseColor)
+                            context.fill(noteRect, with: .color(notesColor.opacity(0.9)))
+                        }
+                    }
                 }
             }
             .frame(width: width, height: clipHeight)
