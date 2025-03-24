@@ -93,6 +93,12 @@ struct KeyboardShortcutsView: View {
                 ShortcutItem(name: "Copy", shortcut: "⌘C"),
                 ShortcutItem(name: "Paste", shortcut: "⌘V")
             ]
+        ),
+        ShortcutCategory(
+            name: "Effects Rack / Midi Editor",
+            shortcuts: [
+                ShortcutItem(name: "Switch Tab", shortcut: "tab"),
+            ]
         )
     ]
     

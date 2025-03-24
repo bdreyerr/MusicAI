@@ -14,13 +14,6 @@ struct KeyboardShortcutsBottomSection: View {
     var body: some View {
         // Invisible buttons for keyboard shortcuts
         VStack {
-//            // Switch between (piano roll / audio waveform) and effects rack
-//            Button(action: {
-//                // TODO: Cursor add the action here
-//            }) {
-//                EmptyView()
-//            }
-//            .keyboardShortcut(.tab, modifiers: [.shift])
             
             // Grid Zoom in
             

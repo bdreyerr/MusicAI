@@ -4,6 +4,7 @@ import AppKit
 /// Main container view for the bottom section of the application
 struct BottomSectionView: View {
     @ObservedObject var projectViewModel: ProjectViewModel
+    @StateObject var midiEditorViewModel = MidiEditorViewModel()
     @EnvironmentObject var themeManager: ThemeManager
     @State private var isExpanded: Bool = true
     @State private var selectedTab: Int = 0 // 0 = Waveform/Piano Roll, 1 = Effects
@@ -28,6 +29,11 @@ struct BottomSectionView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Keyboard shortcuts layer (invisible)
+            KeyboardShortcutsBottomSection()
+                .environmentObject(midiEditorViewModel)
+                .frame(width: 0, height: 0)
+            
             // Resize handle area at the top
             Rectangle()
                 .fill(Color.clear)
@@ -83,6 +89,35 @@ struct BottomSectionView: View {
             
             // Header bar with toggle
             HStack {
+                // Switch between (piano roll / audio waveform) and effects rack
+                Button(action: {
+                    self.selectedTab = (self.selectedTab + 1) % 2
+                }) {
+                    EmptyView()
+                }
+                .keyboardShortcut(.tab, modifiers: [])
+                .frame(width: 0, height: 0)
+                .hidden()
+                
+                // Open / Expand
+                Button(action: {
+                    self.isExpanded = true
+                }) {
+                    EmptyView()
+                }
+                .keyboardShortcut(.upArrow, modifiers: [.option])
+                .frame(width: 0, height: 0)
+                .hidden()
+                
+                Button(action: {
+                    self.isExpanded = false
+                }) {
+                    EmptyView()
+                }
+                .keyboardShortcut(.downArrow, modifiers: [.option])
+                .frame(width: 0, height: 0)
+                .hidden()
+                
                 Text("\(projectViewModel.selectedTrack?.name ?? "Track Inspector")")
                     .font(.headline)
                     .foregroundColor(themeManager.primaryTextColor)
@@ -97,17 +132,6 @@ struct BottomSectionView: View {
                             
                             // Tab buttons container
                             HStack(spacing: 1) {
-                                // Switch between (piano roll / audio waveform) and effects rack
-                                Button(action: {
-                                    self.selectedTab = (self.selectedTab + 1) % 2
-                                }) {
-                                    EmptyView()
-                                }
-                                .keyboardShortcut(.tab, modifiers: [])
-                                .frame(width: 0, height: 0)
-                                .hidden()
-                                
-                                
                                 // First tab button
                                 TabButton(
                                     title: selectedTrack.type == .audio ? "Waveform" : "Piano Roll",
@@ -214,6 +238,7 @@ struct BottomSectionView: View {
         )
         .animation(isDraggingResize ? nil : resizeAnimation, value: sectionHeight)
         .animation(expandCollapseAnimation, value: isExpanded)
+        .environmentObject(midiEditorViewModel)
     }
 }
 

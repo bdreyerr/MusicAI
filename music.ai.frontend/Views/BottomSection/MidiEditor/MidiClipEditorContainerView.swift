@@ -9,7 +9,7 @@ import SwiftUI
 
 struct MidiClipEditorContainerView: View {
     @EnvironmentObject var themeManager: ThemeManager
-    @StateObject var midiEditorViewModel = MidiEditorViewModel()
+    @EnvironmentObject var midiEditorViewModel: MidiEditorViewModel
     
     // MIDI clip to be edited
     var midiClip: MidiClip?
@@ -213,11 +213,6 @@ struct MidiClipEditorContainerView: View {
                     }
                     .frame(height: velocityEditorHeight)
                 }
-                
-                // Keyboard shortcuts layer (invisible)
-                KeyboardShortcutsBottomSection()
-                    .environmentObject(midiEditorViewModel)
-                    .frame(width: 0, height: 0)
             }
         }
         .environmentObject(midiEditorViewModel)
