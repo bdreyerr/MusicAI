@@ -157,7 +157,10 @@ struct GridContentView: View {
                         // Draw preview note
                         let noteY = CGFloat(viewModel.fullEndNote - hoverNote) * keyHeight
                         let noteX = CGFloat(hoverBeat) * pixelsPerBeat
-                        let previewWidth = CGFloat(noteDuration) * pixelsPerBeat
+                        
+                        // Calculate preview width based on current grid division
+                        let divisionDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+                        let previewWidth = CGFloat(divisionDuration) * pixelsPerBeat
                         
                         let previewRect = Path(CGRect(x: noteX, y: noteY, width: previewWidth, height: keyHeight))
                         context.fill(previewRect, with: .color(themeManager.accentColor.opacity(0.3)))
@@ -198,12 +201,15 @@ struct GridContentView: View {
                 
                 // Only add note if within clip bounds
                 if beatPosition >= 0 && beatPosition < clip.duration {
+                    // Calculate note duration based on current grid division
+                    let divisionDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+                    
                     // Use the viewModel to add the note and get the updated clip
                     localMidiClip = viewModel.addNoteToClip(
                         clip,
                         pitch: note,
                         startBeat: beatPosition,
-                        duration: noteDuration,
+                        duration: divisionDuration,
                         velocity: 80
                     )
                 }
@@ -238,14 +244,18 @@ struct GridContentView: View {
                         let endingBeat = max(dragNote.startBeat, endBeat)
                         let duration = endingBeat - startBeat
                         
+                        // For very small drags, use grid division as the default size
+                        let divisionDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+                        let finalDuration = duration > 0.001 ? duration : divisionDuration
+                        
                         // Only create note if it has duration and is within clip bounds
-                        if duration > 0 && startBeat >= 0 && endingBeat <= clip.duration {
+                        if finalDuration > 0 && startBeat >= 0 && endingBeat <= clip.duration {
                             // Use the viewModel to add the note and get the updated clip
                             localMidiClip = viewModel.addNoteToClip(
                                 clip,
                                 pitch: dragNote.pitch,
                                 startBeat: startBeat,
-                                duration: duration,
+                                duration: finalDuration,
                                 velocity: 80
                             )
                         }
@@ -293,6 +303,9 @@ struct GridContentView: View {
         }
         .onChange(of: viewModel.horizontalZoomLevel) { _, _ in
             // Redraw when horizontal zoom changes
+        }
+        .onChange(of: viewModel.gridDivision) { _, _ in
+            // Redraw when grid division changes
         }
     }
 }

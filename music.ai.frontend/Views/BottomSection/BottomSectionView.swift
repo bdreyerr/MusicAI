@@ -97,6 +97,17 @@ struct BottomSectionView: View {
                             
                             // Tab buttons container
                             HStack(spacing: 1) {
+                                // Switch between (piano roll / audio waveform) and effects rack
+                                Button(action: {
+                                    self.selectedTab = (self.selectedTab + 1) % 2
+                                }) {
+                                    EmptyView()
+                                }
+                                .keyboardShortcut(.tab, modifiers: [])
+                                .frame(width: 0, height: 0)
+                                .hidden()
+                                
+                                
                                 // First tab button
                                 TabButton(
                                     title: selectedTrack.type == .audio ? "Waveform" : "Piano Roll",
@@ -129,6 +140,7 @@ struct BottomSectionView: View {
                                     .stroke(themeManager.secondaryBorderColor, lineWidth: 1)
                             )
                             .padding(8)
+                            .opacity(self.isExpanded ? 1 : 0)
                         }
                     }
                 }
