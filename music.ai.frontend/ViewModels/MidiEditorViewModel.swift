@@ -11,6 +11,12 @@ class MidiEditorViewModel: ObservableObject {
     /// Selected notes in the editor
     @Published var selectedNotes: Set<UUID> = []
     
+    /// Current resize preview duration for selected notes
+    @Published var resizePreviewDuration: Double? = nil
+    
+    /// Current drag preview offset for selected notes (in beats and pitch)
+    @Published var dragPreviewOffset: (beats: Double, pitchOffset: Int)? = nil
+    
     // MARK: - Piano Roll Properties
     
     /// Draw mode state
@@ -292,6 +298,43 @@ class MidiEditorViewModel: ObservableObject {
             // Signal the update
             midiClipDidUpdate = !midiClipDidUpdate
         }
+        
+        return updatedClip
+    }
+    
+    /// Update multiple notes' durations in a clip
+    func updateMultipleNotesDuration(_ clip: MidiClip, newDuration: Double) -> MidiClip {
+        // Validate the new duration
+        guard newDuration > 0 else {
+            return clip
+        }
+        
+        var updatedClip = clip
+        
+        // Process each selected note
+        for noteId in selectedNotes {
+            if let noteIndex = updatedClip.notes.firstIndex(where: { $0.id == noteId }) {
+                let note = updatedClip.notes[noteIndex]
+                
+                // Ensure the note doesn't extend beyond clip duration
+                let maxDuration = clip.duration - note.startBeat
+                let adjustedDuration = min(newDuration, maxDuration)
+                
+                // Check for overlapping notes and remove them
+                updatedClip.notes.removeAll { otherNote in
+                    !selectedNotes.contains(otherNote.id) && // Don't remove selected notes
+                    otherNote.pitch == note.pitch && // Same pitch
+                    otherNote.startBeat >= note.startBeat && // Starts after or at our note
+                    otherNote.startBeat < note.startBeat + adjustedDuration // Starts before our note ends
+                }
+                
+                // Update the note's duration
+                updatedClip.notes[noteIndex].duration = adjustedDuration
+            }
+        }
+        
+        // Signal the update
+        midiClipDidUpdate = !midiClipDidUpdate
         
         return updatedClip
     }

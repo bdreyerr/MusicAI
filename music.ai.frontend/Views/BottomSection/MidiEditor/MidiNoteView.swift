@@ -21,7 +21,6 @@ struct MidiNoteView: View {
     @State private var isResizing: Bool = false
     @State private var isHoveringResizeHandle: Bool = false
     @State private var resizeStartDuration: Double = 0
-    @State private var resizePreviewDuration: Double? = nil
     
     // Helper function to delete the note
     private func deleteNote() {
@@ -77,8 +76,20 @@ struct MidiNoteView: View {
     var body: some View {
         // Calculate start position
         let startX = viewModel.beatToX(beat: note.startBeat)
+        
+        // Calculate position offset if note is selected and being dragged
+        let (offsetX, offsetY) = if viewModel.selectedNotes.contains(note.id),
+                                  let dragOffset = viewModel.dragPreviewOffset {
+            (
+                viewModel.beatToX(beat: dragOffset.beats),
+                CGFloat(dragOffset.pitchOffset) * -viewModel.getKeyHeight()
+            )
+        } else {
+            (0.0, 0.0)
+        }
+        
         // Calculate end position
-        let endX = viewModel.beatToX(beat: note.startBeat + (resizePreviewDuration ?? note.duration))
+        let endX = viewModel.beatToX(beat: note.startBeat + (viewModel.selectedNotes.contains(note.id) ? viewModel.resizePreviewDuration ?? note.duration : note.duration))
         // Width is the difference between end and start
         let width = endX - startX
         
@@ -111,8 +122,7 @@ struct MidiNoteView: View {
                         }
                 }
             )
-            .position(x: startX + width/2, y: y + keyHeight/2)
-            .offset(isDragging ? dragOffset : .zero)
+            .position(x: startX + width/2 + offsetX, y: y + keyHeight/2 + offsetY)
             .opacity(isDragging || isResizing ? 0.7 : 1.0)
             // Observe both zoom levels for animations
             .animation(.easeInOut(duration: 0.2), value: viewModel.zoomLevel)
@@ -174,8 +184,8 @@ struct MidiNoteView: View {
                             let snappedEndBeat = viewModel.snapToBeat(beat: endBeat)
                             newDuration = snappedEndBeat - note.startBeat
                             
-                            // Update preview duration
-                            resizePreviewDuration = newDuration
+                            // Update preview duration in view model for all selected notes
+                            viewModel.resizePreviewDuration = newDuration
                         }
                         // Handle drag operation
                         else if isDragging {
@@ -197,20 +207,12 @@ struct MidiNoteView: View {
                                         in: nsView,
                                         scrollView: scrollView
                                     ) {
-                                        // Calculate grid-aligned position
-                                        let newX = viewModel.beatToX(beat: position.beat)
-                                        let keyHeight = viewModel.getKeyHeight()
-                                        let pitchOffset = CGFloat(viewModel.fullEndNote - position.pitch)
-                                        let newY = pitchOffset * keyHeight + keyHeight/2
+                                        // Calculate beat and pitch offsets
+                                        let beatOffset = position.beat - note.startBeat
+                                        let pitchOffset = position.pitch - note.pitch
                                         
-                                        // Calculate current position - don't add width/2 to align with grid
-                                        let currentX = startX
-                                        let currentY = y + keyHeight/2
-                                        
-                                        dragOffset = CGSize(
-                                            width: newX - currentX,
-                                            height: newY - currentY
-                                        )
+                                        // Update preview offset in view model for all selected notes
+                                        viewModel.dragPreviewOffset = (beats: beatOffset, pitchOffset: pitchOffset)
                                     }
                                 }
                             }
@@ -220,19 +222,20 @@ struct MidiNoteView: View {
                         // Handle resize completion
                         if isResizing {
                             // Get the final duration from the preview
-                            if let newDuration = resizePreviewDuration,
+                            if let newDuration = viewModel.resizePreviewDuration,
                                let projectViewModel = viewModel.projectViewModel,
                                let trackId = projectViewModel.selectedTrackId,
                                let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
                                let clip = track.midiClips.first(where: { clip in
                                    clip.notes.contains(where: { $0.id == note.id })
                                }) {
-                                // Update the note duration in the clip
-                                let updatedClip = viewModel.updateNoteDuration(
-                                    clip,
-                                    noteId: note.id,
-                                    newDuration: newDuration
-                                )
+                                // If this note is part of a selection, update all selected notes
+                                let updatedClip = if viewModel.selectedNotes.contains(note.id) && viewModel.selectedNotes.count > 1 {
+                                    viewModel.updateMultipleNotesDuration(clip, newDuration: newDuration)
+                                } else {
+                                    // Otherwise just update this note
+                                    viewModel.updateNoteDuration(clip, noteId: note.id, newDuration: newDuration)
+                                }
                                 
                                 // Update the clip in the project
                                 projectViewModel.updateMidiClip(updatedClip)
@@ -240,7 +243,7 @@ struct MidiNoteView: View {
                             
                             // Reset resize state
                             isResizing = false
-                            resizePreviewDuration = nil
+                            viewModel.resizePreviewDuration = nil
                             
                             // Reset cursor if still hovering
                             if isHoveringResizeHandle {
@@ -261,37 +264,37 @@ struct MidiNoteView: View {
                                let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
                                let clip = track.midiClips.first(where: { clip in
                                    clip.notes.contains(where: { $0.id == note.id })
-                               }) {
-                                let windowPoint = window.convertPoint(fromScreen: mouseLocation)
+                               }),
+                               let dragOffset = viewModel.dragPreviewOffset {
                                 
-                                // Convert window coordinates to view coordinates
-                                if let nsView = window.contentView?.hitTest(windowPoint),
-                                   let scrollView = nsView.enclosingScrollView {
-                                    let viewPoint = nsView.convert(windowPoint, from: nil)
-                                    
-                                    // Calculate the final note position
-                                    if let position = getNotePosition(
-                                        from: viewPoint,
-                                        in: nsView,
-                                        scrollView: scrollView
-                                    ) {
-                                        // Update the note position in the clip
-                                        let updatedClip = viewModel.updateNotePosition(
-                                            clip,
-                                            noteId: note.id,
-                                            newStartBeat: position.beat,
-                                            newPitch: position.pitch
-                                        )
+                                var updatedClip = clip
+                                
+                                // Update all selected notes
+                                for noteId in viewModel.selectedNotes {
+                                    if let noteIndex = updatedClip.notes.firstIndex(where: { $0.id == noteId }) {
+                                        // Apply the offset to each selected note
+                                        let currentNote = updatedClip.notes[noteIndex]
+                                        let newStartBeat = currentNote.startBeat + dragOffset.beats
+                                        let newPitch = currentNote.pitch + dragOffset.pitchOffset
                                         
-                                        // Update the clip in the project
-                                        projectViewModel.updateMidiClip(updatedClip)
+                                        // Ensure the note stays within valid bounds
+                                        if newPitch >= viewModel.fullStartNote && newPitch <= viewModel.fullEndNote &&
+                                           newStartBeat >= 0 && newStartBeat + currentNote.duration <= clip.duration {
+                                            updatedClip.notes[noteIndex].startBeat = newStartBeat
+                                            updatedClip.notes[noteIndex].pitch = newPitch
+                                        }
                                     }
                                 }
+                                
+                                // Update the clip in the project
+                                projectViewModel.updateMidiClip(updatedClip)
                             }
                             
                             // Reset drag state
                             isDragging = false
                             dragOffset = .zero
+                            viewModel.dragPreviewOffset = nil
+                            NSCursor.arrow.set()
                         }
                     }
             )
