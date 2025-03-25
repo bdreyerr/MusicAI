@@ -30,7 +30,7 @@ struct MidiClip: Identifiable, Equatable {
 }
 
 /// Represents a single MIDI note in a clip
-struct MidiNote: Identifiable {
+struct MidiNote: Identifiable, Equatable {
     let id = UUID()
     var pitch: Int // MIDI note number (0-127)
     var startBeat: Double // Start position relative to clip start (in beats)
@@ -40,5 +40,14 @@ struct MidiNote: Identifiable {
     // Computed property to get the end beat position
     var endBeat: Double {
         return startBeat + duration
+    }
+    
+    // Implement Equatable
+    static func == (lhs: MidiNote, rhs: MidiNote) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.pitch == rhs.pitch &&
+               lhs.startBeat == rhs.startBeat &&
+               lhs.duration == rhs.duration &&
+               lhs.velocity == rhs.velocity
     }
 } 

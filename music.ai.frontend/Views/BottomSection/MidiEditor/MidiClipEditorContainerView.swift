@@ -223,15 +223,12 @@ struct MidiClipEditorContainerView: View {
                         .frame(width: pianoRollWidth)
                         .border(themeManager.secondaryBorderColor, width: 0.5)
                         
-                        // Max velocity indicator
-                        ZStack(alignment: .trailing) {
-                            Rectangle()
-                                .fill(themeManager.tertiaryBackgroundColor)
-                            
-                            Text("127")
-                                .font(.system(size: 11))
-                                .foregroundColor(themeManager.primaryTextColor)
-                                .padding(.trailing, 4)
+                        // Velocity editor
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            if let clip = midiClip {
+                                MidiVelocityEditorView(viewModel: midiEditorViewModel, trackId: trackId, clipId: clipId)
+                                    .frame(width: midiEditorViewModel.calculateGridWidth(clipDuration: clip.duration))
+                            }
                         }
                         .border(themeManager.secondaryBorderColor, width: 0.5)
                     }
