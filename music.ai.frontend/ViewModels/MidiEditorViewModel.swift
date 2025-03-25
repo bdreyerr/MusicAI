@@ -263,6 +263,39 @@ class MidiEditorViewModel: ObservableObject {
         return updatedClip
     }
     
+    /// Update a note's duration in a clip
+    func updateNoteDuration(_ clip: MidiClip, noteId: UUID, newDuration: Double) -> MidiClip {
+        // Validate the new duration
+        guard newDuration > 0 else {
+            return clip
+        }
+        
+        var updatedClip = clip
+        if let noteIndex = updatedClip.notes.firstIndex(where: { $0.id == noteId }) {
+            let note = updatedClip.notes[noteIndex]
+            
+            // Ensure the note doesn't extend beyond clip duration
+            let maxDuration = clip.duration - note.startBeat
+            let adjustedDuration = min(newDuration, maxDuration)
+            
+            // Check for overlapping notes and remove them
+            updatedClip.notes.removeAll { otherNote in
+                otherNote.id != noteId && // Don't remove the note we're resizing
+                otherNote.pitch == note.pitch && // Same pitch
+                otherNote.startBeat >= note.startBeat && // Starts after or at our note
+                otherNote.startBeat < note.startBeat + adjustedDuration // Starts before our note ends
+            }
+            
+            // Update the note's duration
+            updatedClip.notes[noteIndex].duration = adjustedDuration
+            
+            // Signal the update
+            midiClipDidUpdate = !midiClipDidUpdate
+        }
+        
+        return updatedClip
+    }
+    
     // MARK: - Navigation Methods
     
     /// Sets the current hovered note to middle C (C4, MIDI note 60)

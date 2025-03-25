@@ -17,6 +17,12 @@ struct MidiNoteView: View {
     @State private var dragOffset: CGSize = .zero
     @State private var dragStartLocation: CGPoint = .zero
     
+    // State for resizing
+    @State private var isResizing: Bool = false
+    @State private var isHoveringResizeHandle: Bool = false
+    @State private var resizeStartDuration: Double = 0
+    @State private var resizePreviewDuration: Double? = nil
+    
     // Helper function to delete the note
     private func deleteNote() {
         // Get the current clip
@@ -72,7 +78,7 @@ struct MidiNoteView: View {
         // Calculate start position
         let startX = viewModel.beatToX(beat: note.startBeat)
         // Calculate end position
-        let endX = viewModel.beatToX(beat: note.startBeat + note.duration)
+        let endX = viewModel.beatToX(beat: note.startBeat + (resizePreviewDuration ?? note.duration))
         // Width is the difference between end and start
         let width = endX - startX
         
@@ -87,9 +93,27 @@ struct MidiNoteView: View {
                 RoundedRectangle(cornerRadius: min(4, keyHeight * 0.3))
                     .stroke(viewModel.isNoteSelected(note.id) ? Color.white : themeManager.accentColor, lineWidth: viewModel.isNoteSelected(note.id) ? 2 : 1)
             )
+            .overlay(
+                // Resize handle
+                HStack {
+                    Spacer()
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(width: 8)
+                        .contentShape(Rectangle())
+                        .onHover { hovering in
+                            isHoveringResizeHandle = hovering
+                            if hovering && !isResizing {
+                                NSCursor.resizeLeftRight.set()
+                            } else if !hovering && !isResizing && !isDragging {
+                                NSCursor.arrow.set()
+                            }
+                        }
+                }
+            )
             .position(x: startX + width/2, y: y + keyHeight/2)
             .offset(isDragging ? dragOffset : .zero)
-            .opacity(isDragging ? 0.7 : 1.0)
+            .opacity(isDragging || isResizing ? 0.7 : 1.0)
             // Observe both zoom levels for animations
             .animation(.easeInOut(duration: 0.2), value: viewModel.zoomLevel)
             .animation(.easeInOut(duration: 0.2), value: viewModel.horizontalZoomLevel)
@@ -113,62 +137,120 @@ struct MidiNoteView: View {
                         }
                     }
             )
-            // Add drag gesture with lower priority
-            .highPriorityGesture(
+            // Combined gesture handler for both resize and drag
+            .gesture(
                 DragGesture(minimumDistance: 2)
                     .onChanged { value in
-                        // Only check for draw mode now
-                        guard !viewModel.isDrawModeEnabled else { return }
-                        
-                        // Set initial state on first detection
-                        if !isDragging {
-                            isDragging = true
-                            dragStartLocation = value.startLocation
-                            // Select the note if it's not already selected
-                            if !viewModel.isNoteSelected(note.id) {
-                                viewModel.toggleNoteSelection(note.id, isShiftPressed: false)
+                        // Determine which operation to perform based on initial click location
+                        if !isDragging && !isResizing {
+                            // If we're hovering over the resize handle, start resize operation
+                            if isHoveringResizeHandle {
+                                isResizing = true
+                                resizeStartDuration = note.duration
+                                NSCursor.resizeLeftRight.set()
+                            } else if !viewModel.isDrawModeEnabled {
+                                // Otherwise start drag operation (if not in draw mode)
+                                isDragging = true
+                                dragStartLocation = value.startLocation
+                                // Select the note if it's not already selected
+                                if !viewModel.isNoteSelected(note.id) {
+                                    viewModel.toggleNoteSelection(note.id, isShiftPressed: false)
+                                }
                             }
                         }
                         
-                        // Get mouse location in screen coordinates
-                        let mouseLocation = NSEvent.mouseLocation
-                        
-                        // Convert screen coordinates to window coordinates
-                        if let window = NSApp.keyWindow {
-                            let windowPoint = window.convertPoint(fromScreen: mouseLocation)
+                        // Handle resize operation
+                        if isResizing {
+                            // Calculate duration change based on drag distance
+                            let dragDistanceInBeats = viewModel.xToBeat(x: value.translation.width)
+                            var newDuration = resizeStartDuration + dragDistanceInBeats
                             
-                            // Convert window coordinates to view coordinates
-                            if let nsView = window.contentView?.hitTest(windowPoint),
-                               let scrollView = nsView.enclosingScrollView {
-                                let viewPoint = nsView.convert(windowPoint, from: nil)
+                            // Ensure minimum duration (1 division)
+                            let minDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+                            newDuration = max(minDuration, newDuration)
+                            
+                            // Snap to grid
+                            let endBeat = note.startBeat + newDuration
+                            let snappedEndBeat = viewModel.snapToBeat(beat: endBeat)
+                            newDuration = snappedEndBeat - note.startBeat
+                            
+                            // Update preview duration
+                            resizePreviewDuration = newDuration
+                        }
+                        // Handle drag operation
+                        else if isDragging {
+                            // Get mouse location in screen coordinates
+                            let mouseLocation = NSEvent.mouseLocation
+                            
+                            // Convert screen coordinates to window coordinates
+                            if let window = NSApp.keyWindow {
+                                let windowPoint = window.convertPoint(fromScreen: mouseLocation)
                                 
-                                // Calculate the note position
-                                if let position = getNotePosition(
-                                    from: viewPoint,
-                                    in: nsView,
-                                    scrollView: scrollView
-                                ) {
-                                    // Calculate grid-aligned position
-                                    let newX = viewModel.beatToX(beat: position.beat)
-                                    let keyHeight = viewModel.getKeyHeight()
-                                    let pitchOffset = CGFloat(viewModel.fullEndNote - position.pitch)
-                                    let newY = pitchOffset * keyHeight + keyHeight/2
+                                // Convert window coordinates to view coordinates
+                                if let nsView = window.contentView?.hitTest(windowPoint),
+                                   let scrollView = nsView.enclosingScrollView {
+                                    let viewPoint = nsView.convert(windowPoint, from: nil)
                                     
-                                    // Calculate current position - don't add width/2 to align with grid
-                                    let currentX = startX
-                                    let currentY = y + keyHeight/2
-                                    
-                                    dragOffset = CGSize(
-                                        width: newX - currentX,
-                                        height: newY - currentY
-                                    )
+                                    // Calculate the note position
+                                    if let position = getNotePosition(
+                                        from: viewPoint,
+                                        in: nsView,
+                                        scrollView: scrollView
+                                    ) {
+                                        // Calculate grid-aligned position
+                                        let newX = viewModel.beatToX(beat: position.beat)
+                                        let keyHeight = viewModel.getKeyHeight()
+                                        let pitchOffset = CGFloat(viewModel.fullEndNote - position.pitch)
+                                        let newY = pitchOffset * keyHeight + keyHeight/2
+                                        
+                                        // Calculate current position - don't add width/2 to align with grid
+                                        let currentX = startX
+                                        let currentY = y + keyHeight/2
+                                        
+                                        dragOffset = CGSize(
+                                            width: newX - currentX,
+                                            height: newY - currentY
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                     .onEnded { value in
-                        // Only process if we were actually dragging
-                        if isDragging {
+                        // Handle resize completion
+                        if isResizing {
+                            // Get the final duration from the preview
+                            if let newDuration = resizePreviewDuration,
+                               let projectViewModel = viewModel.projectViewModel,
+                               let trackId = projectViewModel.selectedTrackId,
+                               let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
+                               let clip = track.midiClips.first(where: { clip in
+                                   clip.notes.contains(where: { $0.id == note.id })
+                               }) {
+                                // Update the note duration in the clip
+                                let updatedClip = viewModel.updateNoteDuration(
+                                    clip,
+                                    noteId: note.id,
+                                    newDuration: newDuration
+                                )
+                                
+                                // Update the clip in the project
+                                projectViewModel.updateMidiClip(updatedClip)
+                            }
+                            
+                            // Reset resize state
+                            isResizing = false
+                            resizePreviewDuration = nil
+                            
+                            // Reset cursor if still hovering
+                            if isHoveringResizeHandle {
+                                NSCursor.resizeLeftRight.set()
+                            } else {
+                                NSCursor.arrow.set()
+                            }
+                        }
+                        // Handle drag completion
+                        else if isDragging {
                             // Get mouse location in screen coordinates
                             let mouseLocation = NSEvent.mouseLocation
                             
@@ -206,13 +288,13 @@ struct MidiNoteView: View {
                                     }
                                 }
                             }
+                            
+                            // Reset drag state
+                            isDragging = false
+                            dragOffset = .zero
                         }
-                        
-                        // Reset drag state
-                        isDragging = false
-                        dragOffset = .zero
                     }
             )
-            .zIndex(isDragging ? 1000 : 100) // Ensure dragged note is above others
+            .zIndex(isDragging || isResizing ? 1000 : 100) // Ensure dragged/resized note is above others
     }
 }

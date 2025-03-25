@@ -93,7 +93,7 @@ struct MidiGridEditorView: View {
         
         // If there's already a note at this position and pitch, don't add a new one
         if existingNoteAtPosition != nil {
-            print("DEBUG - Note already exists at position \(position.beat) with pitch \(position.pitch)")
+//            print("DEBUG - Note already exists at position \(position.beat) with pitch \(position.pitch)")
             return
         }
         
@@ -256,23 +256,23 @@ struct MidiGridEditorView: View {
                             viewModel.isDrawModeEnabled ?
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    print("DEBUG - Draw mode drag detected")
+//                                    print("DEBUG - Draw mode drag detected")
                                     isDragging = true
                                     
                                     // Get mouse location in screen coordinates
                                     let mouseLocation = NSEvent.mouseLocation
-                                    print("DEBUG - Mouse Location (screen): \(mouseLocation)")
+//                                    print("DEBUG - Mouse Location (screen): \(mouseLocation)")
                                     
                                     // Convert screen coordinates to window coordinates
                                     if let window = NSApp.keyWindow {
                                         let windowPoint = window.convertPoint(fromScreen: mouseLocation)
-                                        print("DEBUG - Window Point: \(windowPoint)")
+//                                        print("DEBUG - Window Point: \(windowPoint)")
                                         
                                         // Convert window coordinates to view coordinates
                                         if let nsView = window.contentView?.hitTest(windowPoint),
                                            let scrollView = nsView.enclosingScrollView {
                                             let viewPoint = nsView.convert(windowPoint, from: nil)
-                                            print("DEBUG - View Point: \(viewPoint)")
+//                                            print("DEBUG - View Point: \(viewPoint)")
                                             
                                             // Calculate the note position
                                             if let position = getNotePosition(
@@ -280,14 +280,14 @@ struct MidiGridEditorView: View {
                                                 in: nsView,
                                                 scrollView: scrollView
                                             ) {
-                                                print("DEBUG - Adding/updating note at pitch: \(position.pitch), beat: \(position.beat)")
+//                                                print("DEBUG - Adding/updating note at pitch: \(position.pitch), beat: \(position.beat)")
                                                 addOrUpdateNote(at: position, in: clip)
                                             }
                                         }
                                     }
                                 }
                                 .onEnded { _ in
-                                    print("DEBUG - Draw mode drag ended")
+//                                    print("DEBUG - Draw mode drag ended")
                                     isDragging = false
                                     currentDragColumn = nil
                                 }
@@ -295,22 +295,22 @@ struct MidiGridEditorView: View {
                         )
                         .onTapGesture(count: 2) { location in
                             guard !viewModel.isDrawModeEnabled else { return }
-                            print("DEBUG - Double tap detected in normal mode")
+//                            print("DEBUG - Double tap detected in normal mode")
                             
                             // Get mouse location in screen coordinates
                             let mouseLocation = NSEvent.mouseLocation
-                            print("DEBUG - Mouse Location (screen): \(mouseLocation)")
+//                            print("DEBUG - Mouse Location (screen): \(mouseLocation)")
                             
                             // Convert screen coordinates to window coordinates
                             if let window = NSApp.keyWindow {
                                 let windowPoint = window.convertPoint(fromScreen: mouseLocation)
-                                print("DEBUG - Window Point: \(windowPoint)")
+//                                print("DEBUG - Window Point: \(windowPoint)")
                                 
                                 // Convert window coordinates to view coordinates
                                 if let nsView = window.contentView?.hitTest(windowPoint),
                                    let scrollView = nsView.enclosingScrollView {
                                     let viewPoint = nsView.convert(windowPoint, from: nil)
-                                    print("DEBUG - View Point: \(viewPoint)")
+//                                    print("DEBUG - View Point: \(viewPoint)")
                                     
                                     // Calculate note position directly
                                     if let position = getNotePosition(
@@ -318,7 +318,7 @@ struct MidiGridEditorView: View {
                                         in: nsView,
                                         scrollView: scrollView
                                     ) {
-                                        print("DEBUG - Adding note at pitch: \(position.pitch), beat: \(position.beat)")
+//                                        print("DEBUG - Adding note at pitch: \(position.pitch), beat: \(position.beat)")
                                         
                                         // Check if there's already a note at this position and pitch
                                         let column = Int(position.beat * Double(viewModel.gridDivision.divisionsPerBeat))
@@ -329,7 +329,7 @@ struct MidiGridEditorView: View {
                                         
                                         // If there's already a note at this position and pitch, don't add a new one
                                         if existingNoteAtPosition != nil {
-                                            print("DEBUG - Note already exists at position \(position.beat) with pitch \(position.pitch)")
+//                                            print("DEBUG - Note already exists at position \(position.beat) with pitch \(position.pitch)")
                                             return
                                         }
                                         
