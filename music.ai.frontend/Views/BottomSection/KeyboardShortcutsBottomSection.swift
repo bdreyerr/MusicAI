@@ -24,7 +24,7 @@ struct KeyboardShortcutsBottomSection: View {
             }) {
                 EmptyView()
             }
-            .keyboardShortcut("+", modifiers: [.option])
+            .keyboardShortcut("+", modifiers: [.shift])
             
             // Grid Zoom out
             Button(action: {
@@ -32,7 +32,7 @@ struct KeyboardShortcutsBottomSection: View {
             }) {
                 EmptyView()
             }
-            .keyboardShortcut("-", modifiers: [.option])
+            .keyboardShortcut("-", modifiers: [.shift])
             
             // Piano Roll Zoom in (simply +)
             Button(action: {

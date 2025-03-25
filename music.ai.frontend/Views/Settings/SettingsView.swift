@@ -66,6 +66,9 @@ struct KeyboardShortcutsView: View {
         ShortcutCategory(
             name: "Timeline",
             shortcuts: [
+                ShortcutItem(name: "Copy Clip(s)", shortcut: "⌘C"),
+                ShortcutItem(name: "Paste Clip(s)", shortcut: "⌘V"),
+                ShortcutItem(name: "Zoom In", shortcut: "⌘+"),
                 ShortcutItem(name: "Zoom In", shortcut: "⌘+"),
                 ShortcutItem(name: "Zoom Out", shortcut: "⌘-"),
                 ShortcutItem(name: "Add Audio Track", shortcut: "⌘T"),
@@ -87,11 +90,11 @@ struct KeyboardShortcutsView: View {
             ]
         ),
         ShortcutCategory(
-            name: "Editing",
+            name: "Midi Editor",
             shortcuts: [
                 ShortcutItem(name: "Delete Selected Clip", shortcut: "⌫"),
-                ShortcutItem(name: "Copy", shortcut: "⌘C"),
-                ShortcutItem(name: "Paste", shortcut: "⌘V")
+                ShortcutItem(name: "Copy Note(s)", shortcut: "⌘C"),
+                ShortcutItem(name: "Paste Note(s)", shortcut: "⌘V")
             ]
         ),
         ShortcutCategory(

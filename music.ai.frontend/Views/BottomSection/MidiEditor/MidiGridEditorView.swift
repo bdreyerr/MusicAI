@@ -350,6 +350,23 @@ struct MidiNoteView: View {
     @ObservedObject var viewModel: MidiEditorViewModel
     @EnvironmentObject var themeManager: ThemeManager
     
+    // Helper function to delete the note
+    private func deleteNote() {
+        // Get the current clip
+        if let projectViewModel = viewModel.projectViewModel,
+           let trackId = projectViewModel.selectedTrackId,
+           let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
+           let clip = track.midiClips.first(where: { clip in
+               clip.notes.contains(where: { $0.id == note.id })
+           }) {
+            // Create updated clip with the note removed
+            let updatedClip = viewModel.removeNoteFromClip(clip, noteId: note.id)
+            
+            // Update the clip in the project
+            projectViewModel.updateMidiClip(updatedClip)
+        }
+    }
+    
     var body: some View {
         // Calculate start position
         let startX = viewModel.beatToX(beat: note.startBeat)
@@ -373,6 +390,23 @@ struct MidiNoteView: View {
             // Observe both zoom levels for animations
             .animation(.easeInOut(duration: 0.2), value: viewModel.zoomLevel)
             .animation(.easeInOut(duration: 0.2), value: viewModel.horizontalZoomLevel)
+            // Add gesture recognizers for note deletion
+            .onTapGesture(count: 2) {
+                // Double click deletion (when draw mode is off)
+                if !viewModel.isDrawModeEnabled {
+                    deleteNote()
+                }
+            }
+            .simultaneousGesture(
+                TapGesture(count: 1)
+                    .onEnded {
+                        // Single click deletion (when draw mode is on)
+                        if viewModel.isDrawModeEnabled {
+                            deleteNote()
+                        }
+                    }
+            )
+            .zIndex(100) // Add high z-index to ensure note receives gestures first
     }
 }
 
