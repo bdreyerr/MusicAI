@@ -7,6 +7,11 @@ struct MidiGridEditorView: View {
     @State private var isDragging: Bool = false
     @State private var currentDragColumn: Int? = nil // Track which column we're currently drawing in
     
+    // Selection rectangle states
+    @State private var isSelecting: Bool = false
+    @State private var selectionStart: CGPoint = .zero
+    @State private var selectionEnd: CGPoint = .zero
+    
     // Track and clip IDs for looking up the clip
     let trackId: UUID
     let clipId: UUID
@@ -118,6 +123,61 @@ struct MidiGridEditorView: View {
         }
     }
     
+    // Helper function to check if a point is inside a note
+    private func isPointInsideNote(_ point: CGPoint, clip: MidiClip) -> Bool {
+        let keyHeight = viewModel.getKeyHeight()
+        let contentOffset = (NSApp.keyWindow?.contentView?.enclosingScrollView?.contentView.bounds.origin ?? .zero)
+        
+        // Adjust point for scroll position
+        let adjustedPoint = CGPoint(
+            x: point.x + contentOffset.x,
+            y: point.y + contentOffset.y
+        )
+        
+        // Convert point to beat and pitch
+        let beat = viewModel.xToBeat(x: adjustedPoint.x)
+        let pitch = viewModel.fullEndNote - Int(adjustedPoint.y / keyHeight)
+        
+        // Check if any note contains this point
+        return clip.notes.contains { note in
+            let noteStartX = viewModel.beatToX(beat: note.startBeat)
+            let noteEndX = viewModel.beatToX(beat: note.startBeat + note.duration)
+            let notePitchY = CGFloat(viewModel.fullEndNote - note.pitch) * keyHeight
+            
+            return adjustedPoint.x >= noteStartX &&
+                   adjustedPoint.x <= noteEndX &&
+                   adjustedPoint.y >= notePitchY &&
+                   adjustedPoint.y <= notePitchY + keyHeight
+        }
+    }
+    
+    // Helper function to get notes in selection rectangle
+    private func getNotesInSelection(_ clip: MidiClip) -> Set<UUID> {
+        let keyHeight = viewModel.getKeyHeight()
+        let contentOffset = (NSApp.keyWindow?.contentView?.enclosingScrollView?.contentView.bounds.origin ?? .zero)
+        
+        // Calculate selection rectangle bounds
+        let minX = min(selectionStart.x, selectionEnd.x) + contentOffset.x
+        let maxX = max(selectionStart.x, selectionEnd.x) + contentOffset.x
+        let minY = min(selectionStart.y, selectionEnd.y) + contentOffset.y
+        let maxY = max(selectionStart.y, selectionEnd.y) + contentOffset.y
+        
+        // Convert bounds to musical values
+        let startBeat = viewModel.xToBeat(x: minX)
+        let endBeat = viewModel.xToBeat(x: maxX)
+        let highPitch = viewModel.fullEndNote - Int(minY / keyHeight)
+        let lowPitch = viewModel.fullEndNote - Int(maxY / keyHeight)
+        
+        // Find notes that intersect with the selection rectangle
+        return Set(clip.notes.filter { note in
+            let noteEndBeat = note.startBeat + note.duration
+            return note.startBeat < endBeat &&
+                   noteEndBeat > startBeat &&
+                   note.pitch >= lowPitch &&
+                   note.pitch <= highPitch
+        }.map { $0.id })
+    }
+    
     var body: some View {
         GeometryReader { geometry in
             // Buttons 
@@ -218,6 +278,25 @@ struct MidiGridEditorView: View {
                     }
                 }
                 
+                // Selection rectangle layer
+                if isSelecting {
+                    Path { path in
+                        let rect = CGRect(
+                            x: min(selectionStart.x, selectionEnd.x),
+                            y: min(selectionStart.y, selectionEnd.y),
+                            width: abs(selectionEnd.x - selectionStart.x),
+                            height: abs(selectionEnd.y - selectionStart.y)
+                        )
+                        path.addRect(rect)
+                    }
+                    .stroke(style: StrokeStyle(
+                        lineWidth: 1,
+                        dash: [5],
+                        dashPhase: 0
+                    ))
+                    .foregroundColor(Color.white.opacity(0.8))
+                }
+                
                 // Debug overlay (toggle with 'D' key)
                 if showDebugOverlay {
                     GeometryReader { geo in
@@ -252,105 +331,132 @@ struct MidiGridEditorView: View {
                                 viewModel.clearNoteSelection()
                             }
                         }
-                        .gesture(
-                            viewModel.isDrawModeEnabled ?
-                            DragGesture(minimumDistance: 0)
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 2)
                                 .onChanged { value in
-//                                    print("DEBUG - Draw mode drag detected")
-                                    isDragging = true
+                                    if !isDragging && !isSelecting {
+                                        // Check if we're clicking on a note
+                                        let clickedOnNote = isPointInsideNote(value.startLocation, clip: clip)
+                                        
+                                        if viewModel.isDrawModeEnabled {
+                                            // In draw mode, always start drawing
+                                            isDragging = true
+                                            
+                                            // Get mouse location in screen coordinates
+                                            let mouseLocation = NSEvent.mouseLocation
+                                            
+                                            // Convert screen coordinates to window coordinates
+                                            if let window = NSApp.keyWindow {
+                                                let windowPoint = window.convertPoint(fromScreen: mouseLocation)
+                                                
+                                                // Convert window coordinates to view coordinates
+                                                if let nsView = window.contentView?.hitTest(windowPoint),
+                                                   let scrollView = nsView.enclosingScrollView {
+                                                    let viewPoint = nsView.convert(windowPoint, from: nil)
+                                                    
+                                                    // Calculate the note position
+                                                    if let position = getNotePosition(
+                                                        from: viewPoint,
+                                                        in: nsView,
+                                                        scrollView: scrollView
+                                                    ) {
+                                                        addOrUpdateNote(at: position, in: clip)
+                                                    }
+                                                }
+                                            }
+                                        } else if !clickedOnNote {
+                                            // Only start selection if we're not in draw mode and not clicking on a note
+                                            isSelecting = true
+                                            selectionStart = value.startLocation
+                                        }
+                                    }
+                                    
+                                    if isSelecting {
+                                        selectionEnd = value.location
+                                        // Update selected notes
+                                        viewModel.selectedNotes = getNotesInSelection(clip)
+                                    } else if isDragging && viewModel.isDrawModeEnabled {
+                                        // Continue drawing in draw mode
+                                        let mouseLocation = NSEvent.mouseLocation
+                                        if let window = NSApp.keyWindow {
+                                            let windowPoint = window.convertPoint(fromScreen: mouseLocation)
+                                            if let nsView = window.contentView?.hitTest(windowPoint),
+                                               let scrollView = nsView.enclosingScrollView {
+                                                let viewPoint = nsView.convert(windowPoint, from: nil)
+                                                if let position = getNotePosition(
+                                                    from: viewPoint,
+                                                    in: nsView,
+                                                    scrollView: scrollView
+                                                ) {
+                                                    addOrUpdateNote(at: position, in: clip)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                .onEnded { value in
+                                    if isSelecting {
+                                        isSelecting = false
+                                    } else if isDragging {
+                                        isDragging = false
+                                        currentDragColumn = nil
+                                    }
+                                }
+                        )
+                        .simultaneousGesture(
+                            TapGesture(count: 2)
+                                .onEnded { _ in
+                                    guard !viewModel.isDrawModeEnabled else { return }
                                     
                                     // Get mouse location in screen coordinates
                                     let mouseLocation = NSEvent.mouseLocation
-//                                    print("DEBUG - Mouse Location (screen): \(mouseLocation)")
                                     
                                     // Convert screen coordinates to window coordinates
                                     if let window = NSApp.keyWindow {
                                         let windowPoint = window.convertPoint(fromScreen: mouseLocation)
-//                                        print("DEBUG - Window Point: \(windowPoint)")
                                         
                                         // Convert window coordinates to view coordinates
                                         if let nsView = window.contentView?.hitTest(windowPoint),
                                            let scrollView = nsView.enclosingScrollView {
                                             let viewPoint = nsView.convert(windowPoint, from: nil)
-//                                            print("DEBUG - View Point: \(viewPoint)")
                                             
-                                            // Calculate the note position
+                                            // Calculate note position directly
                                             if let position = getNotePosition(
                                                 from: viewPoint,
                                                 in: nsView,
                                                 scrollView: scrollView
                                             ) {
-//                                                print("DEBUG - Adding/updating note at pitch: \(position.pitch), beat: \(position.beat)")
-                                                addOrUpdateNote(at: position, in: clip)
+                                                // Check if there's already a note at this position and pitch
+                                                let column = Int(position.beat * Double(viewModel.gridDivision.divisionsPerBeat))
+                                                let existingNoteAtPosition = clip.notes.first { note in
+                                                    let noteColumn = Int(note.startBeat * Double(viewModel.gridDivision.divisionsPerBeat))
+                                                    return noteColumn == column && note.pitch == position.pitch
+                                                }
+                                                
+                                                // If there's already a note at this position and pitch, don't add a new one
+                                                if existingNoteAtPosition != nil {
+                                                    return
+                                                }
+                                                
+                                                // Set duration based on grid division
+                                                let defaultDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
+                                                
+                                                let updatedClip = viewModel.addNoteToClip(
+                                                    clip,
+                                                    pitch: position.pitch,
+                                                    startBeat: position.beat,
+                                                    duration: defaultDuration
+                                                )
+                                                
+                                                // Update the clip in the project
+                                                if let projectViewModel = viewModel.projectViewModel {
+                                                    projectViewModel.updateMidiClip(updatedClip)
+                                                }
                                             }
                                         }
                                     }
                                 }
-                                .onEnded { _ in
-//                                    print("DEBUG - Draw mode drag ended")
-                                    isDragging = false
-                                    currentDragColumn = nil
-                                }
-                            : nil
                         )
-                        .onTapGesture(count: 2) { location in
-                            guard !viewModel.isDrawModeEnabled else { return }
-//                            print("DEBUG - Double tap detected in normal mode")
-                            
-                            // Get mouse location in screen coordinates
-                            let mouseLocation = NSEvent.mouseLocation
-//                            print("DEBUG - Mouse Location (screen): \(mouseLocation)")
-                            
-                            // Convert screen coordinates to window coordinates
-                            if let window = NSApp.keyWindow {
-                                let windowPoint = window.convertPoint(fromScreen: mouseLocation)
-//                                print("DEBUG - Window Point: \(windowPoint)")
-                                
-                                // Convert window coordinates to view coordinates
-                                if let nsView = window.contentView?.hitTest(windowPoint),
-                                   let scrollView = nsView.enclosingScrollView {
-                                    let viewPoint = nsView.convert(windowPoint, from: nil)
-//                                    print("DEBUG - View Point: \(viewPoint)")
-                                    
-                                    // Calculate note position directly
-                                    if let position = getNotePosition(
-                                        from: viewPoint,
-                                        in: nsView,
-                                        scrollView: scrollView
-                                    ) {
-//                                        print("DEBUG - Adding note at pitch: \(position.pitch), beat: \(position.beat)")
-                                        
-                                        // Check if there's already a note at this position and pitch
-                                        let column = Int(position.beat * Double(viewModel.gridDivision.divisionsPerBeat))
-                                        let existingNoteAtPosition = clip.notes.first { note in
-                                            let noteColumn = Int(note.startBeat * Double(viewModel.gridDivision.divisionsPerBeat))
-                                            return noteColumn == column && note.pitch == position.pitch
-                                        }
-                                        
-                                        // If there's already a note at this position and pitch, don't add a new one
-                                        if existingNoteAtPosition != nil {
-//                                            print("DEBUG - Note already exists at position \(position.beat) with pitch \(position.pitch)")
-                                            return
-                                        }
-                                        
-                                        // Set duration based on grid division
-                                        let defaultDuration = 1.0 / Double(viewModel.gridDivision.divisionsPerBeat)
-                                        
-                                        let updatedClip = viewModel.addNoteToClip(
-                                            clip,
-                                            pitch: position.pitch,
-                                            startBeat: position.beat,
-                                            duration: defaultDuration
-                                        )
-                                        
-                                        // Update the clip in the project
-                                        if let projectViewModel = viewModel.projectViewModel {
-                                            projectViewModel.updateMidiClip(updatedClip)
-                                        }
-                                    }
-                                }
-                            }
-                        }
                 }
             }
             .frame(width: midiClip.map { viewModel.calculateGridWidth(clipDuration: $0.duration) } ?? geometry.size.width)
