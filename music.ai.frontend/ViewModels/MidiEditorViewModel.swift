@@ -8,6 +8,9 @@ class MidiEditorViewModel: ObservableObject {
     /// Reference to the project view model for updating clips
     weak var projectViewModel: ProjectViewModel?
     
+    /// Selected notes in the editor
+    @Published var selectedNotes: Set<UUID> = []
+    
     // MARK: - Piano Roll Properties
     
     /// Draw mode state
@@ -331,5 +334,64 @@ class MidiEditorViewModel: ObservableObject {
             updateHoveredKey(currentNote - 1)
             lastCenteredNote = currentNote - 1
         }
+    }
+    
+    // MARK: - Note Selection Methods
+    
+    /// Toggle selection for a note
+    func toggleNoteSelection(_ noteId: UUID, isShiftPressed: Bool) {
+        if !isShiftPressed {
+            // If shift is not pressed, clear other selections
+            selectedNotes = [noteId]
+        } else {
+            // If shift is pressed, toggle this note's selection
+            if selectedNotes.contains(noteId) {
+                selectedNotes.remove(noteId)
+            } else {
+                selectedNotes.insert(noteId)
+            }
+        }
+    }
+    
+    /// Clear all note selections
+    func clearNoteSelection() {
+        selectedNotes.removeAll()
+    }
+    
+    /// Check if a note is selected
+    func isNoteSelected(_ noteId: UUID) -> Bool {
+        return selectedNotes.contains(noteId)
+    }
+    
+    /// Update a note's position in a clip
+    func updateNotePosition(_ clip: MidiClip, noteId: UUID, newStartBeat: Double, newPitch: Int) -> MidiClip {
+        // Validate the new position
+        guard newPitch >= fullStartNote && newPitch <= fullEndNote,
+              newStartBeat >= 0 && newStartBeat < clip.duration else {
+            return clip
+        }
+        
+        var updatedClip = clip
+        if let noteIndex = updatedClip.notes.firstIndex(where: { $0.id == noteId }) {
+            // Keep the same duration and velocity, just update position and pitch
+            let duration = updatedClip.notes[noteIndex].duration
+            let velocity = updatedClip.notes[noteIndex].velocity
+            
+            // Make sure the note doesn't extend beyond clip duration
+            let adjustedDuration = min(duration, clip.duration - newStartBeat)
+            
+            // Update the note
+            updatedClip.notes[noteIndex] = MidiNote(
+                pitch: newPitch,
+                startBeat: newStartBeat,
+                duration: adjustedDuration,
+                velocity: velocity
+            )
+            
+            // Signal the update
+            midiClipDidUpdate = !midiClipDidUpdate
+        }
+        
+        return updatedClip
     }
 } 

@@ -120,6 +120,18 @@ struct MidiGridEditorView: View {
     
     var body: some View {
         GeometryReader { geometry in
+            // Buttons 
+            VStack {
+                Button(action: {
+                    print("delete note - test")
+                }) {
+                    EmptyView()
+                }
+                .keyboardShortcut(.delete, modifiers: [])
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+
             ZStack {
                 // Grid lines layer
                 Canvas { context, size in
@@ -234,6 +246,12 @@ struct MidiGridEditorView: View {
                 if let clip = midiClip {
                     Color.clear
                         .contentShape(Rectangle())
+                        .onTapGesture {
+                            // Clear selection when clicking empty space (only when not in draw mode)
+                            if !viewModel.isDrawModeEnabled {
+                                viewModel.clearNoteSelection()
+                            }
+                        }
                         .gesture(
                             viewModel.isDrawModeEnabled ?
                             DragGesture(minimumDistance: 0)
@@ -342,71 +360,6 @@ struct MidiGridEditorView: View {
             }
         }
         .frame(height: viewModel.calculatePianoRollContentHeight())
-    }
-}
-
-struct MidiNoteView: View {
-    let note: MidiNote
-    @ObservedObject var viewModel: MidiEditorViewModel
-    @EnvironmentObject var themeManager: ThemeManager
-    
-    // Helper function to delete the note
-    private func deleteNote() {
-        // Get the current clip
-        if let projectViewModel = viewModel.projectViewModel,
-           let trackId = projectViewModel.selectedTrackId,
-           let track = projectViewModel.tracks.first(where: { $0.id == trackId }),
-           let clip = track.midiClips.first(where: { clip in
-               clip.notes.contains(where: { $0.id == note.id })
-           }) {
-            // Create updated clip with the note removed
-            let updatedClip = viewModel.removeNoteFromClip(clip, noteId: note.id)
-            
-            // Update the clip in the project
-            projectViewModel.updateMidiClip(updatedClip)
-        }
-    }
-    
-    var body: some View {
-        // Calculate start position
-        let startX = viewModel.beatToX(beat: note.startBeat)
-        // Calculate end position
-        let endX = viewModel.beatToX(beat: note.startBeat + note.duration)
-        // Width is the difference between end and start
-        let width = endX - startX
-        
-        // Calculate vertical position based on current zoom level
-        let keyHeight = viewModel.getKeyHeight()
-        let y = CGFloat(viewModel.fullEndNote - note.pitch) * keyHeight
-        
-        RoundedRectangle(cornerRadius: min(4, keyHeight * 0.3))
-            .fill(themeManager.accentColor.opacity(0.7))
-            .frame(width: width, height: max(1, keyHeight - 2)) // Ensure minimum height of 1
-            .overlay(
-                RoundedRectangle(cornerRadius: min(4, keyHeight * 0.3))
-                    .stroke(themeManager.accentColor, lineWidth: 1)
-            )
-            .position(x: startX + width/2, y: y + keyHeight/2)
-            // Observe both zoom levels for animations
-            .animation(.easeInOut(duration: 0.2), value: viewModel.zoomLevel)
-            .animation(.easeInOut(duration: 0.2), value: viewModel.horizontalZoomLevel)
-            // Add gesture recognizers for note deletion
-            .onTapGesture(count: 2) {
-                // Double click deletion (when draw mode is off)
-                if !viewModel.isDrawModeEnabled {
-                    deleteNote()
-                }
-            }
-            .simultaneousGesture(
-                TapGesture(count: 1)
-                    .onEnded {
-                        // Single click deletion (when draw mode is on)
-                        if viewModel.isDrawModeEnabled {
-                            deleteNote()
-                        }
-                    }
-            )
-            .zIndex(100) // Add high z-index to ensure note receives gestures first
     }
 }
 
