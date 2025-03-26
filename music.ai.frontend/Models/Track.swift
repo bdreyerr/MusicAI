@@ -1,7 +1,8 @@
 import Foundation
 import SwiftUI
+//import Models.CodableUtilities
 
-enum TrackType: Equatable {
+enum TrackType: String, Equatable, Codable {
     case audio
     case midi
     case instrument
@@ -46,8 +47,8 @@ enum TrackType: Equatable {
     }
 }
 
-struct Track: Identifiable, Equatable {
-    let id = UUID()
+struct Track: Identifiable, Equatable, Codable {
+    let id: UUID
     var name: String
     var type: TrackType
     var isMuted: Bool = false
@@ -63,6 +64,89 @@ struct Track: Identifiable, Equatable {
     var instrument: Effect? = nil // Optional instrument for MIDI tracks
     var midiClips: [MidiClip] = [] // MIDI clips on this track
     var audioClips: [AudioClip] = [] // Audio clips on this track
+    
+    // Coding keys for Codable
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, isMuted, isSolo, isArmed, isEnabled, volume, pan, height, isCollapsed
+        case customColorData, effects, instrument, midiClips, audioClips
+    }
+    
+    init(id: UUID = UUID(), name: String, type: TrackType, isMuted: Bool = false, isSolo: Bool = false, isArmed: Bool = false, 
+         isEnabled: Bool = true, volume: Double = 0.8, pan: Double = 0.5, height: CGFloat = 100, isCollapsed: Bool = false,
+         customColor: Color? = nil, effects: [Effect] = [], instrument: Effect? = nil, midiClips: [MidiClip] = [], audioClips: [AudioClip] = []) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.isMuted = isMuted
+        self.isSolo = isSolo
+        self.isArmed = isArmed
+        self.isEnabled = isEnabled
+        self.volume = volume
+        self.pan = pan
+        self.height = height
+        self.isCollapsed = isCollapsed
+        self.customColor = customColor
+        self.effects = effects
+        self.instrument = instrument
+        self.midiClips = midiClips
+        self.audioClips = audioClips
+    }
+    
+    // Custom initializer from decoder
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        type = try container.decode(TrackType.self, forKey: .type)
+        isMuted = try container.decode(Bool.self, forKey: .isMuted)
+        isSolo = try container.decode(Bool.self, forKey: .isSolo)
+        isArmed = try container.decode(Bool.self, forKey: .isArmed)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        volume = try container.decode(Double.self, forKey: .volume)
+        pan = try container.decode(Double.self, forKey: .pan)
+        height = try container.decode(CGFloat.self, forKey: .height)
+        isCollapsed = try container.decode(Bool.self, forKey: .isCollapsed)
+        
+        // Decode optional customColor
+        if let colorData = try container.decodeIfPresent(CodableColor.self, forKey: .customColorData) {
+            customColor = colorData.color
+        } else {
+            customColor = nil
+        }
+        
+        effects = try container.decode([Effect].self, forKey: .effects)
+        instrument = try container.decodeIfPresent(Effect.self, forKey: .instrument)
+        midiClips = try container.decode([MidiClip].self, forKey: .midiClips)
+        audioClips = try container.decode([AudioClip].self, forKey: .audioClips)
+    }
+    
+    // Custom encoder
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(type, forKey: .type)
+        try container.encode(isMuted, forKey: .isMuted)
+        try container.encode(isSolo, forKey: .isSolo)
+        try container.encode(isArmed, forKey: .isArmed)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(volume, forKey: .volume)
+        try container.encode(pan, forKey: .pan)
+        try container.encode(height, forKey: .height)
+        try container.encode(isCollapsed, forKey: .isCollapsed)
+        
+        // Encode optional customColor
+        if let color = customColor {
+            try container.encode(CodableColor(color: color), forKey: .customColorData)
+        }
+        
+        try container.encode(effects, forKey: .effects)
+        try container.encode(instrument, forKey: .instrument)
+        try container.encode(midiClips, forKey: .midiClips)
+        try container.encode(audioClips, forKey: .audioClips)
+    }
     
     // Get the effective color for the track (custom color or default type color)
     var effectiveColor: Color {

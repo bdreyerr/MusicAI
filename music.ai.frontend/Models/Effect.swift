@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 /// Represents the type of effect or instrument
-enum EffectType: Equatable {
+enum EffectType: Equatable, Codable {
     case equalizer
     case compressor
     case reverb
@@ -13,6 +13,84 @@ enum EffectType: Equatable {
     case synthesizer
     case instrument
     case other(String)
+    
+    // Codable implementation
+    enum CodingKeys: String, CodingKey {
+        case type
+        case customName
+    }
+    
+    enum EffectTypeCase: String, Codable {
+        case equalizer
+        case compressor
+        case reverb
+        case delay
+        case filter
+        case arpeggiator
+        case chordTrigger
+        case synthesizer
+        case instrument
+        case other
+    }
+    
+    // Custom encoder
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        switch self {
+        case .equalizer:
+            try container.encode(EffectTypeCase.equalizer, forKey: .type)
+        case .compressor:
+            try container.encode(EffectTypeCase.compressor, forKey: .type)
+        case .reverb:
+            try container.encode(EffectTypeCase.reverb, forKey: .type)
+        case .delay:
+            try container.encode(EffectTypeCase.delay, forKey: .type)
+        case .filter:
+            try container.encode(EffectTypeCase.filter, forKey: .type)
+        case .arpeggiator:
+            try container.encode(EffectTypeCase.arpeggiator, forKey: .type)
+        case .chordTrigger:
+            try container.encode(EffectTypeCase.chordTrigger, forKey: .type)
+        case .synthesizer:
+            try container.encode(EffectTypeCase.synthesizer, forKey: .type)
+        case .instrument:
+            try container.encode(EffectTypeCase.instrument, forKey: .type)
+        case .other(let name):
+            try container.encode(EffectTypeCase.other, forKey: .type)
+            try container.encode(name, forKey: .customName)
+        }
+    }
+    
+    // Custom decoder
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let typeCase = try container.decode(EffectTypeCase.self, forKey: .type)
+        
+        switch typeCase {
+        case .equalizer:
+            self = .equalizer
+        case .compressor:
+            self = .compressor
+        case .reverb:
+            self = .reverb
+        case .delay:
+            self = .delay
+        case .filter:
+            self = .filter
+        case .arpeggiator:
+            self = .arpeggiator
+        case .chordTrigger:
+            self = .chordTrigger
+        case .synthesizer:
+            self = .synthesizer
+        case .instrument:
+            self = .instrument
+        case .other:
+            let name = try container.decode(String.self, forKey: .customName)
+            self = .other(name)
+        }
+    }
     
     var name: String {
         switch self {
@@ -90,14 +168,15 @@ enum EffectType: Equatable {
 }
 
 /// Represents an effect or instrument that can be applied to a track
-struct Effect: Identifiable, Equatable {
-    let id = UUID()
+struct Effect: Identifiable, Equatable, Codable {
+    let id: UUID
     var type: EffectType
     var name: String
     var isEnabled: Bool = true
     var parameters: [String: Double] = [:]
     
-    init(type: EffectType, name: String? = nil, isEnabled: Bool = true) {
+    init(id: UUID = UUID(), type: EffectType, name: String? = nil, isEnabled: Bool = true) {
+        self.id = id
         self.type = type
         self.name = name ?? type.name
         self.isEnabled = isEnabled

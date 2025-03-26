@@ -81,59 +81,62 @@ class AudioViewModel: ObservableObject {
         return true
     }
     
-    /// Create an audio clip from the current selection
-    func createAudioClipFromSelection() -> Bool {
-        // Ensure there is an active selection and we have references to required objects
-        guard let projectViewModel = projectViewModel,
-              let timelineState = findTimelineState(),
-              timelineState.selectionActive,
-              let trackId = projectViewModel.selectedTrackId,
-              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
-            return false
-        }
-        
-        // Get the selected track
-        var track = projectViewModel.tracks[trackIndex]
-        
-        // Ensure this is an audio track
-        guard track.type == .audio else {
-            return false
-        }
-        
-        // Get the selection range
-        let (startBeat, endBeat) = timelineState.normalizedSelectionRange
-        let duration = endBeat - startBeat
-        
-        // Ensure the duration is valid
-        guard duration > 0 else {
-            return false
-        }
-        
-        // Check if we can add a clip at this position (no overlaps)
-        guard track.canAddAudioClip(startBeat: startBeat, duration: duration) else {
-            return false
-        }
-        
-        // Create a new audio clip
-        let clipName = "Audio \(track.audioClips.count + 1)"
-        let newClip = AudioClip.createEmpty(
-            name: clipName, 
-            startBeat: startBeat, 
-            duration: duration,
-            color: track.effectiveColor
-        )
-        
-        // Add the clip to the track
-        track.addAudioClip(newClip)
-        
-        // Update the track in the project view model
-        projectViewModel.updateTrack(at: trackIndex, with: track)
-        
-        // Clear the selection
-        timelineState.clearSelection()
-        
-        return true
+    func createAudioClipFromSelection() {
+        print("do nothing")
     }
+    /// Create an audio clip from the current selection
+//    func createAudioClipFromSelection() -> Bool {
+//        // Ensure there is an active selection and we have references to required objects
+//        guard let projectViewModel = projectViewModel,
+//              let timelineState = findTimelineState(),
+//              timelineState.selectionActive,
+//              let trackId = projectViewModel.selectedTrackId,
+//              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
+//            return false
+//        }
+//        
+//        // Get the selected track
+//        var track = projectViewModel.tracks[trackIndex]
+//        
+//        // Ensure this is an audio track
+//        guard track.type == .audio else {
+//            return false
+//        }
+//        
+//        // Get the selection range
+//        let (startBeat, endBeat) = timelineState.normalizedSelectionRange
+//        let duration = endBeat - startBeat
+//        
+//        // Ensure the duration is valid
+//        guard duration > 0 else {
+//            return false
+//        }
+//        
+//        // Check if we can add a clip at this position (no overlaps)
+//        guard track.canAddAudioClip(startBeat: startBeat, duration: duration) else {
+//            return false
+//        }
+//        
+//        // Create a new audio clip
+//        let clipName = "Audio \(track.audioClips.count + 1)"
+//        let newClip = AudioClip.createEmpty(
+//            name: clipName, 
+//            startBeat: startBeat, 
+//            duration: duration,
+//            color: track.effectiveColor
+//        )
+//        
+//        // Add the clip to the track
+//        track.addAudioClip(newClip)
+//        
+//        // Update the track in the project view model
+//        projectViewModel.updateTrack(at: trackIndex, with: track)
+//        
+//        // Clear the selection
+//        timelineState.clearSelection()
+//        
+//        return true
+//    }
     
     /// Remove an audio clip from a track
     func removeAudioClip(trackId: UUID, clipId: UUID) -> Bool {

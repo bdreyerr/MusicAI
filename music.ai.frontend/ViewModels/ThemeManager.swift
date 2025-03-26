@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 /// Theme options available in the application
-enum ThemeOption: String, CaseIterable, Identifiable {
+enum ThemeOption: String, CaseIterable, Identifiable, Codable {
     case light = "Light"
     case dark = "Dark"
     

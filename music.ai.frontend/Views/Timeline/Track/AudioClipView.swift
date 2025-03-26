@@ -957,20 +957,3 @@ extension Color {
         return (r * 0.299 + g * 0.587 + b * 0.114)
     }
 }
-
-#Preview {
-    let projectVM = ProjectViewModel()
-    let track = Track.samples.first(where: { $0.type == .audio })!
-    let trackVM = projectVM.trackViewModelManager.viewModel(for: track)
-    
-    return AudioClipView(
-        clip: AudioClip(name: "Test Audio", startBeat: 4, duration: 4),
-        track: track,
-        state: TimelineStateViewModel(),
-        projectViewModel: projectVM,
-        trackViewModel: trackVM
-    )
-    .environmentObject(ThemeManager())
-    .environmentObject(MenuCoordinator())
-    .frame(width: 400, height: 70)
-}

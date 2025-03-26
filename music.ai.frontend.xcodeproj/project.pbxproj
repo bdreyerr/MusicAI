@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1A3584112D93C26300C6342B /* DSWaveformImage in Frameworks */ = {isa = PBXBuildFile; productRef = 1A3584102D93C26300C6342B /* DSWaveformImage */; };
+		1A3584132D93C26300C6342B /* DSWaveformImageViews in Frameworks */ = {isa = PBXBuildFile; productRef = 1A3584122D93C26300C6342B /* DSWaveformImageViews */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		1AFCF1A12D878F8A003F104C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,9 +26,22 @@
 		1AFCF19B2D878F8A003F104C /* music.ai.frontendUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = music.ai.frontendUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1A3584DF2D94A79F00C6342B /* Exceptions for "music.ai.frontend" folder in "music.ai.frontend" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"music-ai-frontend-Info.plist",
+			);
+			target = 1A273D702D8293A5008EE3FA /* music.ai.frontend */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1A273D732D8293A5008EE3FA /* music.ai.frontend */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1A3584DF2D94A79F00C6342B /* Exceptions for "music.ai.frontend" folder in "music.ai.frontend" target */,
+			);
 			path = music.ai.frontend;
 			sourceTree = "<group>";
 		};
@@ -39,6 +57,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1A3584112D93C26300C6342B /* DSWaveformImage in Frameworks */,
+				1A3584132D93C26300C6342B /* DSWaveformImageViews in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +110,8 @@
 			);
 			name = music.ai.frontend;
 			packageProductDependencies = (
+				1A3584102D93C26300C6342B /* DSWaveformImage */,
+				1A3584122D93C26300C6342B /* DSWaveformImageViews */,
 			);
 			productName = music.ai.frontend;
 			productReference = 1A273D712D8293A5008EE3FA /* Glitch.app */;
@@ -146,6 +168,9 @@
 			);
 			mainGroup = 1A273D682D8293A5008EE3FA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1A35840F2D93C26300C6342B /* XCRemoteSwiftPackageReference "DSWaveformImage" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1A273D722D8293A5008EE3FA /* Products */;
 			projectDirPath = "";
@@ -332,6 +357,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "music-ai-frontend-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Glitch;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -360,6 +386,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "music-ai-frontend-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Glitch;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -437,6 +464,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1A35840F2D93C26300C6342B /* XCRemoteSwiftPackageReference "DSWaveformImage" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/dmrschmidt/DSWaveformImage";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 14.2.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1A3584102D93C26300C6342B /* DSWaveformImage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A35840F2D93C26300C6342B /* XCRemoteSwiftPackageReference "DSWaveformImage" */;
+			productName = DSWaveformImage;
+		};
+		1A3584122D93C26300C6342B /* DSWaveformImageViews */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1A35840F2D93C26300C6342B /* XCRemoteSwiftPackageReference "DSWaveformImage" */;
+			productName = DSWaveformImageViews;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1A273D692D8293A5008EE3FA /* Project object */;
 }
