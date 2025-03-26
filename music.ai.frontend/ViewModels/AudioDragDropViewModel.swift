@@ -56,7 +56,14 @@ class AudioDragDropViewModel: ObservableObject {
     /// Register when a drag operation has ended
     func registerDragEnded(successful: Bool) {
         print("📝 Drag operation ended, successful: \(successful)")
-        // Here we could clean up any temporary resources used for dragging
+        
+        // Clear most recent drag path when a drag operation ends so it won't interfere with future drops
+        if !successful {
+            mostRecentDragPath = nil
+            dragPathCache.removeAll()
+        }
+        
+        // Notify subscribers that a drag has ended
         dragEndedPublisher.send(successful)
     }
     
@@ -66,6 +73,10 @@ class AudioDragDropViewModel: ObservableObject {
         if successful {
             // Here we could create a security-scoped bookmark for future use
             createSecurityScopedBookmark(for: path)
+        } else {
+            // Clear cache if drop wasn't successful
+            dragPathCache.removeAll()
+            mostRecentDragPath = nil
         }
         dropCompletedPublisher.send((fileName, path, successful))
     }
@@ -367,6 +378,13 @@ class AudioDragDropViewModel: ObservableObject {
         }
         
         return nil
+    }
+    
+    /// Clear all cached drag paths
+    func clearDragCache() {
+        print("📝 Clearing all drag cache data")
+        dragPathCache.removeAll()
+        mostRecentDragPath = nil
     }
     
     // MARK: - Lifecycle

@@ -170,6 +170,12 @@ class AudioFileDragData: NSObject, NSItemProviderWriting, NSItemProviderReading,
                 // Create a security-scoped bookmark for this URL
                 viewModel.createSecurityScopedBookmark(for: filePath)
                 
+                // Clear the cached path since we're handling a direct URL
+                viewModel.mostRecentDragPath = nil
+                
+                // Cache this new path
+                viewModel.cacheDragPath(fileName: fileName, path: filePath)
+                
                 return Self(name: fileName, path: filePath, fileExtension: fileExtension, icon: "music.note")
             } else {
                 print("📦 DECODING ERROR: Failed to decode file URL from data")
@@ -191,27 +197,18 @@ class AudioFileDragData: NSObject, NSItemProviderWriting, NSItemProviderReading,
                     // Create a security-scoped bookmark for this path
                     viewModel.createSecurityScopedBookmark(for: pathString)
                     
+                    // Clear the cached path since we're handling a direct path
+                    viewModel.mostRecentDragPath = nil
+                    
+                    // Cache this new path
+                    viewModel.cacheDragPath(fileName: fileName, path: pathString)
+                    
                     return Self(name: fileName, path: pathString, fileExtension: fileExtension, icon: "music.note")
                 }
             }
         }
         
-        // For audio formats, try to extract path info from AudioDragDropViewModel cache
-        if typeIdentifier == "com.microsoft.waveform-audio" || 
-           typeIdentifier == "public.mp3" || 
-           typeIdentifier == "public.audio" {
-            
-            // Try to find the most recent drag path
-            if let path = viewModel.mostRecentDragPath {
-                let url = URL(fileURLWithPath: path)
-                let fileName = url.lastPathComponent
-                let fileExtension = url.pathExtension
-                
-                return Self(name: fileName, path: path, fileExtension: fileExtension, icon: "music.note")
-            }
-        }
-        
-        // For all other type identifiers, decode as JSON
+        // For all other type identifiers, try to decode as JSON first
         do {
             let decoder = JSONDecoder()
             let result = try decoder.decode(Self.self, from: data)
@@ -225,14 +222,21 @@ class AudioFileDragData: NSObject, NSItemProviderWriting, NSItemProviderReading,
                 print("📦 DATA CONTENT (first 100 chars): \(String(dataString.prefix(100)))")
             }
             
-            // If all else fails, try to extract from AudioDragDropViewModel
-            if let path = viewModel.mostRecentDragPath {
-                print("📦 DECODING FALLBACK: Using cached drag path: \(path)")
-                let url = URL(fileURLWithPath: path)
-                return Self(name: url.lastPathComponent, 
-                           path: path, 
-                           fileExtension: url.pathExtension, 
-                           icon: "music.note")
+            // FALLBACK: For audio formats, try to extract path info from AudioDragDropViewModel cache
+            // This should only be used as a last resort
+            if typeIdentifier == "com.microsoft.waveform-audio" || 
+               typeIdentifier == "public.mp3" || 
+               typeIdentifier == "public.audio" {
+                
+                // Try to find the most recent drag path
+                if let path = viewModel.mostRecentDragPath {
+                    print("📦 DECODING FALLBACK: Using cached drag path: \(path)")
+                    let url = URL(fileURLWithPath: path)
+                    return Self(name: url.lastPathComponent, 
+                               path: path, 
+                               fileExtension: url.pathExtension, 
+                               icon: "music.note")
+                }
             }
             
             throw error

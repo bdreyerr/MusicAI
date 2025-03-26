@@ -338,9 +338,95 @@ struct TrackView: View {
             print("🔍 Provider \(index) type identifiers: \(provider.registeredTypeIdentifiers)")
         }
         
-        // Check if we already have a cached path from the most recent drag
+        // Process audio file URL that might be dropped directly - try this first
+        for provider in providers {
+            if provider.canLoadObject(ofClass: URL.self) {
+                provider.loadObject(ofClass: URL.self) { (urlData, error) in
+                    guard error == nil else {
+                        print("❌ Error loading URL from provider: \(error!.localizedDescription)")
+                        return
+                    }
+                    
+                    guard let url = urlData as? URL, url.isFileURL else {
+                        print("❌ Invalid URL or not a file URL")
+                        return
+                    }
+                    
+                    // Process the URL on the main thread
+                    DispatchQueue.main.async {
+                        // Calculate beat position for the drop
+                        let xPosition = location.x
+                        let beatPosition = xPosition / CGFloat(self.state.effectivePixelsPerBeat)
+                        let snappedPosition = self.snapToNearestGridMarker(beatPosition)
+                        
+                        // Set the beat position in a local variable
+                        let dropBeatPosition = snappedPosition
+                        
+                        // Clear the cached path since we're handling a direct URL drop
+                        self.dragDropViewModel.mostRecentDragPath = nil
+                        
+                        // Cache this new path for future operations
+                        self.dragDropViewModel.cacheDragPath(fileName: url.lastPathComponent, path: url.path)
+                        
+                        // Check if this is an audio track
+                        if self.track.type == .audio {
+                            // Create audio clip directly on this audio track
+                            let success = self.audioViewModel.createAudioClipFromFile(
+                                trackId: self.track.id,
+                                filePath: url.path,
+                                fileName: url.lastPathComponent,
+                                startBeat: dropBeatPosition
+                            )
+                            
+                            if success {
+                                print("✅ Successfully created audio clip from directly dropped file at beat \(dropBeatPosition)")
+                            } else {
+                                print("❌ CLIP CREATION FAILED")
+                            }
+                        } else {
+                            // Forward to the first audio track
+                            self.ensureAudioTrackExists()
+                            
+                            if let audioTrack = self.projectViewModel.tracks.first(where: { $0.type == .audio }) {
+                                let audioFileData = AudioFileDragData(
+                                    name: url.lastPathComponent,
+                                    path: url.path,
+                                    fileExtension: url.pathExtension,
+                                    icon: "music.note"
+                                )
+                                
+                                // Use audio view model to create a clip at a default position
+                                let startBeat = 0.0
+                                self.audioViewModel.createAudioClipFromFile(
+                                    trackId: audioTrack.id,
+                                    filePath: url.path,
+                                    fileName: url.lastPathComponent,
+                                    startBeat: startBeat
+                                )
+                            }
+                        }
+                    }
+                }
+                return true
+            }
+        }
+        
+        // Try to handle common item provider types
+        for provider in providers {
+            // Try to handle with processItemProvider
+            for typeId in provider.registeredTypeIdentifiers {
+                if typeId.contains("audio") || typeId.contains("mp3") || typeId.contains("wav") {
+                    print("⚠️ Attempting to process with type ID: \(typeId)")
+                    processItemProvider(provider, typeIdentifier: typeId, at: location)
+                    return true
+                }
+            }
+        }
+        
+        // FALLBACK: Check if we already have a cached path from the most recent drag
+        // Only use cached path if we couldn't handle the direct drag from Finder
         if let path = dragDropViewModel.mostRecentDragPath, FileManager.default.fileExists(atPath: path) {
-            print("✅ USING CACHED PATH FROM DRAG: \(path)")
+            print("✅ USING CACHED PATH FROM DRAG (FALLBACK): \(path)")
             let fileName = URL(fileURLWithPath: path).lastPathComponent
             
             // Make sure we have an audio track
@@ -354,9 +440,6 @@ struct TrackView: View {
                         fileExtension: URL(fileURLWithPath: path).pathExtension,
                         icon: "music.note"
                     )
-                    
-                    // Forward to the audio drag drop view model for processing
-                    dragDropViewModel.cacheDragPath(fileName: fileName, path: path)
                     
                     // Use audio view model to create a clip at beat 0 (or other default position)
                     let startBeat = 0.0
@@ -396,88 +479,6 @@ struct TrackView: View {
             } else {
                 print("❌ Failed to create audio clip from dropped file")
                 return false
-            }
-        }
-        
-        // Process audio file URL that might be dropped directly
-        for provider in providers {
-            if provider.canLoadObject(ofClass: URL.self) {
-                provider.loadObject(ofClass: URL.self) { (urlData, error) in
-                    guard error == nil else {
-                        print("❌ Error loading URL from provider: \(error!.localizedDescription)")
-                        return
-                    }
-                    
-                    guard let url = urlData as? URL, url.isFileURL else {
-                        print("❌ Invalid URL or not a file URL")
-                        return
-                    }
-                    
-                    // Process the URL on the main thread
-                    DispatchQueue.main.async {
-                        // Calculate beat position for the drop
-                        let xPosition = location.x
-                        let beatPosition = xPosition / CGFloat(self.state.effectivePixelsPerBeat)
-                        let snappedPosition = self.snapToNearestGridMarker(beatPosition)
-                        
-                        // Set the beat position in a local variable
-                        let dropBeatPosition = snappedPosition
-                        
-                        // Check if this is an audio track
-                        if self.track.type == .audio {
-                            // Create audio clip directly on this audio track
-                            let success = self.audioViewModel.createAudioClipFromFile(
-                                trackId: self.track.id,
-                                filePath: url.path,
-                                fileName: url.lastPathComponent,
-                                startBeat: dropBeatPosition
-                            )
-                            
-                            if success {
-                                print("✅ Successfully created audio clip from directly dropped file at beat \(dropBeatPosition)")
-                            } else {
-                                print("❌ CLIP CREATION FAILED")
-                            }
-                        } else {
-                            // Forward to the first audio track
-                            self.ensureAudioTrackExists()
-                            
-                            if let audioTrack = self.projectViewModel.tracks.first(where: { $0.type == .audio }) {
-                                let audioFileData = AudioFileDragData(
-                                    name: url.lastPathComponent,
-                                    path: url.path,
-                                    fileExtension: url.pathExtension,
-                                    icon: "music.note"
-                                )
-                                
-                                // Process the audio file
-                                self.dragDropViewModel.cacheDragPath(fileName: url.lastPathComponent, path: url.path)
-                                
-                                // Use audio view model to create a clip at a default position
-                                let startBeat = 0.0
-                                self.audioViewModel.createAudioClipFromFile(
-                                    trackId: audioTrack.id,
-                                    filePath: url.path,
-                                    fileName: url.lastPathComponent,
-                                    startBeat: startBeat
-                                )
-                            }
-                        }
-                    }
-                }
-                return true
-            }
-        }
-        
-        // Try to handle common item provider types
-        for provider in providers {
-            // Try to handle with processItemProvider
-            for typeId in provider.registeredTypeIdentifiers {
-                if typeId.contains("audio") || typeId.contains("mp3") || typeId.contains("wav") {
-                    print("⚠️ Attempting to process with type ID: \(typeId)")
-                    processItemProvider(provider, typeIdentifier: typeId, at: location)
-                    return true
-                }
             }
         }
         
