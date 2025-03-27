@@ -206,7 +206,7 @@ struct BottomSectionView: View {
                                 // First tab: Waveform for audio tracks, Piano Roll for MIDI tracks
                                 Group {
                                     if selectedTrack.type == .audio {
-                                        PlaceholderAudioWaveformView(track: selectedTrack, projectViewModel: projectViewModel)
+//                                        PlaceholderAudioWaveformView(track: selectedTrack, projectViewModel: projectViewModel)
                                     } else if selectedTrack.type == .midi {
                                         MIDIPianoRollView(track: selectedTrack, projectViewModel: projectViewModel)
                                     }

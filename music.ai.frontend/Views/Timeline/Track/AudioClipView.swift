@@ -11,9 +11,6 @@ struct AudioClipView: View {
     @EnvironmentObject var menuCoordinator: MenuCoordinator
     @ObservedObject var trackViewModel: TrackViewModel
     
-    // Shared waveform view model
-    @ObservedObject private var waveformViewModel = AudioWaveformViewModel.shared
-    
     // Computed property to access the Audio view model
     private var audioViewModel: AudioViewModel {
         return projectViewModel.audioViewModel
@@ -84,74 +81,6 @@ struct AudioClipView: View {
         self.waveformColor = isDark ? .white : .red.opacity(0.9)
     }
     
-    // Load waveform data when the view appears
-    private func loadWaveformData() {
-        // Skip if we already have waveform data
-        if !waveformData.isEmpty {
-            return
-        }
-        
-        // Set loading state
-        isLoadingWaveform = true
-        
-        // If the clip already has waveform data, use that
-        if !clip.waveformData.isEmpty {
-            // Convert Float array to CGFloat array
-            waveformData = clip.waveformData.map { CGFloat($0) }
-            isLoadingWaveform = false
-            return
-        }
-        
-        // Use a fixed 60 points per beat at all zoom levels
-        let pointsPerBeat = 60
-        
-        // Calculate total points based on duration
-        let durationBasedPoints = Int(clip.duration * Double(pointsPerBeat))
-        
-        // Cap the maximum number of points for performance
-        let maxPoints = 2000
-        let sampleCount = min(maxPoints, max(500, durationBasedPoints))
-        
-        // If we have a path, try to generate a waveform
-        if let fileURL = clip.audioFileURL {
-            // Start generating waveform
-            waveformViewModel.generateWaveform(filePath: fileURL, sampleCount: sampleCount) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("Error generating waveform: \(error.localizedDescription)")
-                        // On failure, generate a random waveform
-                        self.waveformData = self.waveformViewModel.generateRandomWaveform(
-                            sampleCount: sampleCount
-                        )
-                    } else if !self.waveformViewModel.waveformData.isEmpty {
-                        // Use the generated waveform data
-                        self.waveformData = self.waveformViewModel.waveformData
-                        
-                        // Convert CGFloat array to Float array and store in clip
-                        var updated = self.clip
-                        updated.waveformData = self.waveformData.map { Float($0) }
-                        
-                        // Update the clip in the track
-                        if let trackIndex = self.projectViewModel.tracks.firstIndex(where: { $0.id == self.track.id }) {
-                            var updatedTrack = self.projectViewModel.tracks[trackIndex]
-                            if let clipIndex = updatedTrack.audioClips.firstIndex(where: { $0.id == self.clip.id }) {
-                                updatedTrack.audioClips[clipIndex] = updated
-                                self.projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
-                            }
-                        }
-                    }
-                    self.isLoadingWaveform = false
-                }
-            }
-        } else {
-            // No file path, generate random waveform
-            waveformData = waveformViewModel.generateRandomWaveform(
-                sampleCount: sampleCount
-            )
-            isLoadingWaveform = false
-        }
-    }
-    
     var body: some View {
         // Calculate position and size based on timeline state
         let startX = CGFloat(clip.startBeat * state.effectivePixelsPerBeat)
@@ -194,52 +123,7 @@ struct AudioClipView: View {
                         .opacity(0.9)
                 }
                 
-                // Only show waveform when not collapsed
-                if !trackViewModel.isCollapsed {
-                    // Load waveform data if needed
-                    if waveformData.isEmpty && !isLoadingWaveform {
-                        EmptyView()
-                            .onAppear {
-                                DispatchQueue.main.async {
-                                    loadWaveformData()
-                                }
-                            }
-                            .frame(width: 0, height: 0)
-                            .opacity(0)
-                    }
-                    
-                    if isLoadingWaveform {
-                        // Show loading indicator centered with proper padding
-                        VStack {
-                            Spacer().frame(height: 24) // Match top padding of waveform
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Spacer()
-                            }
-                            Spacer()
-                        }
-                        .frame(width: width, height: clipHeight - 30)
-                        .allowsHitTesting(false)
-                    } else if !waveformData.isEmpty {
-                        // Show waveform with our data
-                        AudioWaveformView(
-                            waveformData: waveformData,
-                            color: determineWaveformColor(), // Use function for more professional coloring
-                            backgroundColor: Color.clear,
-                            mirrored: true,
-                            spacing: 0.5, // Use consistent tight spacing for professional look
-                            style: .bars,
-                            zoomLevel: CGFloat(state.effectivePixelsPerBeat)
-                        )
-                        .padding(.top, 24)
-                        .padding(.horizontal, 0) // No horizontal padding
-                        .frame(width: width, height: clipHeight - 30) // Match clip width
-                        .clipped() // Ensure waveform stays within bounds
-                        .allowsHitTesting(false)
-                    }
-                }
+                // TODO: add waveform
             }
             .frame(width: width, height: clipHeight)
             .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
@@ -633,8 +517,7 @@ struct AudioClipView: View {
                                             startBeat: finalPosition,
                                             duration: clip.duration,
                                             audioFileURL: clip.audioFileURL,
-                                            color: clip.color,
-                                            waveformData: clip.waveformData
+                                            color: clip.color
                                         )
                                         
                                         // Add the duplicate clip to the track
@@ -802,19 +685,6 @@ struct AudioClipView: View {
             }
         } message: {
             Text("Enter a new name for this clip")
-        }
-        .onAppear {
-            // Load waveform data when view appears if not already loaded
-            if waveformData.isEmpty && !isLoadingWaveform {
-                loadWaveformData()
-            }
-        }
-        .onDisappear {
-            // Cancel any active waveform generation when view disappears
-            if isLoadingWaveform {
-                waveformViewModel.cancelGeneration()
-                isLoadingWaveform = false
-            }
         }
     }
     

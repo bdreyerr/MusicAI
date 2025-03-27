@@ -16,8 +16,6 @@ struct SimpleWaveformView: View {
     var body: some View {
         GlobalKeyboardShortcuts()
         
-        
-        
         HStack(spacing: 2) {
             ForEach(0..<barHeights.count, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 1.5)

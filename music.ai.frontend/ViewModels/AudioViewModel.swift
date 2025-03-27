@@ -64,8 +64,7 @@ class AudioViewModel: ObservableObject {
             startBeat: startBeat,
             duration: durationInBeats,
             audioFileURL: fileURL,
-            color: track.effectiveColor,
-            waveformData: waveformData
+            color: track.effectiveColor
         )
         
         // Add the clip to the track

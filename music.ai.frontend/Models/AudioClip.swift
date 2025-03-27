@@ -9,22 +9,20 @@ struct AudioClip: Identifiable, Equatable, Codable {
     var duration: Double // Duration in beats
     var color: Color? // Optional custom color for the clip
     var audioFileURL: URL? // URL to the audio file on disk
-    var waveformData: [Float] = [] // Waveform visualization data
     
     // Coding keys for Codable
     enum CodingKeys: String, CodingKey {
-        case id, name, startBeat, duration, colorData, audioFileURL, waveformData
+        case id, name, startBeat, duration, colorData, audioFileURL
     }
     
     init(id: UUID = UUID(), name: String, startBeat: Double, duration: Double, 
-         audioFileURL: URL? = nil, color: Color? = nil, waveformData: [Float] = []) {
+         audioFileURL: URL? = nil, color: Color? = nil) {
         self.id = id
         self.name = name
         self.startBeat = startBeat
         self.duration = duration
         self.audioFileURL = audioFileURL
         self.color = color
-        self.waveformData = waveformData
     }
     
     // Custom initializer from decoder
@@ -35,7 +33,6 @@ struct AudioClip: Identifiable, Equatable, Codable {
         name = try container.decode(String.self, forKey: .name)
         startBeat = try container.decode(Double.self, forKey: .startBeat)
         duration = try container.decode(Double.self, forKey: .duration)
-        waveformData = try container.decode([Float].self, forKey: .waveformData)
         audioFileURL = try container.decodeIfPresent(URL.self, forKey: .audioFileURL)
         
         // Decode optional color
@@ -54,7 +51,6 @@ struct AudioClip: Identifiable, Equatable, Codable {
         try container.encode(name, forKey: .name)
         try container.encode(startBeat, forKey: .startBeat)
         try container.encode(duration, forKey: .duration)
-        try container.encode(waveformData, forKey: .waveformData)
         try container.encodeIfPresent(audioFileURL, forKey: .audioFileURL)
         
         // Encode optional color
