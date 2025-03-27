@@ -137,7 +137,7 @@ struct AudioClipView: View {
                         // Left Resize
                         Rectangle()
                             .fill(Color.black.opacity(0.1))
-                            .frame(width: 15, height: trackViewModel.isCollapsed ? 20 : 24)
+                            .frame(width: width < 60 ? min(8, width/4) : min(15, width/2), height: trackViewModel.isCollapsed ? 20 : 24)
                             .onHover { hovering in
                                 isHoveringLeftResizeArea = hovering
                                 isHoveringRightResizeArea = false
@@ -266,11 +266,12 @@ struct AudioClipView: View {
                         Rectangle()
                             .fill(Color.black.opacity(0.1))
                             .frame(height: trackViewModel.isCollapsed ? 20 : 24)
+                            .clipped()
                         
                         // Right resize
                         Rectangle()
                             .fill(Color.black.opacity(0.1))
-                            .frame(width: 15, height: trackViewModel.isCollapsed ? 20 : 24)
+                            .frame(width: width < 60 ? min(8, width/4) : min(15, width/2), height: trackViewModel.isCollapsed ? 20 : 24)
                             .onHover { hovering in
                                 isHoveringRightResizeArea = hovering
                                 isHoveringLeftResizeArea = false
@@ -376,11 +377,15 @@ struct AudioClipView: View {
                             )
                     }
                     
-                    Text(clip.name)
-                        .font(.caption)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .lineLimit(1)
+                    // Only show text if there's enough width
+                    if width >= 30 {
+                        Text(clip.name)
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .lineLimit(1)
+                            .clipped() // Ensure text is clipped inside its container
+                    }
                 }
                 .onHover { hovering in
                     isHovering = hovering
@@ -591,6 +596,7 @@ struct AudioClipView: View {
                 Spacer()
             }
             .frame(height: clipHeight)
+            .clipped() // Ensure nothing extends outside clip boundaries
             // Add right-click gesture as a simultaneous gesture to the overall clip
             .simultaneousGesture(
                 DragGesture(minimumDistance: 0)
