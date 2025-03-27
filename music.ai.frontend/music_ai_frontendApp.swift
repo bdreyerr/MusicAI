@@ -57,8 +57,8 @@ struct music_ai_frontendApp: App {
     @StateObject private var audioDragDropViewModel = AudioDragDropViewModel.shared
     // Create a shared FileViewModel instance
     @StateObject private var fileViewModel = FileViewModel()
-    // Create a shared SettingsViewModel instance
-    @StateObject private var settingsViewModel = SettingsViewModel()
+    // Use the shared SettingsViewModel instance
+    @StateObject private var settingsViewModel = SettingsViewModel.shared
     
     // Register the app delegate
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -70,6 +70,7 @@ struct music_ai_frontendApp: App {
                 .environmentObject(sidebarViewModel)
                 .environmentObject(audioDragDropViewModel)
                 .environmentObject(fileViewModel)
+                .environmentObject(settingsViewModel)
                 .onAppear {
                     // Set the fileViewModel reference in the app delegate
                     appDelegate.fileViewModel = fileViewModel

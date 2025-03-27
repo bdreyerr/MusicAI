@@ -11,7 +11,7 @@ struct SidebarFolder: Identifiable {
     static let allFolders: [SidebarFolder] = [
         SidebarFolder(
             name: "Instruments",
-            icon: "pianokeys",
+            icon: "guitars",
             items: [
                 FolderItem(name: "Piano", icon: "pianokeys"),
                 FolderItem(name: "Guitar", icon: "guitars"),
@@ -21,7 +21,7 @@ struct SidebarFolder: Identifiable {
         ),
         SidebarFolder(
             name: "Plugins",
-            icon: "puzzlepiece",
+            icon: "powerplug",
             items: [
                 FolderItem(name: "Compressor", icon: "dial.min"),
                 FolderItem(name: "Equalizer", icon: "slider.horizontal.3"),
@@ -31,7 +31,7 @@ struct SidebarFolder: Identifiable {
         ),
         SidebarFolder(
             name: "Samples",
-            icon: "waveform.circle",
+            icon: "folder",
             items: [
                 FolderItem(name: "Drum Loops", icon: "music.note.list"),
                 FolderItem(name: "Bass Loops", icon: "music.note"),

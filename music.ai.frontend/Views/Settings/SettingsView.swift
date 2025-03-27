@@ -43,6 +43,8 @@ struct SettingsView: View {
                         LookAndFeelSettingsView()
                     case .shortcuts:
                         KeyboardShortcutsView()
+                    case .fileFolder:
+                        FileFolderSettingsView(viewModel: viewModel)
                     default:
                         Text("\(viewModel.selectedTab.rawValue) settings coming soon")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -285,7 +287,66 @@ struct AudioSettingsView: View {
     }
 }
 
-#Preview {
-    SettingsView(viewModel: SettingsViewModel())
-        .environmentObject(ThemeManager())
-} 
+struct FileFolderSettingsView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    @EnvironmentObject private var themeManager: ThemeManager
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Title
+            Text("File & Folder Settings")
+                .font(.title2)
+                .bold()
+                .foregroundColor(themeManager.primaryTextColor)
+            
+            // Samples Folder Section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Samples Folder")
+                    .bold()
+                    .foregroundColor(themeManager.primaryTextColor)
+                
+                HStack {
+                    TextField("", text: .constant(viewModel.samplesFolderPath))
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .foregroundColor(themeManager.primaryTextColor)
+                        .padding(8)
+                        .background(themeManager.tertiaryBackgroundColor)
+                        .cornerRadius(4)
+                        .disabled(true)
+                    
+                    Button(action: {
+                        let openPanel = NSOpenPanel()
+                        openPanel.title = "Select Samples Folder"
+                        openPanel.showsResizeIndicator = true
+                        openPanel.showsHiddenFiles = false
+                        openPanel.canChooseDirectories = true
+                        openPanel.canCreateDirectories = true
+                        openPanel.allowsMultipleSelection = false
+                        openPanel.canChooseFiles = false
+                        
+                        if openPanel.runModal() == .OK {
+                            if let url = openPanel.url {
+                                viewModel.saveSamplesFolderPath(url.path)
+                            }
+                        }
+                    }) {
+                        Text("Change")
+                            .foregroundColor(themeManager.primaryTextColor)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(themeManager.tertiaryBackgroundColor)
+                    .cornerRadius(4)
+                }
+                
+                Text("This folder will be used to display audio samples in the sidebar.")
+                    .font(.caption)
+                    .foregroundColor(themeManager.secondaryTextColor)
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}

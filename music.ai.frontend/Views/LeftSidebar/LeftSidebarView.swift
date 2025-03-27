@@ -6,17 +6,12 @@ struct LeftSidebarView: View {
     @State private var sidebarWidth: CGFloat = 320
     @State private var isResizing = false
     
-    // Calculate widths for the two sections with a minimum width for the left section
-    private var leftSectionWidth: CGFloat {
-        // Ensure left section has a minimum width of 140px to prevent text wrapping
-        let minLeftWidth: CGFloat = 140
-        let calculatedWidth = sidebarWidth * 0.45 - 3 // Slightly less than half to give more space to content
-        return max(calculatedWidth, minLeftWidth)
-    }
+    // Calculate widths for the two sections
+    private var leftSectionWidth: CGFloat = 60 // Fixed width for icon column with logo
     
     private var rightSectionWidth: CGFloat {
         // Right section gets the remaining width
-        return sidebarWidth - leftSectionWidth - 5.5 // Account for divider (0.5) and resize handle (5)
+        return sidebarWidth - leftSectionWidth - 0.5 // Account for divider (0.5)
     }
     
     var body: some View {
@@ -25,7 +20,7 @@ struct LeftSidebarView: View {
             FolderListView(viewModel: viewModel)
                 .frame(width: leftSectionWidth)
             
-            // Divider between sections - thinner now
+            // Divider between sections
             Rectangle()
                 .fill(themeManager.secondaryBorderColor.opacity(0.5))
                 .frame(width: 0.5)
@@ -39,7 +34,6 @@ struct LeftSidebarView: View {
                 .fill(Color.clear)
                 .frame(width: 5)
                 .contentShape(Rectangle())
-//                .cursor(.resizeLeftRight)
                 .onHover { hovering in
                     if hovering && !isResizing {
                         NSCursor.resizeLeftRight.push()
@@ -52,8 +46,8 @@ struct LeftSidebarView: View {
                         .onChanged { value in
                             isResizing = true
                             let newWidth = sidebarWidth + value.translation.width
-                            // Increase minimum width to ensure text doesn't wrap
-                            sidebarWidth = min(max(newWidth, 280), 500)
+                            // Adjust minimum width to account for new icon-only left section
+                            sidebarWidth = min(max(newWidth, 220), 500) // Adjusted minimum width
                         }
                         .onEnded { _ in
                             isResizing = false

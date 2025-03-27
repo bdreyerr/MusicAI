@@ -57,35 +57,40 @@ struct FolderContentView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 4)
                 
-                // Folder navigation bar (only shown for user folders with navigation history)
-                if let _ = viewModel.selectedUserFolder, viewModel.canNavigateBack {
+                // Navigation bar for folders that support it
+                if viewModel.supportsNavigation {
                     HStack(spacing: 8) {
-                        Button(action: {
-                            viewModel.navigateBack()
-                        }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 12))
-                                .foregroundColor(themeManager.secondaryTextColor)
+                        // Back button
+                        if !viewModel.folderNavigationHistory.isEmpty {
+                            Button(action: {
+                                viewModel.navigateBack()
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            // Root folder button
+                            Button(action: {
+                                viewModel.navigateToRoot()
+                            }) {
+                                Image(systemName: "house")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(themeManager.primaryTextColor)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(PlainButtonStyle())
                         
-                        Button(action: {
-                            viewModel.navigateToRoot()
-                        }) {
-                            Image(systemName: "house")
-                                .font(.system(size: 12))
-                                .foregroundColor(themeManager.secondaryTextColor)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
+                        // Current path
                         Text(viewModel.currentFolderPath)
                             .font(.system(size: 12))
-                            .foregroundColor(themeManager.primaryTextColor)
+                            .foregroundColor(themeManager.secondaryTextColor)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
                     .background(themeManager.tertiaryBackgroundColor.opacity(0.3))
                 }
                 
@@ -103,26 +108,31 @@ struct FolderContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(themeManager.secondaryBackgroundColor)
                 } else if let errorMessage = viewModel.folderLoadError {
-                    // Error message
+                    // Error message with settings link if folder doesn't exist
                     VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
+                        Image(systemName: "folder.badge.plus")
                             .font(.system(size: 24))
                             .foregroundColor(themeManager.secondaryTextColor)
                         
-                        Text(errorMessage)
-                            .font(.system(size: 12))
-                            .foregroundColor(themeManager.secondaryTextColor)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 16)
-                        
-                        Button("Refresh") {
-                            viewModel.refreshCurrentFolder()
+                        if errorMessage.contains("does not exist") {
+                            Text("Samples folder not found")
+                                .font(.system(size: 12))
+                                .foregroundColor(themeManager.secondaryTextColor)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 16)
+                            
+                            SettingsLink {
+                                Text("Configure in Settings")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.blue)
+                            }
+                        } else {
+                            Text(errorMessage)
+                                .font(.system(size: 12))
+                                .foregroundColor(themeManager.secondaryTextColor)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 16)
                         }
-                        .font(.system(size: 12))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(themeManager.tertiaryBackgroundColor)
-                        .cornerRadius(4)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(themeManager.secondaryBackgroundColor)
