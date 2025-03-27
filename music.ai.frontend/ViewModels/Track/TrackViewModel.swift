@@ -89,8 +89,12 @@ class TrackViewModel: ObservableObject, Identifiable {
         switch theme {
         case .light:
             return baseColor.opacity(0.35)
+        case .lightGrey:
+            return baseColor.opacity(0.32)
         case .dark:
             return baseColor.opacity(0.3)
+        case .black:
+            return baseColor.opacity(0.25)
         }
     }
     

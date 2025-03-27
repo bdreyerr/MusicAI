@@ -4,7 +4,9 @@ import Combine
 /// Theme options available in the application
 enum ThemeOption: String, CaseIterable, Identifiable, Codable {
     case light = "Light"
+    case lightGrey = "Light Grey"
     case dark = "Dark"
+    case black = "Black"
     
     var id: String { self.rawValue }
 }
@@ -86,9 +88,9 @@ class ThemeManager: ObservableObject {
     // Accent color for selections and highlights
     var accentColor: Color {
         switch currentTheme {
-        case .light:
+        case .light, .lightGrey:
             return Color.blue
-        case .dark:
+        case .dark, .black:
             return Color.blue.opacity(0.8)
         }
     }
@@ -98,8 +100,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color(white: 0.9)
+        case .lightGrey:
+            return Color(white: 0.75)
         case .dark:
             return Color(white: 0.2)
+        case .black:
+            return Color(white: 0.1)
         }
     }
     
@@ -107,8 +113,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color(white: 0.95).opacity(0.8)
+        case .lightGrey:
+            return Color(white: 0.8)
         case .dark:
             return Color(white: 0.25)
+        case .black:
+            return Color(white: 0.15)
         }
     }
     
@@ -116,8 +126,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color(white: 0.85)
+        case .lightGrey:
+            return Color(white: 0.7)
         case .dark:
             return Color(white: 0.3)
+        case .black:
+            return Color(white: 0.2)
         }
     }
     
@@ -125,9 +139,13 @@ class ThemeManager: ObservableObject {
     var controlBackgroundColor: Color {
         switch currentTheme {
         case .light:
-            return Color(white: 1.0) // White in light mode
+            return Color(white: 1.0)
+        case .lightGrey:
+            return Color(white: 0.85)
         case .dark:
-            return Color(white: 0.15) // Darker in dark mode
+            return Color(white: 0.15)
+        case .black:
+            return Color(white: 0.12)
         }
     }
     
@@ -136,8 +154,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color.black
+        case .lightGrey:
+            return Color(white: 0.2)
         case .dark:
             return Color(white: 0.6)
+        case .black:
+            return Color(white: 0.7)
         }
     }
     
@@ -145,8 +167,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color.gray.opacity(0.7)
+        case .lightGrey:
+            return Color(white: 0.3).opacity(0.7)
         case .dark:
             return Color(white: 0.45).opacity(0.7)
+        case .black:
+            return Color(white: 0.5).opacity(0.7)
         }
     }
     
@@ -155,7 +181,9 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color.black
-        case .dark:
+        case .lightGrey:
+            return Color.black
+        case .dark, .black:
             return Color.white
         }
     }
@@ -164,8 +192,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color(white: 0.3)
+        case .lightGrey:
+            return Color(white: 0.2)
         case .dark:
             return Color(white: 0.8)
+        case .black:
+            return Color(white: 0.9)
         }
     }
     
@@ -174,8 +206,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color.black.opacity(0.3)
+        case .lightGrey:
+            return Color.black.opacity(0.25)
         case .dark:
             return Color.white.opacity(0.3)
+        case .black:
+            return Color.white.opacity(0.35)
         }
     }
     
@@ -183,8 +219,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color.gray.opacity(0.2)
+        case .lightGrey:
+            return Color.black.opacity(0.15)
         case .dark:
             return Color.white.opacity(0.15)
+        case .black:
+            return Color.white.opacity(0.2)
         }
     }
     
@@ -192,8 +232,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color.gray.opacity(0.1)
+        case .lightGrey:
+            return Color.black.opacity(0.08)
         case .dark:
             return Color.white.opacity(0.08)
+        case .black:
+            return Color.white.opacity(0.1)
         }
     }
     
@@ -202,8 +246,12 @@ class ThemeManager: ObservableObject {
         switch currentTheme {
         case .light:
             return Color.black.opacity(0.4)
+        case .lightGrey:
+            return Color.black.opacity(0.35)
         case .dark:
             return Color.white.opacity(0.4)
+        case .black:
+            return Color.white.opacity(0.45)
         }
     }
     
@@ -211,11 +259,13 @@ class ThemeManager: ObservableObject {
     var rulerBackgroundColor: Color {
         switch currentTheme {
         case .light:
-            // Darker than tertiaryBackgroundColor in light mode
             return Color(white: 0.7)
+        case .lightGrey:
+            return Color(white: 0.5)
         case .dark:
-            // Lighter than tertiaryBackgroundColor in dark mode
             return Color(white: 0.35)
+        case .black:
+            return Color(white: 0.25)
         }
     }
     
@@ -228,9 +278,9 @@ class ThemeManager: ObservableObject {
         
         // Default to theme-appropriate colors for contrast
         switch currentTheme {
-        case .light:
+        case .light, .lightGrey:
             return Color.black // Dark playhead for light mode
-        case .dark:
+        case .dark, .black:
             return Color.white // Light playhead for dark mode
         }
     }
@@ -239,16 +289,18 @@ class ThemeManager: ObservableObject {
     var alternatingGridSectionColor: Color {
         switch currentTheme {
         case .light:
-            // Reduced contrast in light mode (was 0.75 opacity 0.9)
             return Color(white: 0.80).opacity(0.8)
+        case .lightGrey:
+            return Color(white: 0.70).opacity(0.5)
         case .dark:
-            // Reduced contrast in dark mode (was 0.23 opacity 0.6)
             return Color(white: 0.30).opacity(0.3)
+        case .black:
+            return Color(white: 0.20).opacity(0.3)
         }
     }
     
     // Determine if current theme is dark mode
     var isDarkMode: Bool {
-        return currentTheme == .dark
+        return currentTheme == .dark || currentTheme == .black
     }
 } 

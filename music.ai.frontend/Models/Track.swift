@@ -41,8 +41,12 @@ enum TrackType: String, Equatable, Codable {
         switch theme {
         case .light:
             return baseColor.opacity(0.1)
+        case .lightGrey:
+            return baseColor.opacity(0.15)
         case .dark:
             return baseColor.opacity(0.2)
+        case .black:
+            return baseColor.opacity(0.25)
         }
     }
 }
@@ -160,8 +164,12 @@ struct Track: Identifiable, Equatable, Codable {
         switch theme {
         case .light:
             return baseColor.opacity(0.1)
+        case .lightGrey:
+            return baseColor.opacity(0.15)
         case .dark:
             return baseColor.opacity(0.2)
+        case .black:
+            return baseColor.opacity(0.25)
         }
     }
     

@@ -19,15 +19,8 @@ struct TimelineGridView: View {
     private var eighthBarLineColor: Color { themeManager.tertiaryGridColor.opacity(0.9) }
     private var sixteenthBarLineColor: Color { themeManager.tertiaryGridColor.opacity(0.7) }
     
-    // Reduce contrast for alternating sections
-    private var alternatingBgColor: Color { 
-        // In light mode, make the dark sections lighter; in dark mode, make the light sections darker
-        if themeManager.isDarkMode {
-            return Color.gray.opacity(0.08) // Reduced from 0.15 for dark mode
-        } else {
-            return Color.gray.opacity(0.05) // Reduced from 0.15 for light mode
-        }
-    }
+    // Use theme manager's alternating section color directly
+    private var alternatingBgColor: Color { themeManager.alternatingGridSectionColor }
     
     var body: some View {
         Canvas { context, size in
@@ -151,7 +144,7 @@ struct TimelineGridView: View {
                 )
                 
                 // Use the theme manager's alternating background color
-                context.fill(Path(barRect), with: .color(themeManager.alternatingGridSectionColor))
+                context.fill(Path(barRect), with: .color(alternatingBgColor))
             }
         }
     }

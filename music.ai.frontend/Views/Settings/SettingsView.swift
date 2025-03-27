@@ -17,6 +17,7 @@ struct SettingsView: View {
                     // Content
                     HStack {
                         Text(tab.rawValue)
+                            .foregroundColor(themeManager.primaryTextColor)
                             .tag(tab)
                         Spacer()
                     }
@@ -45,6 +46,7 @@ struct SettingsView: View {
                     default:
                         Text("\(viewModel.selectedTab.rawValue) settings coming soon")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .foregroundColor(themeManager.primaryTextColor)
                     }
                 }
                 .padding()
@@ -110,6 +112,7 @@ struct KeyboardShortcutsView: View {
             // Title with information about future editable shortcuts
             VStack(alignment: .leading, spacing: 8) {
                 Text("Keyboard Shortcuts")
+                    .foregroundColor(themeManager.primaryTextColor)
                     .font(.title2)
                     .bold()
                 
@@ -133,11 +136,13 @@ struct KeyboardShortcutsView: View {
                         ForEach(category.shortcuts) { shortcut in
                             HStack {
                                 Text(shortcut.name)
+                                    .foregroundColor(themeManager.primaryTextColor)
                                     .frame(width: 160, alignment: .leading)
                                 
                                 Spacer()
                                 
                                 Text(shortcut.shortcut)
+                                    .foregroundColor(themeManager.primaryTextColor)
                                     .font(.system(.body, design: .monospaced))
                                     .padding(4)
                                     .background(themeManager.secondaryBackgroundColor)
@@ -193,6 +198,7 @@ struct LookAndFeelSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Theme")
                     .bold()
+                    .foregroundColor(themeManager.primaryTextColor)
                 Picker("", selection: Binding(
                     get: { themeManager.currentTheme },
                     set: { 
@@ -211,6 +217,7 @@ struct LookAndFeelSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Playhead Color")
                     .bold()
+                    .foregroundColor(themeManager.primaryTextColor)
                 ColorPicker("", selection: $playheadColor)
                     .onChange(of: playheadColor) { newColor in
                         themeManager.setPlayheadColor(newColor)
@@ -240,6 +247,7 @@ struct AudioSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Driver Type")
                     .bold()
+                    .foregroundColor(themeManager.primaryTextColor)
                 Picker("", selection: $viewModel.driverType) {
                     ForEach(viewModel.driverTypes, id: \.self) { driver in
                         Text(driver).tag(driver)
@@ -251,6 +259,7 @@ struct AudioSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Audio Input Device")
                     .bold()
+                    .foregroundColor(themeManager.primaryTextColor)
                 Picker("", selection: $viewModel.audioInputDevice) {
                     ForEach(viewModel.audioDevices, id: \.self) { device in
                         Text(device).tag(device)
@@ -262,6 +271,7 @@ struct AudioSettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Audio Output Device")
                     .bold()
+                    .foregroundColor(themeManager.primaryTextColor)
                 Picker("", selection: $viewModel.audioOutputDevice) {
                     ForEach(viewModel.audioDevices, id: \.self) { device in
                         Text(device).tag(device)
