@@ -142,7 +142,7 @@ struct TrackControlsView: View {
                                     .foregroundColor(trackViewModel.isSolo ? .yellow : themeManager.primaryTextColor)
                             }
                             .buttonStyle(BorderlessButtonStyle())
-                            .help("Solo Track")
+                            .help(trackViewModel.isSolo ? "Unsolo Track (Exclusive)" : "Solo Track (Exclusive)")
                             
                             // Record arm button
                             Button(action: {
@@ -281,7 +281,7 @@ struct TrackControlsView: View {
                     
                     // Selection border
                     Rectangle()
-                        .stroke(trackViewModel.effectiveColor.opacity(0.9), lineWidth: 1.5)
+                        .stroke(trackViewModel.effectiveColor.opacity(0.6), lineWidth: 0.5)
                         .brightness(0.3)
                         .allowsHitTesting(false)
                 }
@@ -440,7 +440,7 @@ struct TrackControlsView: View {
         }
         
         // Solo option
-        Button(trackViewModel.isSolo ? "Unsolo Track" : "Solo Track") {
+        Button(trackViewModel.isSolo ? "Unsolo Track" : "Solo Track (Exclusive)") {
             trackViewModel.toggleSolo()
         }
         

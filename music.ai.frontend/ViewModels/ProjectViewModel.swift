@@ -69,6 +69,9 @@ class ProjectViewModel: ObservableObject {
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
     @Published var masterTrack: Track // Master track for final output processing
     
+    // Track the ID of the currently soloed track (if any)
+    @Published var soloedTrackId: UUID? = nil
+    
     // Reference to the file manager
     private var fileViewModel: FileViewModel?
     
@@ -151,6 +154,9 @@ class ProjectViewModel: ObservableObject {
         // Initialize master track
         self.masterTrack = Track(name: "Master", type: .master)
         self.masterTrack.height = 100
+        
+        // Reset soloed track tracking
+        self.soloedTrackId = nil
         
         // Clear track view models
         trackViewModelManager.clearViewModels()
@@ -444,6 +450,11 @@ class ProjectViewModel: ObservableObject {
         // Clean up the track view model
         trackViewModelManager.removeViewModel(for: trackId)
         
+        // Check if the track being removed was soloed
+        if soloedTrackId == trackId {
+            soloedTrackId = nil
+        }
+        
         // Use withAnimation for smoother track removal
         withAnimation(.easeInOut(duration: 0.2)) {
             tracks.remove(at: index)
@@ -593,8 +604,36 @@ class ProjectViewModel: ObservableObject {
             tracks[index].isMuted = muted
         }
         
+        // Handle solo state with mutual exclusivity
         if let solo = isSolo {
-            tracks[index].isSolo = solo
+            // If we're turning solo on for this track
+            if solo {
+                // If there's another track currently soloed, un-solo it
+                if let currentSoloedTrackId = soloedTrackId, 
+                   let currentSoloedIndex = tracks.firstIndex(where: { $0.id == currentSoloedTrackId }) {
+                    tracks[currentSoloedIndex].isSolo = false
+                }
+                
+                // Set this track as the soloed track
+                tracks[index].isSolo = true
+                soloedTrackId = tracks[index].id
+            } else {
+                // If we're turning solo off for this track
+                tracks[index].isSolo = false
+                
+                // If this track was the soloed track, clear the soloed track ID
+                if soloedTrackId == tracks[index].id {
+                    soloedTrackId = nil
+                }
+            }
+        } else {
+            // If solo wasn't explicitly set, we need to check if this track is the soloed track
+            // This handles cases where tracks are removed or otherwise modified
+            if tracks[index].isSolo {
+                soloedTrackId = tracks[index].id
+            } else if soloedTrackId == tracks[index].id {
+                soloedTrackId = nil
+            }
         }
         
         if let armed = isArmed {

@@ -120,7 +120,11 @@ class TrackViewModel: ObservableObject, Identifiable {
     }
     
     func toggleSolo() {
+        // Toggle the solo state - if it's currently off, turn it on (and vice versa)
         isSolo.toggle()
+        
+        // The ProjectViewModel.updateTrackControlsOnly method will handle the mutual exclusivity
+        // It will turn off any other soloed tracks when turning this one on
         updateTrackControlsOnly()
     }
     

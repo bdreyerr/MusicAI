@@ -191,7 +191,7 @@ struct TrackView: View {
                 
                 // Border
                 Rectangle()
-                    .stroke(projectViewModel.isTrackSelected(track) ? trackViewModel.effectiveColor.opacity(0.8) : Color.clear, lineWidth: 1)
+                    .stroke(projectViewModel.isTrackSelected(track) ? trackViewModel.effectiveColor.opacity(0.5) : Color.clear, lineWidth: 0.5)
                     .allowsHitTesting(false) // Important: Don't block clicks
             }
         )

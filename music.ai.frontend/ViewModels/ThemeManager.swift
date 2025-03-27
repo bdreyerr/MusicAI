@@ -41,6 +41,13 @@ class ThemeManager: ObservableObject {
     // Change the theme and save the preference
     func setTheme(_ theme: ThemeOption) {
         currentTheme = theme
+        
+        // Reset custom playhead color to ensure it uses theme-specific color
+        customPlayheadColor = nil
+        
+        // Remove stored custom playhead color from UserDefaults
+        UserDefaults.standard.removeObject(forKey: "playheadColor")
+        
         themeChangeIdentifier = UUID() // Generate new identifier to force UI updates
         UserDefaults.standard.set(theme.rawValue, forKey: "appTheme")
     }
@@ -63,6 +70,13 @@ class ThemeManager: ObservableObject {
     // Toggle between light and dark themes
     func toggleTheme() {
         currentTheme = currentTheme == .light ? .dark : .light
+        
+        // Reset custom playhead color to ensure it uses theme-specific color
+        customPlayheadColor = nil
+        
+        // Remove stored custom playhead color from UserDefaults
+        UserDefaults.standard.removeObject(forKey: "playheadColor")
+        
         themeChangeIdentifier = UUID() // Generate new identifier to force UI updates
         UserDefaults.standard.set(currentTheme.rawValue, forKey: "appTheme")
     }
@@ -207,13 +221,18 @@ class ThemeManager: ObservableObject {
     
     // Playhead color for timeline indicator
     var playheadColor: Color {
-        // Return custom color if set, otherwise return default black
+        // Return custom color if set, otherwise return theme-appropriate color
         if let customColor = customPlayheadColor {
             return customColor
         }
         
-        // Default to black in both themes
-        return Color.black
+        // Default to theme-appropriate colors for contrast
+        switch currentTheme {
+        case .light:
+            return Color.black // Dark playhead for light mode
+        case .dark:
+            return Color.white // Light playhead for dark mode
+        }
     }
     
     // Alternating grid section color for visual distinction

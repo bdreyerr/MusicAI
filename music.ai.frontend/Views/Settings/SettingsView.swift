@@ -195,7 +195,11 @@ struct LookAndFeelSettingsView: View {
                     .bold()
                 Picker("", selection: Binding(
                     get: { themeManager.currentTheme },
-                    set: { themeManager.setTheme($0) }
+                    set: { 
+                        themeManager.setTheme($0)
+                        // Update displayed color when theme changes
+                        playheadColor = themeManager.playheadColor
+                    }
                 )) {
                     ForEach(ThemeOption.allCases) { theme in
                         Text(theme.rawValue).tag(theme)
@@ -219,6 +223,10 @@ struct LookAndFeelSettingsView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Also listen for theme change identifier changes
+        .onChange(of: themeManager.themeChangeIdentifier) { _ in
+            playheadColor = themeManager.playheadColor
+        }
     }
 }
 
