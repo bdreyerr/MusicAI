@@ -69,6 +69,9 @@ class ProjectViewModel: ObservableObject {
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
     @Published var masterTrack: Track // Master track for final output processing
     
+    // Reference to the file manager
+    private var fileViewModel: FileViewModel?
+    
     // Performance optimization settings
     @Published var performanceMode: PerformanceMode = .balanced
     
@@ -119,6 +122,56 @@ class ProjectViewModel: ObservableObject {
         if !tracks.isEmpty {
             selectedTrackId = tracks[0].id
         }
+    }
+    
+    // Set the reference to FileViewModel
+    func setFileViewModel(_ viewModel: FileViewModel) {
+        print("📝 PROJECT VM: Setting FileViewModel reference")
+        self.fileViewModel = viewModel
+    }
+    
+    // Reset project to default state for a new project
+    func resetToNewProject() {
+        print("📝 PROJECT VM: Resetting to new project")
+        
+        // Stop playback if active
+        if isPlaying {
+            togglePlayback()
+        }
+        
+        // Reset position
+        currentBeat = 0.0
+        internalBeatPosition = 0.0
+        
+        // Reset tempo and time signature
+        tempo = 120.0
+        timeSignatureBeats = 4
+        timeSignatureUnit = 4
+        
+        // Initialize master track
+        self.masterTrack = Track(name: "Master", type: .master)
+        self.masterTrack.height = 100
+        
+        // Clear track view models
+        trackViewModelManager.clearViewModels()
+        
+        // Create default tracks
+        self.tracks = [
+            createTrackWithRandomColor(name: "1 Audio", type: .audio),
+            createTrackWithRandomColor(name: "2 Audio", type: .audio),
+            createTrackWithRandomColor(name: "3 Midi", type: .midi),
+            createTrackWithRandomColor(name: "4 Midi", type: .midi)
+        ]
+        
+        // Select the first track by default
+        if !tracks.isEmpty {
+            selectedTrackId = tracks[0].id
+        }
+        
+        print("📝 PROJECT VM: Project reset complete")
+        
+        // Update timeline content width
+        updateTimelineContentWidth(reason: "new_project")
     }
     
     // Helper function to create a track with a random color
@@ -360,6 +413,9 @@ class ProjectViewModel: ObservableObject {
             print("📝 PROJECT VM: First track, selecting it automatically")
         }
         
+        // Mark project as modified
+        projectChanged()
+        
         // Track was just added - update the timeline content width
         // This is done to ensure there's enough space for the new track
         updateTimelineContentWidth(reason: "track_addition")
@@ -404,6 +460,9 @@ class ProjectViewModel: ObservableObject {
                 selectedTrackId = nil
             }
         }
+        
+        // Mark project as modified
+        projectChanged()
         
         // Update the timeline content width
         updateTimelineContentWidth(reason: "track_removal")
@@ -478,6 +537,9 @@ class ProjectViewModel: ObservableObject {
         objectWillChange.send()
         print("📢 PROJECT VM: Observers notified")
         
+        // Mark project as modified
+        projectChanged()
+        
         // Update the timeline content width if needed
         updateTimelineContentWidth(reason: "track_update")
     }
@@ -491,6 +553,9 @@ class ProjectViewModel: ObservableObject {
         
         // Update just the pan value directly 
         tracks[index].pan = pan
+        
+        // Mark project as modified
+        projectChanged()
         
         // Still notify observers but skip the timeline content width update
         // since pan changes don't affect the layout of the timeline
@@ -506,6 +571,9 @@ class ProjectViewModel: ObservableObject {
         
         // Update just the volume value directly 
         tracks[index].volume = volume
+        
+        // Mark project as modified
+        projectChanged()
         
         // Still notify observers but skip the timeline content width update
         // since volume changes don't affect the layout of the timeline
@@ -537,6 +605,9 @@ class ProjectViewModel: ObservableObject {
             tracks[index].isEnabled = enabled
         }
         
+        // Mark project as modified
+        projectChanged()
+        
         // Still notify observers but skip the timeline content width update
         // since control changes don't affect the layout of the timeline
         objectWillChange.send()
@@ -551,6 +622,9 @@ class ProjectViewModel: ObservableObject {
         
         // Update just the collapsed state directly
         tracks[index].isCollapsed = isCollapsed
+        
+        // Mark project as modified
+        projectChanged()
         
         // Still notify observers but skip the timeline content width update
         // since collapsed state changes don't affect the horizontal layout of the timeline
@@ -567,6 +641,9 @@ class ProjectViewModel: ObservableObject {
         // Update just the height value directly 
         tracks[index].height = height
         
+        // Mark project as modified
+        projectChanged()
+        
         // Still notify observers but skip the timeline content width update
         // since height changes don't affect the horizontal layout of the timeline
         objectWillChange.send()
@@ -581,6 +658,9 @@ class ProjectViewModel: ObservableObject {
         
         // Update just the name directly
         tracks[index].name = name
+        
+        // Mark project as modified
+        projectChanged()
         
         // Still notify observers but skip the timeline content width update
         objectWillChange.send()
@@ -599,6 +679,9 @@ class ProjectViewModel: ObservableObject {
         // Make sure the track view model manager updates this track's view model
         let trackId = tracks[index].id
         trackViewModelManager.updateViewModel(for: trackId)
+        
+        // Mark project as modified
+        projectChanged()
         
         // Still notify observers but skip the timeline content width update
         objectWillChange.send()
@@ -623,6 +706,9 @@ class ProjectViewModel: ObservableObject {
                 
                 // Notify observers
                 objectWillChange.send()
+                
+                // Mark project as modified
+                projectChanged()
                 
                 // Update the track view model if needed
                 trackViewModelManager.updateViewModel(for: tracks[trackIndex].id)
@@ -728,5 +814,15 @@ class ProjectViewModel: ObservableObject {
             // No need for a second log message - reduces noise
             #endif
         }
+    }
+    
+    // MARK: - Change Tracking
+    
+    // Notify that a project change has occurred
+    func projectChanged() {
+        print("📝 PROJECT VM: Project changed")
+        
+        // Mark the project as modified in the FileViewModel
+        fileViewModel?.markAsModified()
     }
 } 

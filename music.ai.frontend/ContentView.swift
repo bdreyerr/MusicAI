@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var projectViewModel = ProjectViewModel()
     @StateObject private var aiChatViewModel = AIChatViewModel()
+    @StateObject private var fileViewModel = FileViewModel()
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var sidebarViewModel: SidebarViewModel
     @EnvironmentObject var audioDragDropViewModel: AudioDragDropViewModel
@@ -20,6 +21,7 @@ struct ContentView: View {
             // Top control bar
             TopControlBarView(projectViewModel: projectViewModel)
                 .environmentObject(themeManager)
+                .environmentObject(fileViewModel)
             
             // Main content area
             HStack(spacing: 0) {
@@ -44,6 +46,12 @@ struct ContentView: View {
             .onAppear {
                 // Connect the AIChatViewModel to the ProjectViewModel
                 aiChatViewModel.setProjectViewModel(projectViewModel)
+                
+                // Connect the FileViewModel to the ProjectViewModel
+                fileViewModel.setProjectViewModel(projectViewModel)
+                projectViewModel.setFileViewModel(fileViewModel)
+                
+                print("📱 CONTENT VIEW: ViewModels connected")
             }
             
             // Bottom section for effects and instruments

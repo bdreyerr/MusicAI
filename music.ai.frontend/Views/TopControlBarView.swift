@@ -14,6 +14,10 @@ struct SimpleWaveformView: View {
     @State private var cpuUsagePercentage: Double = 0.0
     
     var body: some View {
+        GlobalKeyboardShortcuts()
+        
+        
+        
         HStack(spacing: 2) {
             ForEach(0..<barHeights.count, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 1.5)
@@ -200,6 +204,7 @@ struct NotchTimeDisplayWrapper: View {
 struct TopControlBarView: View {
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var fileViewModel: FileViewModel
     @State private var isEditingTempo: Bool = false
     @State private var tempTempoValue: String = ""
     @State private var isEditingTimeSignatureBeats: Bool = false
@@ -219,6 +224,25 @@ struct TopControlBarView: View {
     
     var body: some View {
         HStack(spacing: 0) {
+            // Project info (new section)
+            HStack(spacing: 8) {
+                // Project name display 
+                Text(fileViewModel.projectName + (fileViewModel.projectModified ? " *" : ""))
+                    .font(.system(.callout, design: .rounded))
+                    .foregroundColor(themeManager.primaryTextColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(themeManager.tertiaryBackgroundColor.opacity(0.2))
+                    )
+            }
+            .padding(.horizontal, 10)
+            
+            Divider()
+                .frame(height: 24)
+                .background(themeManager.secondaryBorderColor)
+            
             // Left group with controls
             HStack(spacing: 0) {
                 // BPM control with tap button
@@ -438,15 +462,178 @@ struct TopControlBarView: View {
             
             Spacer()
             
-            // TODO: Add CPU usage display (someone figure it out i can't)
-           Text("Glitch v0.1")
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundColor(themeManager.primaryTextColor.opacity(0.5))
+            // Version text updated with project info
+            HStack(spacing: 10) {
+                // Add a disk icon if the project is modified
+                if fileViewModel.projectModified {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(.orange)
+                }
+                
+                Text("Glitch v0.1")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(themeManager.primaryTextColor.opacity(0.5))
+            }
             .padding(.trailing, 20)
         }
         .frame(height: 44)
         .background(themeManager.backgroundColor)
         .border(themeManager.secondaryBorderColor, width: 0.5)
+        .onAppear {
+            setupNotificationObservers()
+        }
+        .onDisappear {
+            removeNotificationObservers()
+        }
+    }
+    
+    // MARK: - File Operations
+    
+    private func setupNotificationObservers() {
+        print("🔔 TOP CONTROL BAR: Setting up notification observers")
+        
+        // Add observers for file menu actions
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("NewProject"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            handleNewProject()
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("OpenProject"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            handleOpenProject()
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("SaveProject"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            handleSaveProject()
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("SaveProjectAs"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            handleSaveProjectAs()
+        }
+        
+        // Add observer for opening a specific project file (from app delegate)
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("OpenSpecificProject"),
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let userInfo = notification.userInfo,
+               let url = userInfo["url"] as? URL {
+                handleOpenSpecificProject(url: url)
+            }
+        }
+    }
+    
+    private func removeNotificationObservers() {
+        print("🔔 TOP CONTROL BAR: Removing notification observers")
+        
+        NotificationCenter.default.removeObserver(self, name: Notification.Name("NewProject"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: Notification.Name("OpenProject"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: Notification.Name("SaveProject"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: Notification.Name("SaveProjectAs"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: Notification.Name("OpenSpecificProject"), object: nil)
+    }
+    
+    private func handleNewProject() {
+        print("🔔 TOP CONTROL BAR: New Project notification received")
+        
+        // Check for unsaved changes first
+        fileViewModel.checkUnsavedChanges { shouldProceed in
+            if shouldProceed {
+                print("🔔 TOP CONTROL BAR: Creating new project")
+                
+                // Reset the project to default state
+                projectViewModel.resetToNewProject()
+                
+                // Reset file view model
+                fileViewModel.createNewProject()
+            }
+        }
+    }
+    
+    private func handleOpenProject() {
+        print("🔔 TOP CONTROL BAR: Open Project notification received")
+        
+        // Check for unsaved changes first
+        fileViewModel.checkUnsavedChanges { shouldProceed in
+            if shouldProceed {
+                print("🔔 TOP CONTROL BAR: Opening project dialog")
+                
+                // Show the open file dialog
+                let success = fileViewModel.loadProjectFromFile()
+                if success {
+                    print("✅ TOP CONTROL BAR: Project opened successfully")
+                } else {
+                    print("❌ TOP CONTROL BAR: Failed to open project")
+                }
+            }
+        }
+    }
+    
+    private func handleSaveProject() {
+        print("🔔 TOP CONTROL BAR: Save Project notification received")
+        
+        // Simple save, no confirmation needed
+        let success = fileViewModel.saveCurrentProject()
+        if success {
+            print("✅ TOP CONTROL BAR: Project saved successfully")
+        } else {
+            print("❌ TOP CONTROL BAR: Failed to save project")
+        }
+    }
+    
+    private func handleSaveProjectAs() {
+        print("🔔 TOP CONTROL BAR: Save Project As notification received")
+        
+        // Save as a new file
+        let success = fileViewModel.saveProjectAs()
+        if success {
+            print("✅ TOP CONTROL BAR: Project saved as new file successfully")
+        } else {
+            print("❌ TOP CONTROL BAR: Failed to save project as")
+        }
+    }
+    
+    private func handleOpenSpecificProject(url: URL) {
+        print("🔔 TOP CONTROL BAR: Open Specific Project request received for: \(url.path)")
+        
+        // Check for unsaved changes first
+        fileViewModel.checkUnsavedChanges { shouldProceed in
+            if shouldProceed {
+                print("🔔 TOP CONTROL BAR: Loading specific project file")
+                
+                // Load the specific project file
+                let success = fileViewModel.loadProjectFromFile(at: url)
+                if success {
+                    print("✅ TOP CONTROL BAR: Project opened successfully")
+                } else {
+                    print("❌ TOP CONTROL BAR: Failed to open project")
+                    
+                    // Show an error alert
+                    let alert = NSAlert()
+                    alert.messageText = "Failed to Open Project"
+                    alert.informativeText = "The project file could not be opened. It may be corrupted or in an unsupported format."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+            }
+        }
     }
 }
 
@@ -713,4 +900,5 @@ enum PerformanceMode: String {
 #Preview {
     TopControlBarView(projectViewModel: ProjectViewModel())
         .environmentObject(ThemeManager())
+        .environmentObject(FileViewModel())
 }

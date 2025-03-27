@@ -26,22 +26,9 @@
 		1AFCF19B2D878F8A003F104C /* music.ai.frontendUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = music.ai.frontendUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		1A3584DF2D94A79F00C6342B /* Exceptions for "music.ai.frontend" folder in "music.ai.frontend" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"music-ai-frontend-Info.plist",
-			);
-			target = 1A273D702D8293A5008EE3FA /* music.ai.frontend */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1A273D732D8293A5008EE3FA /* music.ai.frontend */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				1A3584DF2D94A79F00C6342B /* Exceptions for "music.ai.frontend" folder in "music.ai.frontend" target */,
-			);
 			path = music.ai.frontend;
 			sourceTree = "<group>";
 		};
