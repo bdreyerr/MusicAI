@@ -55,12 +55,17 @@ class AudioViewModel: ObservableObject {
             return false
         }
         
+        // Start with empty waveform data - will be populated by the view when displayed
+        let waveformData = [Float]()
+        
         // Create a new audio clip
         let newClip = AudioClip(
             name: fileName,
             startBeat: startBeat,
             duration: durationInBeats,
-            color: track.effectiveColor
+            audioFileURL: fileURL,
+            color: track.effectiveColor,
+            waveformData: waveformData
         )
         
         // Add the clip to the track

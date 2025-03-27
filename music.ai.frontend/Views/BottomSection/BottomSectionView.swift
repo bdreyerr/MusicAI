@@ -206,7 +206,7 @@ struct BottomSectionView: View {
                                 // First tab: Waveform for audio tracks, Piano Roll for MIDI tracks
                                 Group {
                                     if selectedTrack.type == .audio {
-                                        AudioWaveformView(track: selectedTrack, projectViewModel: projectViewModel)
+                                        PlaceholderAudioWaveformView(track: selectedTrack, projectViewModel: projectViewModel)
                                     } else if selectedTrack.type == .midi {
                                         MIDIPianoRollView(track: selectedTrack, projectViewModel: projectViewModel)
                                     }
@@ -307,7 +307,7 @@ private struct SeededRandomGenerator {
 }
 
 // Placeholder view for audio waveform visualization
-struct AudioWaveformView: View {
+struct PlaceholderAudioWaveformView: View {
     let track: Track
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
@@ -368,13 +368,13 @@ struct AudioWaveformView: View {
                     .padding(.bottom, 8)
                     
                     // Waveform visualization
-                    StripedWaveformView(
-                        waveformData: waveformData,
-                        color: track.effectiveColor,
-                        width: geometry.size.width - 32,
-                        height: geometry.size.height - 80
-                    )
-                    .padding(.horizontal, 16)
+//                    StripedWaveformView(
+//                        waveformData: waveformData,
+//                        color: track.effectiveColor,
+//                        width: geometry.size.width - 32,
+//                        height: geometry.size.height - 80
+//                    )
+//                    .padding(.horizontal, 16)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(themeManager.secondaryBackgroundColor)

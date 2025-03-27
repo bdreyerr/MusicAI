@@ -8,15 +8,16 @@ struct AudioClip: Identifiable, Equatable, Codable {
     var startBeat: Double // Position in the timeline (in beats)
     var duration: Double // Duration in beats
     var color: Color? // Optional custom color for the clip
-    var waveformData: [Float] = [] // Placeholder for waveform visualization data
     var audioFileURL: URL? // URL to the audio file on disk
+    var waveformData: [Float] = [] // Waveform visualization data
     
     // Coding keys for Codable
     enum CodingKeys: String, CodingKey {
-        case id, name, startBeat, duration, colorData, waveformData, audioFileURL
+        case id, name, startBeat, duration, colorData, audioFileURL, waveformData
     }
     
-    init(id: UUID = UUID(), name: String, startBeat: Double, duration: Double, audioFileURL: URL? = nil, color: Color? = nil, waveformData: [Float] = []) {
+    init(id: UUID = UUID(), name: String, startBeat: Double, duration: Double, 
+         audioFileURL: URL? = nil, color: Color? = nil, waveformData: [Float] = []) {
         self.id = id
         self.name = name
         self.startBeat = startBeat
@@ -88,6 +89,11 @@ struct AudioClip: Identifiable, Equatable, Codable {
     // Create a new audio clip with a file URL
     static func create(name: String, startBeat: Double, duration: Double, audioFileURL: URL? = nil, color: Color? = nil) -> AudioClip {
         return AudioClip(name: name, startBeat: startBeat, duration: duration, audioFileURL: audioFileURL, color: color)
+    }
+    
+    // Create an empty audio clip (for UI testing or placeholders)
+    static func createEmpty(name: String, startBeat: Double, duration: Double, color: Color? = nil) -> AudioClip {
+        return AudioClip(name: name, startBeat: startBeat, duration: duration, color: color)
     }
     
     // Implement Equatable to help with updates

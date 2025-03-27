@@ -11,6 +11,9 @@ struct AudioClipView: View {
     @EnvironmentObject var menuCoordinator: MenuCoordinator
     @ObservedObject var trackViewModel: TrackViewModel
     
+    // Shared waveform view model
+    @ObservedObject private var waveformViewModel = AudioWaveformViewModel.shared
+    
     // Computed property to access the Audio view model
     private var audioViewModel: AudioViewModel {
         return projectViewModel.audioViewModel
@@ -33,14 +36,14 @@ struct AudioClipView: View {
     @State private var currentClipColor: Color? // Track the current clip color for UI updates
     @State private var isOptionDragging: Bool = false // Track if we're option-dragging for duplication
     @State private var originalClipVisible: Bool = true // Track if the original clip should be visible during drag
+    @State private var waveformData: [CGFloat] = [] // Waveform data for this clip
+    @State private var isLoadingWaveform: Bool = false // Track loading state for waveform
     
     // Computed property to determine if resize handles should be visible
     private var showResizeHandles: Bool {
         return isHovering || isHoveringLeftResizeArea || isHoveringRightResizeArea || isDragging || isResizing
     }
     
-    // Store generated waveform data to avoid regenerating on each redraw
-    private let placeholderWaveformData: [CGFloat]
     // Store waveform color for contrast against the clip background
     private let waveformColor: Color
     
@@ -79,30 +82,73 @@ struct AudioClipView: View {
         let isDark = baseColor.brightness < 0.6
         // Choose a contrasting color - white for dark backgrounds, darker red for light backgrounds
         self.waveformColor = isDark ? .white : .red.opacity(0.9)
+    }
+    
+    // Load waveform data when the view appears
+    private func loadWaveformData() {
+        // Skip if we already have waveform data
+        if !waveformData.isEmpty {
+            return
+        }
         
-        // Generate placeholder waveform data only once during initialization
-        if clip.waveformData.isEmpty {
-            // Create a consistent number of data points based on clip duration
-            // More points for longer clips to maintain reasonable bar spacing
-            let baseBars = 40
-            let barsPerBeat = 10
-            let barCount = max(baseBars, Int(clip.duration * Double(barsPerBeat)))
-            var waveformBars = [CGFloat]()
-            
-            // Seed random generator based on clip id for consistency between renders
-            var generator = SeededRandomGenerator(seed: clip.id.hashValue)
-            
-            for _ in 0..<barCount {
-                // Generate a random height value for each bar
-                // Variance should be between 0.1 (small) and 1.0 (full-height)
-                let barHeight = generator.randomCGFloat(min: 0.1, max: 1.0)
-                waveformBars.append(barHeight)
+        // Set loading state
+        isLoadingWaveform = true
+        
+        // If the clip already has waveform data, use that
+        if !clip.waveformData.isEmpty {
+            // Convert Float array to CGFloat array
+            waveformData = clip.waveformData.map { CGFloat($0) }
+            isLoadingWaveform = false
+            return
+        }
+        
+        // Use a fixed 60 points per beat at all zoom levels
+        let pointsPerBeat = 60
+        
+        // Calculate total points based on duration
+        let durationBasedPoints = Int(clip.duration * Double(pointsPerBeat))
+        
+        // Cap the maximum number of points for performance
+        let maxPoints = 2000
+        let sampleCount = min(maxPoints, max(500, durationBasedPoints))
+        
+        // If we have a path, try to generate a waveform
+        if let fileURL = clip.audioFileURL {
+            // Start generating waveform
+            waveformViewModel.generateWaveform(filePath: fileURL, sampleCount: sampleCount) { error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error generating waveform: \(error.localizedDescription)")
+                        // On failure, generate a random waveform
+                        self.waveformData = self.waveformViewModel.generateRandomWaveform(
+                            sampleCount: sampleCount
+                        )
+                    } else if !self.waveformViewModel.waveformData.isEmpty {
+                        // Use the generated waveform data
+                        self.waveformData = self.waveformViewModel.waveformData
+                        
+                        // Convert CGFloat array to Float array and store in clip
+                        var updated = self.clip
+                        updated.waveformData = self.waveformData.map { Float($0) }
+                        
+                        // Update the clip in the track
+                        if let trackIndex = self.projectViewModel.tracks.firstIndex(where: { $0.id == self.track.id }) {
+                            var updatedTrack = self.projectViewModel.tracks[trackIndex]
+                            if let clipIndex = updatedTrack.audioClips.firstIndex(where: { $0.id == self.clip.id }) {
+                                updatedTrack.audioClips[clipIndex] = updated
+                                self.projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            }
+                        }
+                    }
+                    self.isLoadingWaveform = false
+                }
             }
-            
-            self.placeholderWaveformData = waveformBars
         } else {
-            // If the clip already has waveform data, convert it to CGFloat
-            self.placeholderWaveformData = clip.waveformData.map { CGFloat($0) }
+            // No file path, generate random waveform
+            waveformData = waveformViewModel.generateRandomWaveform(
+                sampleCount: sampleCount
+            )
+            isLoadingWaveform = false
         }
     }
     
@@ -149,15 +195,50 @@ struct AudioClipView: View {
                 }
                 
                 // Only show waveform when not collapsed
-                if !trackViewModel.isCollapsed && clip.waveformData.isEmpty {
-                    StripedWaveformView(
-                        waveformData: placeholderWaveformData,
-                        color: waveformColor,
-                        width: width,
-                        height: clipHeight - 30
-                    )
-                    .padding(.top, 24)
-                    .allowsHitTesting(false)
+                if !trackViewModel.isCollapsed {
+                    // Load waveform data if needed
+                    if waveformData.isEmpty && !isLoadingWaveform {
+                        EmptyView()
+                            .onAppear {
+                                DispatchQueue.main.async {
+                                    loadWaveformData()
+                                }
+                            }
+                            .frame(width: 0, height: 0)
+                            .opacity(0)
+                    }
+                    
+                    if isLoadingWaveform {
+                        // Show loading indicator centered with proper padding
+                        VStack {
+                            Spacer().frame(height: 24) // Match top padding of waveform
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Spacer()
+                            }
+                            Spacer()
+                        }
+                        .frame(width: width, height: clipHeight - 30)
+                        .allowsHitTesting(false)
+                    } else if !waveformData.isEmpty {
+                        // Show waveform with our data
+                        AudioWaveformView(
+                            waveformData: waveformData,
+                            color: determineWaveformColor(), // Use function for more professional coloring
+                            backgroundColor: Color.clear,
+                            mirrored: true,
+                            spacing: 0.5, // Use consistent tight spacing for professional look
+                            style: .bars,
+                            zoomLevel: CGFloat(state.effectivePixelsPerBeat)
+                        )
+                        .padding(.top, 24)
+                        .padding(.horizontal, 0) // No horizontal padding
+                        .frame(width: width, height: clipHeight - 30) // Match clip width
+                        .clipped() // Ensure waveform stays within bounds
+                        .allowsHitTesting(false)
+                    }
                 }
             }
             .frame(width: width, height: clipHeight)
@@ -551,6 +632,7 @@ struct AudioClipView: View {
                                             name: clip.name,
                                             startBeat: finalPosition,
                                             duration: clip.duration,
+                                            audioFileURL: clip.audioFileURL,
                                             color: clip.color,
                                             waveformData: clip.waveformData
                                         )
@@ -721,6 +803,19 @@ struct AudioClipView: View {
         } message: {
             Text("Enter a new name for this clip")
         }
+        .onAppear {
+            // Load waveform data when view appears if not already loaded
+            if waveformData.isEmpty && !isLoadingWaveform {
+                loadWaveformData()
+            }
+        }
+        .onDisappear {
+            // Cancel any active waveform generation when view disappears
+            if isLoadingWaveform {
+                waveformViewModel.cancelGeneration()
+                isLoadingWaveform = false
+            }
+        }
     }
     
     // Function to select this clip
@@ -858,6 +953,28 @@ struct AudioClipView: View {
             }
         }
     }
+    
+    // Helper method to determine waveform color for professional appearance
+    private func determineWaveformColor() -> Color {
+        // Get the base color (clip color or track color)
+        let baseColor = currentClipColor ?? track.effectiveColor
+        
+        // Calculate the perceived brightness of the background
+        let brightness = baseColor.brightness
+        
+        if brightness < 0.3 {
+            // For very dark backgrounds, use a bright, high-contrast color
+            // White with slight opacity looks professional on dark backgrounds
+            return Color.white.opacity(0.9)
+        } else if brightness < 0.6 {
+            // For medium-dark backgrounds, use a slightly softer white
+            return Color.white.opacity(0.8)
+        } else {
+            // For lighter backgrounds, use a darker color with good contrast
+            // A dark shade that's not pure black maintains professional look
+            return Color(white: 0.15).opacity(0.85)
+        }
+    }
 }
 
 // A struct to seed the random generator for consistent results
@@ -883,58 +1000,6 @@ private struct SeededRandomGenerator {
         
         // Scale to requested range
         return min + normalizedValue * (max - min)
-    }
-}
-
-// Separate view for the striped waveform visualization
-struct StripedWaveformView: View {
-    let waveformData: [CGFloat]
-    let color: Color
-    let width: CGFloat
-    let height: CGFloat
-    
-    var body: some View {
-        // Don't render anything if height is too small (when collapsed)
-        if height < 10 {
-            Color.clear.frame(width: 0, height: 0)
-        } else {
-            Canvas { context, size in
-                // Calculate spacing between bars
-                let barCount = waveformData.count
-                let barWidth: CGFloat = 2 // Fixed bar width
-                let spacing = (width - CGFloat(barCount) * barWidth) / CGFloat(barCount + 1)
-                let effectiveSpacing = max(1, spacing) // Ensure minimum spacing
-                
-                // Starting X position for the first bar
-                var xPos: CGFloat = effectiveSpacing
-                
-                // Midpoint for drawing bars from center
-                let midY = height / 2
-                
-                // Draw each bar in the waveform
-                for amplitude in waveformData {
-                    // Each bar extends from center up and down based on amplitude
-                    let barHeight = height * amplitude
-                    let yOffset = (height - barHeight) / 2
-                    
-                    // Create path for this bar
-                    let barRect = CGRect(
-                        x: xPos,
-                        y: yOffset,
-                        width: barWidth,
-                        height: barHeight
-                    )
-                    let path = Path(roundedRect: barRect, cornerSize: CGSize(width: 1, height: 1))
-                    
-                    // Draw the bar
-                    context.fill(path, with: .color(color))
-                    
-                    // Move to the next position
-                    xPos += barWidth + effectiveSpacing
-                }
-            }
-            .frame(width: width, height: height)
-        }
     }
 }
 
