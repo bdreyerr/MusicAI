@@ -316,10 +316,21 @@ struct AudioClipView: View {
                                         // Ensure minimum duration (0.25 beats)
                                         newDuration = max(0.25, newDuration)
                                         
+                                        // Check if we need to limit based on original audio file duration
+                                        if let originalDuration = clip.originalDuration {
+                                            // Limit to the original audio file duration
+                                            newDuration = min(newDuration, originalDuration)
+                                        }
+                                        
                                         // Snap to grid
                                         let endBeat = clip.startBeat + newDuration
                                         let snappedEndBeat = snapToNearestGridMarker(endBeat)
                                         newDuration = snappedEndBeat - clip.startBeat
+                                        
+                                        // Reapply original duration limit after snapping if needed
+                                        if let originalDuration = clip.originalDuration {
+                                            newDuration = min(newDuration, originalDuration)
+                                        }
                                         
                                         // Preview the new selection size
                                         state.startSelection(at: clip.startBeat, trackId: track.id)
@@ -335,10 +346,21 @@ struct AudioClipView: View {
                                         // Ensure minimum duration
                                         newDuration = max(0.25, newDuration)
                                         
+                                        // Check if we need to limit based on original audio file duration
+                                        if let originalDuration = clip.originalDuration {
+                                            // Limit to the original audio file duration
+                                            newDuration = min(newDuration, originalDuration)
+                                        }
+                                        
                                         // Snap to grid
                                         let endBeat = clip.startBeat + newDuration
                                         let snappedEndBeat = snapToNearestGridMarker(endBeat)
                                         newDuration = snappedEndBeat - clip.startBeat
+                                        
+                                        // Reapply original duration limit after snapping if needed
+                                        if let originalDuration = clip.originalDuration {
+                                            newDuration = min(newDuration, originalDuration)
+                                        }
                                         
                                         // Apply the resize if duration actually changed
                                         if abs(newDuration - clip.duration) > 0.001 {
@@ -522,7 +544,8 @@ struct AudioClipView: View {
                                             startBeat: finalPosition,
                                             duration: clip.duration,
                                             audioFileURL: clip.audioFileURL,
-                                            color: clip.color
+                                            color: clip.color,
+                                            originalDuration: clip.originalDuration
                                         )
                                         
                                         // Add the duplicate clip to the track

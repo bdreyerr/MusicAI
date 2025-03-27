@@ -362,7 +362,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 name: firstPartName,
                                 startBeat: firstPartStartBeat,
                                 duration: firstPartDuration,
-                                color: originalColor
+                                color: originalColor,
+                                originalDuration: originalDuration
                             )
                             
                             // STEP 3: CREATE THE SECOND (RIGHT) CLIP
@@ -377,7 +378,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 name: secondPartName,
                                 startBeat: secondPartStartBeat,
                                 duration: secondPartDuration,
-                                color: originalColor
+                                color: originalColor,
+                                originalDuration: originalDuration
                             )
                             
                             // STEP 4: ADD BOTH CLIPS TO THE TRACK
@@ -743,7 +745,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                     name: newName,
                     startBeat: newStartBeat,
                     duration: newDuration,
-                    color: originalClip.color
+                    color: originalClip.color,
+                    originalDuration: originalClip.originalDuration
                 )
                 
                 clipsToAdd.append(newClip)
@@ -1260,7 +1263,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                     name: firstPartName,
                                     startBeat: firstPartStartBeat,
                                     duration: firstPartDuration,
-                                    color: originalColor
+                                    color: originalColor,
+                                    originalDuration: originalDuration
                                 )
                                 
                                 clipsToAdd.append(firstPart)
@@ -1279,7 +1283,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                     name: middlePartName,
                                     startBeat: middlePartStartBeat,
                                     duration: middlePartDuration,
-                                    color: originalColor
+                                    color: originalColor,
+                                    originalDuration: originalDuration
                                 )
                                 
                                 clipsToAdd.append(middlePart)
@@ -1297,7 +1302,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                     name: lastPartName,
                                     startBeat: lastPartStartBeat,
                                     duration: lastPartDuration,
-                                    color: originalColor
+                                    color: originalColor,
+                                    originalDuration: originalDuration
                                 )
                                 
                                 clipsToAdd.append(lastPart)
@@ -1364,7 +1370,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 name: firstPartName,
                                 startBeat: firstPartStartBeat,
                                 duration: firstPartDuration,
-                                color: originalColor
+                                color: originalColor,
+                                originalDuration: originalDuration
                             )
                             
                             clipsToAdd.append(firstPart)
@@ -1380,7 +1387,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 name: secondPartName,
                                 startBeat: secondPartStartBeat,
                                 duration: secondPartDuration,
-                                color: originalColor
+                                color: originalColor,
+                                originalDuration: originalDuration
                             )
                             
                             clipsToAdd.append(secondPart)

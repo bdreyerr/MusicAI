@@ -19,6 +19,7 @@ struct FolderListView: View {
                 Divider()
                     .frame(height: 0.5)
                     .background(themeManager.secondaryBorderColor)
+                    .padding(.horizontal, 8)
                 
                 // Library folders - icons only
                 VStack(spacing: 8) {

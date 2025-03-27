@@ -7,22 +7,24 @@ struct AudioClip: Identifiable, Equatable, Codable {
     var name: String
     var startBeat: Double // Position in the timeline (in beats)
     var duration: Double // Duration in beats
+    var originalDuration: Double? // Original duration of the audio file in beats (if available)
     var color: Color? // Optional custom color for the clip
     var audioFileURL: URL? // URL to the audio file on disk
     
     // Coding keys for Codable
     enum CodingKeys: String, CodingKey {
-        case id, name, startBeat, duration, colorData, audioFileURL
+        case id, name, startBeat, duration, originalDuration, colorData, audioFileURL
     }
     
     init(id: UUID = UUID(), name: String, startBeat: Double, duration: Double, 
-         audioFileURL: URL? = nil, color: Color? = nil) {
+         audioFileURL: URL? = nil, color: Color? = nil, originalDuration: Double? = nil) {
         self.id = id
         self.name = name
         self.startBeat = startBeat
         self.duration = duration
         self.audioFileURL = audioFileURL
         self.color = color
+        self.originalDuration = originalDuration
     }
     
     // Custom initializer from decoder
@@ -33,6 +35,7 @@ struct AudioClip: Identifiable, Equatable, Codable {
         name = try container.decode(String.self, forKey: .name)
         startBeat = try container.decode(Double.self, forKey: .startBeat)
         duration = try container.decode(Double.self, forKey: .duration)
+        originalDuration = try container.decodeIfPresent(Double.self, forKey: .originalDuration)
         audioFileURL = try container.decodeIfPresent(URL.self, forKey: .audioFileURL)
         
         // Decode optional color
@@ -51,6 +54,7 @@ struct AudioClip: Identifiable, Equatable, Codable {
         try container.encode(name, forKey: .name)
         try container.encode(startBeat, forKey: .startBeat)
         try container.encode(duration, forKey: .duration)
+        try container.encodeIfPresent(originalDuration, forKey: .originalDuration)
         try container.encodeIfPresent(audioFileURL, forKey: .audioFileURL)
         
         // Encode optional color
@@ -83,8 +87,8 @@ struct AudioClip: Identifiable, Equatable, Codable {
     }
     
     // Create a new audio clip with a file URL
-    static func create(name: String, startBeat: Double, duration: Double, audioFileURL: URL? = nil, color: Color? = nil) -> AudioClip {
-        return AudioClip(name: name, startBeat: startBeat, duration: duration, audioFileURL: audioFileURL, color: color)
+    static func create(name: String, startBeat: Double, duration: Double, audioFileURL: URL? = nil, color: Color? = nil, originalDuration: Double? = nil) -> AudioClip {
+        return AudioClip(name: name, startBeat: startBeat, duration: duration, audioFileURL: audioFileURL, color: color, originalDuration: originalDuration)
     }
     
     // Create an empty audio clip (for UI testing or placeholders)
@@ -98,6 +102,7 @@ struct AudioClip: Identifiable, Equatable, Codable {
                lhs.name == rhs.name &&
                lhs.startBeat == rhs.startBeat &&
                lhs.duration == rhs.duration &&
+               lhs.originalDuration == rhs.originalDuration &&
                lhs.audioFileURL == rhs.audioFileURL
     }
 } 

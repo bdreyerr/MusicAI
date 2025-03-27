@@ -64,7 +64,8 @@ class AudioViewModel: ObservableObject {
             startBeat: startBeat,
             duration: durationInBeats,
             audioFileURL: fileURL,
-            color: track.effectiveColor
+            color: track.effectiveColor,
+            originalDuration: durationInBeats // Set the original duration to match the actual audio file length
         )
         
         // Add the clip to the track
@@ -310,7 +311,15 @@ class AudioViewModel: ObservableObject {
         // Get the clip we're resizing
         var clipToResize = track.audioClips[clipIndex]
         let startBeat = clipToResize.startBeat
-        let newEndBeat = startBeat + newDuration
+        
+        // Check if we need to limit the new duration based on the original audio file length
+        var limitedNewDuration = newDuration
+        if let originalDuration = clipToResize.originalDuration {
+            // Ensure the new duration doesn't exceed the original audio file duration
+            limitedNewDuration = min(newDuration, originalDuration)
+        }
+        
+        let newEndBeat = startBeat + limitedNewDuration
         
         // Check for overlaps with other clips
         let overlappingClips = track.audioClips.filter { clip in
@@ -324,7 +333,7 @@ class AudioViewModel: ObservableObject {
         }
         
         // Update the clip's duration
-        clipToResize.duration = newDuration
+        clipToResize.duration = limitedNewDuration
         
         // Remove the old clip and add the updated one
         track.removeAudioClip(id: clipId)

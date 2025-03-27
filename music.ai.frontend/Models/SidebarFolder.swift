@@ -51,7 +51,7 @@ struct SidebarFolder: Identifiable {
         ),
         SidebarFolder(
             name: "MIDI Effects",
-            icon: "pianokeys.inverse",
+            icon: "pianokeys",
             items: [
                 FolderItem(name: "Arpeggiator", icon: "arrow.up.and.down"),
                 FolderItem(name: "Chord Trigger", icon: "square.grid.3x3"),
