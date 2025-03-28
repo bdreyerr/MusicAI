@@ -4,8 +4,8 @@ import SwiftUI
 import Combine
 
 /// ViewModel for managing audio file drag and drop operations
-class AudioDragDropViewModel: ObservableObject {
-    static let shared = AudioDragDropViewModel()
+class SampleDragDropViewModel: ObservableObject {
+    static let shared = SampleDragDropViewModel()
     
     // Store the most recent drag paths for audio files
     // Format: [fileName: filePath]

@@ -247,6 +247,7 @@ class FileViewModel: ObservableObject {
             tempo: projectViewModel.tempo,
             timeSignatureBeats: projectViewModel.timeSignatureBeats,
             timeSignatureUnit: projectViewModel.timeSignatureUnit,
+            audioItems: projectViewModel.audioItems,
             tracks: projectViewModel.tracks,
             masterTrack: projectViewModel.masterTrack,
             formatVersion: 1

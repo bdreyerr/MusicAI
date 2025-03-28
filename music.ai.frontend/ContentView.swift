@@ -13,7 +13,7 @@ struct ContentView: View {
     @StateObject private var fileViewModel = FileViewModel()
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var sidebarViewModel: SidebarViewModel
-    @EnvironmentObject var audioDragDropViewModel: AudioDragDropViewModel
+    @EnvironmentObject var audioDragDropViewModel: SampleDragDropViewModel
     @State private var showThemeSettings = false
     
     var body: some View {
@@ -72,5 +72,5 @@ struct ContentView: View {
     return ContentView()
         .environmentObject(ThemeManager())
         .environmentObject(SidebarViewModel())
-        .environmentObject(AudioDragDropViewModel.shared)
+        .environmentObject(SampleDragDropViewModel.shared)
 }

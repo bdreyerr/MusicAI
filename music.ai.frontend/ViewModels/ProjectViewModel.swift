@@ -65,6 +65,7 @@ class ProjectViewModel: ObservableObject {
     @Published var timeSignatureUnit: Int = 4
     @Published var isPlaying: Bool = false
     @Published var currentBeat: Double = 0.0 // Current playback position in beats
+    @Published var audioItems: [AudioItem] = []
     @Published var tracks: [Track] = []
     @Published var selectedTrackId: UUID? = nil // ID of the currently selected track
     @Published var masterTrack: Track // Master track for final output processing

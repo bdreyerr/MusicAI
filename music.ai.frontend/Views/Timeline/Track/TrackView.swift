@@ -11,7 +11,7 @@ struct TrackView: View {
     @ObservedObject var trackViewModel: TrackViewModel
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var menuCoordinator: MenuCoordinator
-    @StateObject private var dragDropViewModel = AudioDragDropViewModel.shared
+    @StateObject private var dragDropViewModel = SampleDragDropViewModel.shared
     let width: CGFloat
     
     // Computed property to access the MIDI view model
@@ -371,17 +371,19 @@ struct TrackView: View {
                         // Check if this is an audio track
                         if self.track.type == .audio {
                             // Create audio clip directly on this audio track
-                            let success = self.audioViewModel.createAudioClipFromFile(
-                                trackId: self.track.id,
-                                filePath: url.path,
-                                fileName: url.lastPathComponent,
-                                startBeat: dropBeatPosition
-                            )
-                            
-                            if success {
-                                print("✅ Successfully created audio clip from directly dropped file at beat \(dropBeatPosition)")
-                            } else {
-                                print("❌ CLIP CREATION FAILED")
+                            Task {
+                                let success = await self.audioViewModel.createAudioClipFromFile(
+                                    trackId: self.track.id,
+                                    filePath: url.path,
+                                    fileName: url.lastPathComponent,
+                                    startBeat: dropBeatPosition
+                                )
+                                
+                                if success {
+                                    print("✅ Successfully created audio clip from directly dropped file at beat \(dropBeatPosition)")
+                                } else {
+                                    print("❌ CLIP CREATION FAILED")
+                                }
                             }
                         } else {
                             // Forward to the first audio track
@@ -397,12 +399,14 @@ struct TrackView: View {
                                 
                                 // Use audio view model to create a clip at a default position
                                 let startBeat = 0.0
-                                self.audioViewModel.createAudioClipFromFile(
-                                    trackId: audioTrack.id,
-                                    filePath: url.path,
-                                    fileName: url.lastPathComponent,
-                                    startBeat: startBeat
-                                )
+                                Task {
+                                    await self.audioViewModel.createAudioClipFromFile(
+                                        trackId: audioTrack.id,
+                                        filePath: url.path,
+                                        fileName: url.lastPathComponent,
+                                        startBeat: startBeat
+                                    )
+                                }
                             }
                         }
                     }
@@ -443,12 +447,14 @@ struct TrackView: View {
                     
                     // Use audio view model to create a clip at beat 0 (or other default position)
                     let startBeat = 0.0
-                    audioViewModel.createAudioClipFromFile(
-                        trackId: audioTrack.id,
-                        filePath: path,
-                        fileName: fileName,
-                        startBeat: startBeat
-                    )
+                    Task {
+                        await self.audioViewModel.createAudioClipFromFile(
+                            trackId: audioTrack.id,
+                            filePath: path,
+                            fileName: fileName,
+                            startBeat: startBeat
+                        )
+                    }
                     
                     return true
                 }
@@ -466,20 +472,22 @@ struct TrackView: View {
             
             // Create audio clip at the drop position
             let fileExtension = URL(fileURLWithPath: path).pathExtension
-            let success = audioViewModel.createAudioClipFromFile(
-                trackId: track.id,
-                filePath: path,
-                fileName: fileName,
-                startBeat: dropBeatPosition
-            )
-            
-            if success {
-                print("✅ Successfully created audio clip from dropped file at beat \(dropBeatPosition)")
-                return true
-            } else {
-                print("❌ Failed to create audio clip from dropped file")
-                return false
+            Task {
+                let success = await self.audioViewModel.createAudioClipFromFile(
+                    trackId: track.id,
+                    filePath: path,
+                    fileName: fileName,
+                    startBeat: dropBeatPosition
+                )
+                
+                if success {
+                    print("✅ Successfully created audio clip from dropped file at beat \(dropBeatPosition)")
+                } else {
+                    print("❌ Failed to create audio clip from dropped file")
+                }
             }
+            
+            return true
         }
         
         // If we get here, we couldn't handle the drop
@@ -541,17 +549,19 @@ struct TrackView: View {
                     let beatPosition = xPosition / CGFloat(self.state.effectivePixelsPerBeat)
                     let snappedPosition = self.snapToNearestGridMarker(beatPosition)
                     
-                    let success = self.audioViewModel.createAudioClipFromFile(
-                        trackId: self.track.id,
-                        filePath: url.path,
-                        fileName: url.lastPathComponent,
-                        startBeat: snappedPosition
-                    )
-                    
-                    if success {
-                        print("✅ CLIP CREATED: Successfully created audio clip from dropped file at beat \(snappedPosition)")
-                    } else {
-                        print("❌ CLIP CREATION FAILED")
+                    Task {
+                        let success = await self.audioViewModel.createAudioClipFromFile(
+                            trackId: self.track.id,
+                            filePath: url.path,
+                            fileName: url.lastPathComponent,
+                            startBeat: snappedPosition
+                        )
+                        
+                        if success {
+                            print("✅ CLIP CREATED: Successfully created audio clip from dropped file at beat \(snappedPosition)")
+                        } else {
+                            print("❌ CLIP CREATION FAILED")
+                        }
                     }
                 } else {
                     print("⚠️ Not an audio track, forwarding to first audio track...")
@@ -562,18 +572,20 @@ struct TrackView: View {
                         print("✅ CREATING CLIP ON FORWARDED TRACK: \(audioTrack.name)")
                         
                         // Use audio view model to create a clip at beat 0 (or other default position)
-                        let startBeat = 0.0
-                        let success = self.audioViewModel.createAudioClipFromFile(
-                            trackId: audioTrack.id,
-                            filePath: url.path,
-                            fileName: url.lastPathComponent,
-                            startBeat: startBeat
-                        )
-                        
-                        if success {
-                            print("✅ CLIP CREATED ON FORWARDED TRACK: Successfully created audio clip from dropped file")
-                        } else {
-                            print("❌ CLIP CREATION FAILED ON FORWARDED TRACK")
+                        Task {
+                            let startBeat = 0.0
+                            let success = await self.audioViewModel.createAudioClipFromFile(
+                                trackId: audioTrack.id,
+                                filePath: url.path,
+                                fileName: url.lastPathComponent,
+                                startBeat: startBeat
+                            )
+                            
+                            if success {
+                                print("✅ CLIP CREATED ON FORWARDED TRACK: Successfully created audio clip from dropped file")
+                            } else {
+                                print("❌ CLIP CREATION FAILED ON FORWARDED TRACK")
+                            }
                         }
                     }
                 }
@@ -589,18 +601,20 @@ struct TrackView: View {
                     print("✅ CREATING CLIP ON FORWARDED TRACK: \(audioTrack.name)")
                     
                     // Use audio view model to create a clip at beat 0 (or other default position)
-                    let startBeat = 0.0
-                    let success = self.audioViewModel.createAudioClipFromFile(
-                        trackId: audioTrack.id,
-                        filePath: url.path,
-                        fileName: url.lastPathComponent,
-                        startBeat: startBeat
-                    )
-                    
-                    if success {
-                        print("✅ CLIP CREATED ON FORWARDED TRACK: Successfully created audio clip from dropped file")
-                    } else {
-                        print("❌ CLIP CREATION FAILED ON FORWARDED TRACK")
+                    Task {
+                        let startBeat = 0.0
+                        let success = await self.audioViewModel.createAudioClipFromFile(
+                            trackId: audioTrack.id,
+                            filePath: url.path,
+                            fileName: url.lastPathComponent,
+                            startBeat: startBeat
+                        )
+                        
+                        if success {
+                            print("✅ CLIP CREATED ON FORWARDED TRACK: Successfully created audio clip from dropped file")
+                        } else {
+                            print("❌ CLIP CREATION FAILED ON FORWARDED TRACK")
+                        }
                     }
                 }
             }

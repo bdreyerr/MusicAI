@@ -76,8 +76,8 @@ struct AudioClipView: View {
         
         // Calculate contrasting color for waveform bars
         let baseColor = clip.color ?? track.effectiveColor
-        let isDark = baseColor.brightness < 0.6
-        // Choose a contrasting color - white for dark backgrounds, black for light backgrounds
+        let isDark = baseColor.brightness < 0.2 // Only consider very dark colors
+        // Choose black by default, white only for very dark backgrounds
         self.waveformColor = isDark ? .white : .black
     }
     
@@ -206,6 +206,14 @@ struct AudioClipView: View {
                                         // Ensure we don't go negative
                                         newStartBeat = max(0, newStartBeat)
                                         
+                                        // Calculate the maximum allowed extension based on audioStartTime
+                                        let beatDuration = clip.audioWindowDuration / clip.duration
+                                        let maxAdditionalBeats = clip.audioStartTime / beatDuration
+                                        let minAllowedStartBeat = resizeStartPosition - maxAdditionalBeats
+                                        
+                                        // Limit the start beat to not exceed the audio file bounds
+                                        newStartBeat = max(newStartBeat, minAllowedStartBeat)
+                                        
                                         // Snap to grid
                                         let snappedStartBeat = snapToNearestGridMarker(newStartBeat)
                                         
@@ -223,12 +231,23 @@ struct AudioClipView: View {
                                         let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
                                         var newStartBeat = resizeStartPosition + Double(dragDistanceInBeats)
                                         
+                                        // Calculate the original end beat position
+                                        let originalEndBeat = clip.startBeat + clip.duration
+                                        
                                         // Ensure we don't go past the end of the clip
                                         let clipEnd = resizeStartPosition + resizeStartDuration
                                         newStartBeat = min(newStartBeat, clipEnd - 0.25) // Ensure minimum duration
                                         
                                         // Ensure we don't go negative
                                         newStartBeat = max(0, newStartBeat)
+                                        
+                                        // Calculate the maximum allowed extension based on audioStartTime
+                                        let beatDuration = clip.audioWindowDuration / clip.duration
+                                        let maxAdditionalBeats = clip.audioStartTime / beatDuration
+                                        let minAllowedStartBeat = resizeStartPosition - maxAdditionalBeats
+                                        
+                                        // Limit the start beat to not exceed the audio file bounds
+                                        newStartBeat = max(newStartBeat, minAllowedStartBeat)
                                         
                                         // Snap to grid
                                         let snappedStartBeat = snapToNearestGridMarker(newStartBeat)
@@ -238,24 +257,21 @@ struct AudioClipView: View {
                                         
                                         // Only apply if the position or duration actually changed
                                         if abs(newStartBeat - clip.startBeat) > 0.001 || abs(newDuration - clip.duration) > 0.001 {
-                                            // First move the clip to its new position
-                                            let success1 = audioViewModel.moveAudioClip(
+                                            // Resize the clip with the new duration and position
+                                            let (success, actualDuration) = audioViewModel.resizeAudioClip(
                                                 trackId: track.id,
                                                 clipId: clip.id,
-                                                newStartBeat: snappedStartBeat
+                                                newDuration: newDuration,
+                                                isResizingLeft: true
                                             )
                                             
-                                            // Then resize it to its new duration
-                                            let success2 = audioViewModel.resizeAudioClip(
-                                                trackId: track.id,
-                                                clipId: clip.id,
-                                                newDuration: newDuration
-                                            )
-                                            
-                                            if success1 && success2 {
-                                                // Update selection to match new clip size
-                                                state.startSelection(at: snappedStartBeat, trackId: track.id)
-                                                state.updateSelection(to: snappedStartBeat + newDuration)
+                                            if success {
+                                                // Calculate actual start beat based on the actual duration
+                                                let actualStartBeat = originalEndBeat - actualDuration
+                                                
+                                                // Update selection to match actual clip size
+                                                state.startSelection(at: actualStartBeat, trackId: track.id)
+                                                state.updateSelection(to: actualStartBeat + actualDuration)
                                             } else {
                                                 // Reset selection to original clip size
                                                 state.startSelection(at: clip.startBeat, trackId: track.id)
@@ -335,21 +351,23 @@ struct AudioClipView: View {
                                         // Ensure minimum duration (0.25 beats)
                                         newDuration = max(0.25, newDuration)
                                         
-                                        // Check if we need to limit based on original audio file duration
-                                        if let originalDuration = clip.originalDuration {
-                                            // Limit to the original audio file duration
-                                            newDuration = min(newDuration, originalDuration)
-                                        }
+                                        // Calculate beat duration (seconds per beat)
+                                        let beatDuration = clip.audioWindowDuration / clip.duration
+                                        
+                                        // Calculate the maximum allowed duration based on remaining audio time
+                                        let remainingAudioTime = clip.audioItem.duration - clip.audioStartTime
+                                        let maxNewDuration = remainingAudioTime / beatDuration
+                                        
+                                        // Limit the duration to not exceed the audio file bounds
+                                        newDuration = min(newDuration, maxNewDuration)
                                         
                                         // Snap to grid
                                         let endBeat = clip.startBeat + newDuration
                                         let snappedEndBeat = snapToNearestGridMarker(endBeat)
                                         newDuration = snappedEndBeat - clip.startBeat
                                         
-                                        // Reapply original duration limit after snapping if needed
-                                        if let originalDuration = clip.originalDuration {
-                                            newDuration = min(newDuration, originalDuration)
-                                        }
+                                        // Reapply audio bounds limit after snapping
+                                        newDuration = min(newDuration, maxNewDuration)
                                         
                                         // Preview the new selection size
                                         state.startSelection(at: clip.startBeat, trackId: track.id)
@@ -358,7 +376,7 @@ struct AudioClipView: View {
                                     .onEnded { value in
                                         guard isResizing && !isResizingLeft else { return }
                                         
-                                        // Calculate final duration
+                                        // Calculate new duration
                                         let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
                                         var newDuration = resizeStartDuration + Double(dragDistanceInBeats)
                                         
@@ -381,18 +399,20 @@ struct AudioClipView: View {
                                             newDuration = min(newDuration, originalDuration)
                                         }
                                         
-                                        // Apply the resize if duration actually changed
+                                        // Only apply if the duration actually changed
                                         if abs(newDuration - clip.duration) > 0.001 {
-                                            let success = audioViewModel.resizeAudioClip(
+                                            // Resize the clip
+                                            let (success, actualDuration) = audioViewModel.resizeAudioClip(
                                                 trackId: track.id,
                                                 clipId: clip.id,
-                                                newDuration: newDuration
+                                                newDuration: newDuration,
+                                                isResizingLeft: false
                                             )
                                             
                                             if success {
-                                                // Update selection to match new clip size
+                                                // Update selection to match actual clip size
                                                 state.startSelection(at: clip.startBeat, trackId: track.id)
-                                                state.updateSelection(to: clip.startBeat + newDuration)
+                                                state.updateSelection(to: clip.startBeat + actualDuration)
                                             } else {
                                                 // Reset selection to original clip size
                                                 state.startSelection(at: clip.startBeat, trackId: track.id)
@@ -559,6 +579,7 @@ struct AudioClipView: View {
                                     if isOptionDragging {
                                         // Create a duplicate clip at the new position
                                         let duplicateClip = AudioClip(
+                                            audioItem: clip.audioItem,
                                             name: clip.name,
                                             startBeat: finalPosition,
                                             duration: clip.duration,

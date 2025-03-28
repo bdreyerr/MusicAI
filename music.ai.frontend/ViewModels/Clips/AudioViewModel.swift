@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AVFoundation
 
 /// AudioViewModel handles all audio-related operations and state management
 class AudioViewModel: ObservableObject {
@@ -15,6 +16,63 @@ class AudioViewModel: ObservableObject {
         self.timelineState = timelineState
     }
     
+    // MARK: - Audio Item Management
+    
+    /// Create an AudioItem from a file URL if it doesn't already exist
+    /// - Parameters:
+    ///   - fileURL: The URL of the audio file
+    /// - Returns: The AudioItem (either existing or newly created)
+    private func getOrCreateAudioItem(fileURL: URL) async throws -> AudioItem {
+        // Check if we already have an AudioItem for this URL
+        if let existingItem = projectViewModel?.audioItems.first(where: { $0.audioFileURL == fileURL }) {
+            return existingItem
+        }
+        
+        // Create a new AudioItem
+        let asset = AVAsset(url: fileURL)
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        guard let audioTrack = tracks.first else {
+            throw AudioItemError.invalidAudioFormat
+        }
+        
+        // Load the format description
+        let formatDescription = try await audioTrack.load(.formatDescriptions).first as! CMAudioFormatDescription
+        guard let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else {
+            throw AudioItemError.invalidAudioFormat
+        }
+        
+        let duration = try await asset.load(.duration).seconds
+        let sampleRate = Double(streamDescription.pointee.mSampleRate)
+        let channels = Int(streamDescription.pointee.mChannelsPerFrame)
+        let bitDepth = Int(streamDescription.pointee.mBitsPerChannel)
+        let fileExtension = fileURL.pathExtension.lowercased()
+        
+        // Generate waveform for the audio file
+        let waveform = AudioWaveformGenerator.generateWaveformFromAudioUrl(
+            url: fileURL,
+            color: nil
+        )
+        
+        let newItem = AudioItem(
+            name: fileURL.lastPathComponent,
+            audioFileURL: fileURL,
+            duration: duration,
+            sampleRate: sampleRate,
+            numberOfChannels: channels,
+            bitDepth: bitDepth,
+            fileFormat: fileExtension,
+            waveform: waveform
+        )
+        
+        // Add the new item to the project
+        DispatchQueue.main.async {
+            self.projectViewModel?.audioItems.append(newItem)
+        }
+        
+        
+        return newItem
+    }
+    
     // MARK: - Audio Clip Management
     
     /// Create an audio clip from a dropped file
@@ -24,7 +82,7 @@ class AudioViewModel: ObservableObject {
     ///   - fileName: The name of the audio file (without extension)
     ///   - startBeat: The starting beat position for the clip
     /// - Returns: True if the clip was created successfully
-    func createAudioClipFromFile(trackId: UUID, filePath: String, fileName: String, startBeat: Double) -> Bool {
+    func createAudioClipFromFile(trackId: UUID, filePath: String, fileName: String, startBeat: Double) async -> Bool {
         // Ensure we have a reference to the project view model
         guard let projectViewModel = projectViewModel,
               let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
@@ -43,111 +101,63 @@ class AudioViewModel: ObservableObject {
         // Create a URL from the file path
         let fileURL = URL(fileURLWithPath: filePath)
         
-        // Calculate the duration of the audio file in beats based on the project tempo
-        let durationInBeats = AudioFileDurationCalculator.calculateDurationInBeats(
-            url: fileURL,
-            tempo: projectViewModel.tempo
-        )
-        
-        // Check if we can add a clip at this position (no overlaps)
-        guard track.canAddAudioClip(startBeat: startBeat, duration: durationInBeats) else {
-            print("Cannot add audio clip at position \(startBeat) - overlaps with existing clips")
+        do {
+            // Get or create the AudioItem
+            let audioItem = try await getOrCreateAudioItem(fileURL: fileURL)
+            
+            // Calculate the duration in beats based on the project tempo
+            let durationInBeats = AudioFileDurationCalculator.calculateDurationInBeats(
+                url: fileURL,
+                tempo: projectViewModel.tempo
+            )
+            
+            // Check if we can add a clip at this position (no overlaps)
+            guard track.canAddAudioClip(startBeat: startBeat, duration: durationInBeats) else {
+                print("Cannot add audio clip at position \(startBeat) - overlaps with existing clips")
+                return false
+            }
+            
+            // Create a new audio clip
+            let newClip = AudioClip(
+                audioItem: audioItem,
+                name: fileName,
+                startBeat: startBeat,
+                duration: durationInBeats,
+                audioFileURL: fileURL,
+                color: track.effectiveColor,
+                originalDuration: durationInBeats,
+                waveform: audioItem.waveform,
+                audioStartTime: 0, // Start at the beginning of the audio file
+                audioEndTime: audioItem.duration // End at the end of the audio file
+            )
+            
+            // Add the clip to the track
+            track.addAudioClip(newClip)
+            
+            // Update the track in the project view model
+            await MainActor.run {
+                projectViewModel.updateTrack(at: trackIndex, with: track)
+                
+                // Select the new clip
+                if let timelineState = self.findTimelineState() {
+                    timelineState.startSelection(at: startBeat, trackId: trackId)
+                    timelineState.updateSelection(to: startBeat + durationInBeats)
+                }
+                
+                // Move playhead to the start of the clip
+                projectViewModel.seekToBeat(startBeat)
+            }
+            
+            return true
+        } catch {
+            print("Failed to create audio item: \(error)")
             return false
         }
-        
-        // Generate waveform for the audio file
-        let waveform = AudioWaveformGenerator.generateWaveformFromAudioUrl(
-            url: fileURL,
-            color: track.effectiveColor
-        ) ?? AudioWaveformGenerator.generateRandomWaveform(
-            color: track.effectiveColor
-        )
-        
-        // Create a new audio clip
-        let newClip = AudioClip(
-            name: fileName,
-            startBeat: startBeat,
-            duration: durationInBeats,
-            audioFileURL: fileURL,
-            color: track.effectiveColor,
-            originalDuration: durationInBeats, // Set the original duration to match the actual audio file length
-            waveform: waveform
-        )
-        
-        // Add the clip to the track
-        track.addAudioClip(newClip)
-        
-        // Update the track in the project view model
-        projectViewModel.updateTrack(at: trackIndex, with: track)
-        
-        // Select the new clip
-        if let timelineState = findTimelineState() {
-            timelineState.startSelection(at: startBeat, trackId: trackId)
-            timelineState.updateSelection(to: startBeat + durationInBeats)
-        }
-        
-        // Move playhead to the start of the clip
-        projectViewModel.seekToBeat(startBeat)
-        
-        return true
     }
     
     func createAudioClipFromSelection() {
         print("do nothing")
     }
-    /// Create an audio clip from the current selection
-//    func createAudioClipFromSelection() -> Bool {
-//        // Ensure there is an active selection and we have references to required objects
-//        guard let projectViewModel = projectViewModel,
-//              let timelineState = findTimelineState(),
-//              timelineState.selectionActive,
-//              let trackId = projectViewModel.selectedTrackId,
-//              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
-//            return false
-//        }
-//        
-//        // Get the selected track
-//        var track = projectViewModel.tracks[trackIndex]
-//        
-//        // Ensure this is an audio track
-//        guard track.type == .audio else {
-//            return false
-//        }
-//        
-//        // Get the selection range
-//        let (startBeat, endBeat) = timelineState.normalizedSelectionRange
-//        let duration = endBeat - startBeat
-//        
-//        // Ensure the duration is valid
-//        guard duration > 0 else {
-//            return false
-//        }
-//        
-//        // Check if we can add a clip at this position (no overlaps)
-//        guard track.canAddAudioClip(startBeat: startBeat, duration: duration) else {
-//            return false
-//        }
-//        
-//        // Create a new audio clip
-//        let clipName = "Audio \(track.audioClips.count + 1)"
-//        let newClip = AudioClip.createEmpty(
-//            name: clipName, 
-//            startBeat: startBeat, 
-//            duration: duration,
-//            color: track.effectiveColor
-//        )
-//        
-//        // Add the clip to the track
-//        track.addAudioClip(newClip)
-//        
-//        // Update the track in the project view model
-//        projectViewModel.updateTrack(at: trackIndex, with: track)
-//        
-//        // Clear the selection
-//        timelineState.clearSelection()
-//        
-//        return true
-//    }
     
     /// Remove an audio clip from a track
     func removeAudioClip(trackId: UUID, clipId: UUID) -> Bool {
@@ -294,52 +304,99 @@ class AudioViewModel: ObservableObject {
         return true
     }
     
-    /// Resize an audio clip by changing its duration
-    func resizeAudioClip(trackId: UUID, clipId: UUID, newDuration: Double) -> Bool {
+    /// Resize an audio clip by adjusting its audio window
+    /// Returns: A tuple containing (success, actualDuration) where actualDuration is the final duration after applying bounds
+    func resizeAudioClip(trackId: UUID, clipId: UUID, newDuration: Double, isResizingLeft: Bool) -> (Bool, Double) {
         guard newDuration > 0, // Ensure positive duration
               let projectViewModel = projectViewModel,
               let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
-            return false
+            return (false, 0)
         }
         
         var track = projectViewModel.tracks[trackIndex]
         
         // Ensure this is an audio track
         guard track.type == .audio else {
-            return false
+            return (false, 0)
         }
         
         // Find the clip in the track
         guard let clipIndex = track.audioClips.firstIndex(where: { $0.id == clipId }) else {
-            return false
+            return (false, 0)
         }
         
         // Get the clip we're resizing
         var clipToResize = track.audioClips[clipIndex]
-        let startBeat = clipToResize.startBeat
+        let originalEndBeat = clipToResize.startBeat + clipToResize.duration
         
-        // Check if we need to limit the new duration based on the original audio file length
-        var limitedNewDuration = newDuration
-        if let originalDuration = clipToResize.originalDuration {
-            // Ensure the new duration doesn't exceed the original audio file duration
-            limitedNewDuration = min(newDuration, originalDuration)
+        // Calculate beat duration (seconds per beat)
+        let beatDuration = clipToResize.audioWindowDuration / clipToResize.duration
+        
+        // Calculate new window times based on which side we're resizing
+        if isResizingLeft {
+            // When resizing from left, adjust audioStartTime and startBeat
+            let beatDifference = clipToResize.duration - newDuration
+            let newAudioStartTime = clipToResize.audioStartTime + (beatDifference * beatDuration)
+            
+            // Ensure we don't go negative with audioStartTime
+            if newAudioStartTime < 0 {
+                // Calculate the maximum allowed duration based on current audioStartTime
+                let maxAdditionalDuration = clipToResize.audioStartTime / beatDuration
+                let maxNewDuration = clipToResize.duration + maxAdditionalDuration
+                
+                // Update duration and audioStartTime
+                clipToResize.duration = maxNewDuration
+                clipToResize.audioStartTime = 0
+                clipToResize.startBeat = originalEndBeat - maxNewDuration
+                
+                // Update the track in the project view model
+                track.removeAudioClip(id: clipId)
+                _ = track.addAudioClip(clipToResize)
+                projectViewModel.updateTrack(at: trackIndex, with: track)
+                
+                return (true, maxNewDuration)
+            }
+            
+            clipToResize.audioStartTime = newAudioStartTime
+            clipToResize.duration = newDuration
+            clipToResize.startBeat = originalEndBeat - newDuration
+        } else {
+            // When resizing from right, adjust audioEndTime
+            let beatDifference = newDuration - clipToResize.duration
+            let newAudioEndTime = clipToResize.audioEndTime + (beatDifference * beatDuration)
+            
+            // Ensure we don't exceed the audio file's duration
+            if newAudioEndTime > clipToResize.audioItem.duration {
+                // Calculate the maximum allowed duration based on remaining audio time
+                let remainingAudioTime = clipToResize.audioItem.duration - clipToResize.audioStartTime
+                let maxNewDuration = remainingAudioTime / beatDuration
+                
+                // Update duration and audioEndTime
+                clipToResize.duration = maxNewDuration
+                clipToResize.audioEndTime = clipToResize.audioItem.duration
+                
+                // Update the track in the project view model
+                track.removeAudioClip(id: clipId)
+                _ = track.addAudioClip(clipToResize)
+                projectViewModel.updateTrack(at: trackIndex, with: track)
+                
+                return (true, maxNewDuration)
+            }
+            
+            clipToResize.audioEndTime = newAudioEndTime
+            clipToResize.duration = newDuration
         }
-        
-        let newEndBeat = startBeat + limitedNewDuration
         
         // Check for overlaps with other clips
         let overlappingClips = track.audioClips.filter { clip in
             clip.id != clipId && // Not the clip we're resizing
-            (startBeat < clip.endBeat && newEndBeat > clip.startBeat) // Overlaps
+            (clipToResize.startBeat < clip.endBeat && (clipToResize.startBeat + clipToResize.duration) > clip.startBeat) // Overlaps
         }
         
         // Remove any overlapping clips
         for overlappingClip in overlappingClips {
             track.removeAudioClip(id: overlappingClip.id)
         }
-        
-        // Update the clip's duration
-        clipToResize.duration = limitedNewDuration
         
         // Remove the old clip and add the updated one
         track.removeAudioClip(id: clipId)
@@ -348,18 +405,7 @@ class AudioViewModel: ObservableObject {
         // Update the track in the project view model
         projectViewModel.updateTrack(at: trackIndex, with: track)
         
-        // Update the selection to match the new clip size
-        if let timelineState = findTimelineState(),
-           timelineState.selectionActive,
-           projectViewModel.selectedTrackId == trackId {
-            timelineState.startSelection(at: startBeat, trackId: trackId)
-            timelineState.updateSelection(to: newEndBeat)
-        }
-        
-        // Force UI update by triggering objectWillChange
-        projectViewModel.objectWillChange.send()
-        
-        return true
+        return (true, newDuration)
     }
     
     /// Check if an audio clip is currently selected on a specific track

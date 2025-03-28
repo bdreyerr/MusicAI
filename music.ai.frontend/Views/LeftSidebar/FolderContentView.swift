@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 struct FolderContentView: View {
     @EnvironmentObject var themeManager: ThemeManager
     @ObservedObject var viewModel: SidebarViewModel
-    @StateObject private var dragDropViewModel = AudioDragDropViewModel.shared
+    @StateObject private var dragDropViewModel = SampleDragDropViewModel.shared
     @State private var searchText: String = ""
     @FocusState private var isSearchFieldFocused: Bool
     
@@ -191,7 +191,7 @@ struct FolderItemRowView: View {
     @EnvironmentObject var themeManager: ThemeManager
     let item: FolderItem
     let isFolder: Bool
-    let dragDropViewModel: AudioDragDropViewModel
+    let dragDropViewModel: SampleDragDropViewModel
     var onFolderTap: (() -> Void)? = nil
     
     @State private var isHovering = false

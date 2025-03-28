@@ -16,7 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Release all security-scoped bookmarks and perform cleanup
         // We don't save individual file bookmarks to prevent cluttering UserDefaults
-        AudioDragDropViewModel.shared.releaseAllSecurityScopedResources()
+        SampleDragDropViewModel.shared.releaseAllSecurityScopedResources()
         print("🧹 Application terminating: Cleaned up all security-scoped resources without saving individual file bookmarks")
     }
     
@@ -54,7 +54,7 @@ struct music_ai_frontendApp: App {
     // Create a shared SidebarViewModel instance
     @StateObject private var sidebarViewModel = SidebarViewModel()
     // Create a shared AudioDragDropViewModel instance
-    @StateObject private var audioDragDropViewModel = AudioDragDropViewModel.shared
+    @StateObject private var audioDragDropViewModel = SampleDragDropViewModel.shared
     // Create a shared FileViewModel instance
     @StateObject private var fileViewModel = FileViewModel()
     // Use the shared SettingsViewModel instance

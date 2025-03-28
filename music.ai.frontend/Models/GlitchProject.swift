@@ -34,6 +34,9 @@ struct GlitchProject: Codable {
     /// Time signature denominator (4 = quarter note, 8 = eighth note, etc.)
     var timeSignatureUnit: Int
     
+    /// All Audio Items in the track (audio files dragged in)
+    var audioItems: [AudioItem]
+    
     /// All tracks in the project (excluding master track)
     var tracks: [Track]
     

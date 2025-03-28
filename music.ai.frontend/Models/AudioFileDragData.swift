@@ -38,8 +38,8 @@ class AudioFileDragData: NSObject, NSItemProviderWriting, NSItemProviderReading,
     
     // We use the shared instance since this object can be serialized and deserialized
     // and we can't include a direct reference to the view model
-    private var viewModel: AudioDragDropViewModel {
-        return AudioDragDropViewModel.shared
+    private var viewModel: SampleDragDropViewModel {
+        return SampleDragDropViewModel.shared
     }
     
     init(item: FolderItem) {
@@ -155,7 +155,7 @@ class AudioFileDragData: NSObject, NSItemProviderWriting, NSItemProviderReading,
         print("📦 DECODING: Attempting to decode AudioFileDragData with type \(typeIdentifier), data size: \(data.count) bytes")
         
         // Get access to the view model
-        let viewModel = AudioDragDropViewModel.shared
+        let viewModel = SampleDragDropViewModel.shared
         
         // Handle file URL type identifier
         if typeIdentifier == UTType.fileURL.identifier {

@@ -120,7 +120,166 @@ class MenuCoordinator: NSObject, ObservableObject {
         // Get any multi-selected clips
         let selectedClipIds = timelineState.selectedClipIds
         
-        if track.type == .midi {
+        if track.type == .audio {
+            // Check if we have multi-selected clips
+            if !selectedClipIds.isEmpty {
+                // Get all selected clips from this track
+                let selectedClips = track.audioClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
+                }
+                
+                if !selectedClips.isEmpty {
+                    // Delete all selected clips
+                    for clip in selectedClips {
+                        _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
+                    }
+                    
+                    // Clear the selection
+                    timelineState.clearSelection()
+                    return
+                }
+            }
+            
+            // If no multi-selection, check for clips in the selection range
+            if timelineState.selectionActive {
+                // Get the selection range
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Find any clips that overlap with the selection
+                let overlappingClips = track.audioClips.filter { clip in
+                    selStart < clip.endBeat && selEnd > clip.startBeat
+                }
+                
+                if !overlappingClips.isEmpty {
+                    // Process each overlapping clip
+                    for clip in overlappingClips {
+                        if selStart <= clip.startBeat && selEnd >= clip.endBeat {
+                            // Full clip is within selection - delete it
+                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
+                        } else if selStart > clip.startBeat && selEnd < clip.endBeat {
+                            // Selection is in the middle - split into two clips
+                            print("DEBUG: Processing selection within Audio clip - clipId: \(clip.id), clipName: \(clip.name)")
+                            print("DEBUG: Selection range: \(selStart) to \(selEnd)")
+                            print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
+                            
+                            // Store the original clip data
+                            let originalClipId = clip.id
+                            let originalClipAudioItem = clip.audioItem
+                            let originalStartBeat = clip.startBeat
+                            let originalEndBeat = clip.endBeat
+                            let originalDuration = clip.duration
+                            let originalColor = clip.color
+                            
+                            // Calculate audio window times for both parts
+                            let beatDuration = clip.audioWindowDuration / clip.duration
+                            let firstPartAudioEndTime = clip.audioStartTime + (selStart - clip.startBeat) * beatDuration
+                            let secondPartAudioStartTime = clip.audioStartTime + (selEnd - clip.startBeat) * beatDuration
+                            
+                            // Remove the original clip
+                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
+                            
+                            // Create first part (before selection)
+                            let firstPartName = clip.name + " (1)"
+                            let firstPartStartBeat = originalStartBeat
+                            let firstPartDuration = selStart - originalStartBeat
+                            
+                            let firstPart = AudioClip(
+                                audioItem: originalClipAudioItem,
+                                name: firstPartName,
+                                startBeat: firstPartStartBeat,
+                                duration: firstPartDuration,
+                                color: originalColor,
+                                waveform: clip.waveform,
+                                audioStartTime: clip.audioStartTime,
+                                audioEndTime: firstPartAudioEndTime
+                            )
+                            
+                            // Create second part (after selection)
+                            let secondPartName = clip.name + " (2)"
+                            let secondPartStartBeat = selEnd
+                            let secondPartDuration = originalEndBeat - selEnd
+                            
+                            let secondPart = AudioClip(
+                                audioItem: originalClipAudioItem,
+                                name: secondPartName,
+                                startBeat: secondPartStartBeat,
+                                duration: secondPartDuration,
+                                color: originalColor,
+                                waveform: clip.waveform,
+                                audioStartTime: secondPartAudioStartTime,
+                                audioEndTime: clip.audioEndTime
+                            )
+                            
+                            // Add both parts to the track
+                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                               var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                                updatedTrack.addAudioClip(firstPart)
+                                updatedTrack.addAudioClip(secondPart)
+                                projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            }
+                        } else if selStart <= clip.startBeat && selEnd < clip.endBeat {
+                            // Selection cuts the beginning - resize and move clip
+                            let newStartBeat = selEnd
+                            let newDuration = clip.endBeat - selEnd
+                            
+                            // Calculate new audio window start time
+                            let beatDuration = clip.audioWindowDuration / clip.duration
+                            let newAudioStartTime = clip.audioStartTime + (selEnd - clip.startBeat) * beatDuration
+                            
+                            // Create new clip with adjusted window
+                            let newClip = AudioClip(
+                                audioItem: clip.audioItem,
+                                name: clip.name,
+                                startBeat: newStartBeat,
+                                duration: newDuration,
+                                color: clip.color,
+                                waveform: clip.waveform,
+                                audioStartTime: newAudioStartTime,
+                                audioEndTime: clip.audioEndTime
+                            )
+                            
+                            // Remove old clip and add new one
+                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
+                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                               var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                                updatedTrack.addAudioClip(newClip)
+                                projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            }
+                        } else if selStart > clip.startBeat && selEnd >= clip.endBeat {
+                            // Selection cuts the end - just resize
+                            let newDuration = selStart - clip.startBeat
+                            
+                            // Calculate new audio window end time
+                            let beatDuration = clip.audioWindowDuration / clip.duration
+                            let newAudioEndTime = clip.audioStartTime + newDuration * beatDuration
+                            
+                            // Create new clip with adjusted window
+                            let newClip = AudioClip(
+                                audioItem: clip.audioItem,
+                                name: clip.name,
+                                startBeat: clip.startBeat,
+                                duration: newDuration,
+                                color: clip.color,
+                                waveform: clip.waveform,
+                                audioStartTime: clip.audioStartTime,
+                                audioEndTime: newAudioEndTime
+                            )
+                            
+                            // Remove old clip and add new one
+                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
+                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                               var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                                updatedTrack.addAudioClip(newClip)
+                                projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
+                            }
+                        }
+                    }
+                    
+                    // Clear the selection after processing
+                    timelineState.clearSelection()
+                }
+            }
+        } else if track.type == .midi {
             // Check if we have multi-selected clips
             if !selectedClipIds.isEmpty {
                 // Get all selected clips from this track
@@ -296,134 +455,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                     timelineState.clearSelection()
                 }
             }
-        } else if track.type == .audio {
-            // Check if we have multi-selected clips
-            if !selectedClipIds.isEmpty {
-                // Get all selected clips from this track
-                let selectedClips = track.audioClips.filter { clip in
-                    selectedClipIds.contains(clip.id)
-                }
-                
-                if !selectedClips.isEmpty {
-                    // Delete all selected clips
-                    for clip in selectedClips {
-                        _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
-                    }
-                    
-                    // Clear the selection
-                    timelineState.clearSelection()
-                    return
-                }
-            }
-            
-            // If no multi-selection, check for clips in the selection range
-            if timelineState.selectionActive {
-                // Get the selection range
-                let (selStart, selEnd) = timelineState.normalizedSelectionRange
-                
-                // Find any clips that overlap with the selection
-                let overlappingClips = track.audioClips.filter { clip in
-                    selStart < clip.endBeat && selEnd > clip.startBeat
-                }
-                
-                if !overlappingClips.isEmpty {
-                    // Process each overlapping clip
-                    for clip in overlappingClips {
-                        if selStart <= clip.startBeat && selEnd >= clip.endBeat {
-                            // Full clip is within selection - delete it
-                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
-                        } else if selStart > clip.startBeat && selEnd < clip.endBeat {
-                            // Selection is in the middle - split into two clips
-                            print("DEBUG: Processing selection within Audio clip - clipId: \(clip.id), clipName: \(clip.name)")
-                            print("DEBUG: Selection range: \(selStart) to \(selEnd)")
-                            print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
-                            
-                            // Store the original clip data before modifications
-                            let originalClipId = clip.id
-                            let originalStartBeat = clip.startBeat
-                            let originalEndBeat = clip.endBeat
-                            let originalDuration = clip.duration
-                            let originalColor = clip.color
-                            
-                            // STEP 1: REMOVE THE ORIGINAL CLIP
-                            // This is the key change - we need to remove the original clip completely, then add two new clips
-                            print("DEBUG: Removing original audio clip before creating new clips")
-                            _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
-                            
-                            // STEP 2: CREATE THE FIRST (LEFT) CLIP
-                            // First part - from original start to selStart
-                            let firstPartName = clip.name
-                            let firstPartStartBeat = originalStartBeat
-                            let firstPartDuration = selStart - originalStartBeat
-                            print("DEBUG: Creating first audio part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
-                            
-                            // Get the original clip data (before removing)
-                            let originalWaveform = clip.waveform
-                            
-                            // Create the first clip
-                            let firstPart = AudioClip(
-                                name: firstPartName,
-                                startBeat: firstPartStartBeat,
-                                duration: firstPartDuration,
-                                color: originalColor,
-                                originalDuration: originalDuration,
-                                waveform: originalWaveform
-                            )
-                            
-                            // STEP 3: CREATE THE SECOND (RIGHT) CLIP
-                            // Second part - from selEnd to original end
-                            let secondPartName = "\(clip.name) (2)"
-                            let secondPartStartBeat = selEnd
-                            let secondPartDuration = originalEndBeat - selEnd
-                            print("DEBUG: Creating second audio part - name: \(secondPartName), startBeat: \(secondPartStartBeat), duration: \(secondPartDuration)")
-                            
-                            // Create the second clip
-                            let secondPart = AudioClip(
-                                name: secondPartName,
-                                startBeat: secondPartStartBeat,
-                                duration: secondPartDuration,
-                                color: originalColor,
-                                originalDuration: originalDuration,
-                                waveform: originalWaveform
-                            )
-                            
-                            // STEP 4: ADD BOTH CLIPS TO THE TRACK
-                            // Get a fresh copy of the track (which should now have the original clip removed)
-                            if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
-                               var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
-                                
-                                print("DEBUG: Current audio clip count before adding new clips: \(updatedTrack.audioClips.count)")
-                                
-                                // Add both new clips
-                                updatedTrack.addAudioClip(firstPart)
-                                updatedTrack.addAudioClip(secondPart)
-                                
-                                // Update the track in the project with a single operation
-                                print("DEBUG: Adding both new audio clips to track. Adding \(firstPartName) at \(firstPartStartBeat) and \(secondPartName) at \(secondPartStartBeat)")
-                                projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
-                                print("DEBUG: Audio clip split operation complete - created two clips with empty space between them")
-                            } else {
-                                print("ERROR: Could not find track to update after removing original audio clip")
-                            }
-                        } else if selStart <= clip.startBeat && selEnd < clip.endBeat {
-                            // Selection cuts the beginning - resize and move
-                            let newStartBeat = selEnd
-                            let newDuration = clip.endBeat - selEnd
-                            
-                            // Move the clip to the new position
-                            _ = audioViewModel?.moveAudioClip(trackId: trackId, clipId: clip.id, newStartBeat: newStartBeat)
-                            _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                        } else if selStart > clip.startBeat && selEnd >= clip.endBeat {
-                            // Selection cuts the end - just resize
-                            let newDuration = selStart - clip.startBeat
-                            _ = audioViewModel?.resizeAudioClip(trackId: trackId, clipId: clip.id, newDuration: newDuration)
-                        }
-                    }
-                    
-                    // Clear the selection after processing
-                    timelineState.clearSelection()
-                }
-            }
         }
     }
     
@@ -450,7 +481,48 @@ class MenuCoordinator: NSObject, ObservableObject {
         // Get any multi-selected clips
         let selectedClipIds = timelineState.selectedClipIds
         
-        if track.type == .midi {
+        if track.type == .audio {
+            // Handle multi-selected audio clips
+            if !selectedClipIds.isEmpty {
+                let selectedClips = track.audioClips.filter { clip in
+                    selectedClipIds.contains(clip.id)
+                }
+                
+                if !selectedClips.isEmpty {
+                    // Store all selected clips with their offsets
+                    clipboardAudioClips = selectedClips.map { clip in
+                        // For full clip copy, use the clip's window settings
+                        return (clip, clip.audioStartTime, clip.audioEndTime)
+                    }
+                    return
+                }
+            }
+            
+            // If no multi-selection, check for clips in the selection range
+            if timelineState.selectionActive {
+                let (selStart, selEnd) = timelineState.normalizedSelectionRange
+                
+                // Find clips that overlap with the selection
+                let overlappingClips = track.audioClips.filter { clip in
+                    selStart < clip.endBeat && selEnd > clip.startBeat
+                }
+                
+                if !overlappingClips.isEmpty {
+                    clipboardAudioClips = overlappingClips.map { clip in
+                        // Calculate the portion of the clip to copy
+                        let clipStartBeat = max(selStart, clip.startBeat)
+                        let clipEndBeat = min(selEnd, clip.endBeat)
+                        
+                        // Convert beat positions to audio time positions
+                        let beatDuration = clip.audioWindowDuration / clip.duration
+                        let audioStartOffset = clip.audioStartTime + (clipStartBeat - clip.startBeat) * beatDuration
+                        let audioEndOffset = clip.audioStartTime + (clipEndBeat - clip.startBeat) * beatDuration
+                        
+                        return (clip, audioStartOffset, audioEndOffset)
+                    }
+                }
+            }
+        } else if track.type == .midi {
             // Clear any existing clipboard data
             clipboardAudioClips = nil
             
@@ -525,81 +597,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                 // Store the copied clips
                 clipboardMidiClips = clipsToCopy
             }
-        } else if track.type == .audio {
-            // Clear any existing clipboard data
-            clipboardMidiClips = nil
-            
-            // Initialize array to store copied clips
-            var clipsToCopy: [(AudioClip, Double, Double)] = []
-            
-            // Check if we have multi-selected clips
-            if !selectedClipIds.isEmpty {
-                // Get all selected clips from this track
-                let selectedClips = track.audioClips.filter { clip in
-                    selectedClipIds.contains(clip.id)
-                }
-                
-                if !selectedClips.isEmpty {
-                    // Add all selected clips to clipboard with no offsets
-                    for clip in selectedClips {
-                        clipsToCopy.append((clip, 0.0, 0.0))
-                    }
-                    
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString("Audio Clips: \(selectedClips.count)", forType: .string)
-                    
-                    // Store the copied clips
-                    clipboardAudioClips = clipsToCopy
-                    return
-                }
-            }
-            
-            // If no multi-selection, fall back to the regular selection
-            if timelineState.selectionActive {
-                // Get the selection range
-                let (selStart, selEnd) = timelineState.normalizedSelectionRange
-                
-                // Get all audio clips that overlap with the selection
-                let overlappingClips = track.audioClips.filter { clip in
-                    // Check if the selection overlaps with this clip
-                    selStart < clip.endBeat && selEnd > clip.startBeat
-                }
-                
-                if overlappingClips.isEmpty {
-                    // No clips to copy - do nothing and return
-                    return
-                }
-                
-                // Check if we have an exact clip match (fully selected clip)
-                let fullyContainedClips = overlappingClips.filter { clip in
-                    abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
-                }
-                
-                if !fullyContainedClips.isEmpty {
-                    // Full clips selected, add all to clipboard
-                    for clip in fullyContainedClips {
-                        clipsToCopy.append((clip, 0.0, 0.0))
-                    }
-                    
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString("Audio Clips: \(fullyContainedClips.count)", forType: .string)
-                } else {
-                    // Handle partial clips
-                    for clip in overlappingClips {
-                        // Calculate offsets (how much of the clip we're copying)
-                        let startOffset = max(0, selStart - clip.startBeat)
-                        let endOffset = max(0, clip.endBeat - selEnd)
-                        
-                        clipsToCopy.append((clip, startOffset, endOffset))
-                    }
-                    
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString("Partial Audio Clips: \(overlappingClips.count)", forType: .string)
-                }
-                
-                // Store the copied clips
-                clipboardAudioClips = clipsToCopy
-            }
         }
     }
     
@@ -612,11 +609,54 @@ class MenuCoordinator: NSObject, ObservableObject {
         }
         
         var track = projectViewModel.tracks[trackIndex]
-        
-        // Get the current playhead position as paste location
         let pastePosition = projectViewModel.currentBeat
         
-        if track.type == .midi {
+        if track.type == .audio {
+            // Check if we have audio clip data to paste
+            guard let clipsToPaste = clipboardAudioClips, !clipsToPaste.isEmpty else {
+                return
+            }
+            
+            // Find the earliest start beat in the original clips
+            let originalStartPositions = clipsToPaste.map { $0.0.startBeat }
+            let earliestOriginalPosition = originalStartPositions.min() ?? 0.0
+            
+            var clipsToAdd: [AudioClip] = []
+            var latestEndBeat = pastePosition
+            
+            for (originalClip, audioStartOffset, audioEndOffset) in clipsToPaste {
+                // Calculate new position relative to paste position
+                let relativeStart = originalClip.startBeat - earliestOriginalPosition
+                let newStartBeat = pastePosition + relativeStart
+                
+                // Create new clip with copied window settings
+                var newClip = AudioClip(
+                    audioItem: originalClip.audioItem,
+                    name: getNextClipName(originalClip.name),
+                    startBeat: newStartBeat,
+                    duration: originalClip.duration,
+                    color: originalClip.color,
+                    waveform: originalClip.waveform,
+                    audioStartTime: audioStartOffset,
+                    audioEndTime: audioEndOffset
+                )
+                
+                clipsToAdd.append(newClip)
+                latestEndBeat = max(latestEndBeat, newClip.endBeat)
+            }
+            
+            // Add all clips to the track
+            for newClip in clipsToAdd {
+                track.addAudioClip(newClip)
+            }
+            
+            // Update the track
+            projectViewModel.updateTrack(at: trackIndex, with: track)
+            
+            // Update selection to encompass all pasted clips
+            timelineState.startSelection(at: pastePosition, trackId: trackId)
+            timelineState.updateSelection(to: latestEndBeat)
+        } else if track.type == .midi {
             // Check if we have MIDI clip data to paste
             guard let clipsToPaste = clipboardMidiClips, !clipsToPaste.isEmpty else {
                 // No MIDI clip in clipboard
@@ -715,75 +755,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                 alert.alertStyle = .warning
                 alert.runModal()
             }
-        } else if track.type == .audio {
-            // Check if we have audio clip data to paste
-            guard let clipsToPaste = clipboardAudioClips, !clipsToPaste.isEmpty else {
-                // No audio clip in clipboard
-                return
-            }
-            
-            // Find the earliest start beat in the original clips to use as reference point
-            let originalStartPositions = clipsToPaste.map { $0.0.startBeat }
-            let earliestOriginalPosition = originalStartPositions.min() ?? 0.0
-            
-            // Calculate total span of all clips to be pasted
-            var latestEndBeat = pastePosition
-            var clipsToAdd: [AudioClip] = []
-            
-            // Prepare all clips, preserving their relative positions
-            for (originalClip, startOffset, endOffset) in clipsToPaste {
-                // Calculate the duration of the clip to paste
-                let originalDuration = originalClip.duration
-                let newDuration = originalDuration - startOffset - endOffset
-                
-                // Get the clip name with proper numbering
-                let baseName = originalClip.name.replacingOccurrences(of: " \\(copy \\d+\\)$", with: "", options: .regularExpression)
-                let copyCount = getNextCopyCount(for: baseName)
-                let newName = "\(baseName) (copy \(copyCount))"
-                
-                // Calculate new position preserving the relative spacing from original
-                let offsetFromReference = originalClip.startBeat - earliestOriginalPosition
-                let newStartBeat = pastePosition + offsetFromReference
-                
-                // Create a new clip with adjusted timing
-                var newClip = AudioClip(
-                    name: newName,
-                    startBeat: newStartBeat,
-                    duration: newDuration,
-                    audioFileURL: originalClip.audioFileURL,
-                    color: originalClip.color,
-                    originalDuration: originalClip.originalDuration,
-                    waveform: originalClip.waveform
-                )
-                
-                clipsToAdd.append(newClip)
-                // Update the latest end beat
-                latestEndBeat = max(latestEndBeat, newStartBeat + newDuration)
-            }
-            
-            // Check if we can add all clips (no overlaps)
-            let canAddClips = track.canAddAudioClips(startingAt: pastePosition, clips: clipsToAdd)
-            
-            if canAddClips {
-                // Add all clips
-                for clip in clipsToAdd {
-                    track.addAudioClip(clip)
-                }
-                
-                // Update the track in the project
-                projectViewModel.updateTrack(at: trackIndex, with: track)
-                
-                // Select the pasted area
-                timelineState.startSelection(at: pastePosition, trackId: trackId)
-                timelineState.updateSelection(to: latestEndBeat)
-            } else {
-                // Show error alert - can't paste here due to overlapping clips
-                let alert = NSAlert()
-                alert.messageText = "Cannot Paste Clips"
-                alert.informativeText = "The clips cannot be pasted at the current position because they would overlap with existing clips."
-                alert.alertStyle = .warning
-                alert.runModal()
-            }
         } else {
             // Not an audio or MIDI track, can't paste clips here
             let alert = NSAlert()
@@ -859,11 +830,68 @@ class MenuCoordinator: NSObject, ObservableObject {
         guard let projectViewModel = projectViewModel,
               let timelineState = projectViewModel.timelineState,
               let trackId = projectViewModel.selectedTrackId,
-              let track = projectViewModel.tracks.first(where: { $0.id == trackId }) else {
+              let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }) else {
             return
         }
         
-        if track.type == .midi {
+        var track = projectViewModel.tracks[trackIndex]
+        
+        if track.type == .audio {
+            // Get the current playhead position
+            let splitPosition = projectViewModel.currentBeat
+            
+            // Find clips that overlap with the playhead position
+            let overlappingClips = track.audioClips.filter { clip in
+                splitPosition > clip.startBeat && splitPosition < clip.endBeat
+            }
+            
+            for clip in overlappingClips {
+                // Calculate the duration of each new clip
+                let firstClipDuration = splitPosition - clip.startBeat
+                let secondClipDuration = clip.endBeat - splitPosition
+                
+                // Calculate audio window times for the split
+                let beatDuration = clip.audioWindowDuration / clip.duration
+                let splitAudioTime = clip.audioStartTime + (firstClipDuration * beatDuration)
+                
+                // Create two new clips
+                let firstClip = AudioClip(
+                    audioItem: clip.audioItem,
+                    name: clip.name + " (1)",
+                    startBeat: clip.startBeat,
+                    duration: firstClipDuration,
+                    color: clip.color,
+                    waveform: clip.waveform,
+                    audioStartTime: clip.audioStartTime,
+                    audioEndTime: splitAudioTime
+                )
+                
+                let secondClip = AudioClip(
+                    audioItem: clip.audioItem,
+                    name: clip.name + " (2)",
+                    startBeat: splitPosition,
+                    duration: secondClipDuration,
+                    color: clip.color,
+                    waveform: clip.waveform,
+                    audioStartTime: splitAudioTime,
+                    audioEndTime: clip.audioEndTime
+                )
+                
+                // First remove the original clip using the view model
+                _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
+                
+                // Get a fresh copy of the track after removal
+                if let updatedTrackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
+                   var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
+                    // Add both new clips to the updated track
+                    updatedTrack.addAudioClip(firstClip)
+                    updatedTrack.addAudioClip(secondClip)
+                    
+                    // Update the track in the project
+                    projectViewModel.updateTrack(at: updatedTrackIndex, with: updatedTrack)
+                }
+            }
+        } else if track.type == .midi {
             // Check if we have a selection
             if timelineState.selectionActive {
                 let (selStart, selEnd) = timelineState.normalizedSelectionRange
@@ -1215,216 +1243,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                     }
                 }
             }
-        } else if track.type == .audio {
-            // Check if we have a selection
-            if timelineState.selectionActive {
-                let (selStart, selEnd) = timelineState.normalizedSelectionRange
-                
-                // Find clips that overlap with the selection
-                let overlappingClips = track.audioClips.filter { clip in
-                    selStart < clip.endBeat && selEnd > clip.startBeat
-                }
-                
-                if !overlappingClips.isEmpty {
-                    // Process each overlapping clip
-                    for clip in overlappingClips {
-                        print("DEBUG: Splitting Audio clip at selection - clipId: \(clip.id), clipName: \(clip.name)")
-                        print("DEBUG: Selection range: \(selStart) to \(selEnd)")
-                        print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
-                        
-                        // Store the original clip data
-                        let originalClipId = clip.id
-                        let originalStartBeat = clip.startBeat
-                        let originalEndBeat = clip.endBeat
-                        let originalDuration = clip.duration
-                        let originalColor = clip.color
-                        let originalClipName = clip.name
-                        let originalWaveform = clip.waveform
-                        
-                        // Variables to track which parts to create
-                        let createFirstPart = selStart > originalStartBeat
-                        let createMiddlePart = selStart < originalEndBeat && selEnd > originalStartBeat
-                        let createLastPart = selEnd < originalEndBeat
-                        
-                        // IMPORTANT FIX: First remove the original clip using the view model directly
-                        print("DEBUG: Removing original audio clip before creating split clips")
-                        _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
-                        
-                        // Get the track AFTER the clip has been removed
-                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
-                           var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
-                            
-                            print("DEBUG: Current audio clip count after removing original: \(updatedTrack.audioClips.count)")
-                            var clipsToAdd = [AudioClip]()
-                            
-                            var clipNumber = 1
-                            // FIRST PART: Before selection
-                            if createFirstPart {
-                                let firstPartName = "\(originalClipName) (\(clipNumber))"
-                                clipNumber += 1
-                                let firstPartStartBeat = originalStartBeat
-                                let firstPartDuration = selStart - originalStartBeat
-                                print("DEBUG: Creating first Audio part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
-                                
-                                // Get the original clip data (before removing)
-                                let originalWaveform = clip.waveform
-                                
-                                // Create the first clip
-                                let firstPart = AudioClip(
-                                    name: firstPartName,
-                                    startBeat: firstPartStartBeat,
-                                    duration: firstPartDuration,
-                                    color: originalColor,
-                                    originalDuration: originalDuration,
-                                    waveform: originalWaveform
-                                )
-                                
-                                clipsToAdd.append(firstPart)
-                            }
-                            
-                            // MIDDLE PART: The selection itself (only for selection mode, not playhead mode)
-                            if createMiddlePart && selStart != selEnd {
-                                let middlePartName = "\(originalClipName) (\(clipNumber))"
-                                clipNumber += 1
-                                let middlePartStartBeat = selStart
-                                let middlePartDuration = selEnd - selStart
-                                print("DEBUG: Creating middle Audio part - name: \(middlePartName), startBeat: \(middlePartStartBeat), duration: \(middlePartDuration)")
-                                
-                                // Create the middle clip (the selection itself)
-                                let middlePart = AudioClip(
-                                    name: middlePartName,
-                                    startBeat: selStart,
-                                    duration: middlePartDuration,
-                                    color: originalColor,
-                                    originalDuration: originalDuration,
-                                    waveform: originalWaveform
-                                )
-                                
-                                clipsToAdd.append(middlePart)
-                            }
-                            
-                            // LAST PART: After selection
-                            if createLastPart {
-                                let lastPartName = "\(originalClipName) (\(clipNumber))"
-                                let lastPartStartBeat = selEnd
-                                let lastPartDuration = originalEndBeat - selEnd
-                                print("DEBUG: Creating last Audio part - name: \(lastPartName), startBeat: \(lastPartStartBeat), duration: \(lastPartDuration)")
-                                
-                                // Create the last clip
-                                let lastPart = AudioClip(
-                                    name: lastPartName,
-                                    startBeat: lastPartStartBeat,
-                                    duration: lastPartDuration,
-                                    color: originalColor,
-                                    originalDuration: originalDuration,
-                                    waveform: originalWaveform
-                                )
-                                
-                                clipsToAdd.append(lastPart)
-                            }
-                            
-                            // Add all clips to the track
-                            for newClip in clipsToAdd {
-                                updatedTrack.addAudioClip(newClip)
-                                print("DEBUG: Added \(newClip.name) at \(newClip.startBeat) with duration \(newClip.duration)")
-                            }
-                            
-                            // Update the track in the project with a single operation
-                            projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
-                            print("DEBUG: Audio split operation complete - added \(clipsToAdd.count) new clips")
-                        }
-                    }
-                    
-                    // Clear the selection after processing
-                    timelineState.clearSelection()
-                }
-            } else {
-                // No selection - split at playhead position
-                let playheadPosition = projectViewModel.currentBeat
-                
-                // Find clips that contain the playhead position
-                let overlappingClips = track.audioClips.filter { clip in
-                    playheadPosition > clip.startBeat && playheadPosition < clip.endBeat
-                }
-                
-                if !overlappingClips.isEmpty {
-                    // Process each overlapping clip
-                    for clip in overlappingClips {
-                        print("DEBUG: Splitting Audio clip at playhead - clipId: \(clip.id), clipName: \(clip.name)")
-                        print("DEBUG: Playhead position: \(playheadPosition)")
-                        print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
-                        
-                        // Store the original clip data
-                        let originalClipId = clip.id
-                        let originalStartBeat = clip.startBeat
-                        let originalEndBeat = clip.endBeat
-                        let originalDuration = clip.duration
-                        let originalColor = clip.color
-                        let originalName = clip.name
-                        
-                        // IMPORTANT FIX: First remove the original clip using the view model directly
-                        print("DEBUG: Removing original audio clip before creating split clips")
-                        _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
-                        
-                        // Get the track AFTER the clip has been removed
-                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == trackId }),
-                           var updatedTrack = projectViewModel.tracks.first(where: { $0.id == trackId }) {
-                            
-                            print("DEBUG: Current audio clip count after removing original: \(updatedTrack.audioClips.count)")
-                            var clipsToAdd = [AudioClip]()
-                            
-                            // Get the original clip data
-                            let originalWaveform = clip.waveform
-                            
-                            // First part - from original start to playhead
-                            let firstPartName = "\(originalName) (1)"
-                            let firstPartStartBeat = originalStartBeat
-                            let firstPartDuration = playheadPosition - originalStartBeat
-                            print("DEBUG: Creating first audio part at playhead - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
-                            
-                            // Create the first clip
-                            let firstPart = AudioClip(
-                                name: firstPartName,
-                                startBeat: firstPartStartBeat,
-                                duration: firstPartDuration,
-                                color: originalColor,
-                                originalDuration: originalDuration,
-                                waveform: originalWaveform
-                            )
-                            
-                            clipsToAdd.append(firstPart)
-                            
-                            // Second part - from playhead to original end
-                            let secondPartName = "\(originalName) (2)"
-                            let secondPartStartBeat = playheadPosition
-                            let secondPartDuration = originalEndBeat - playheadPosition
-                            print("DEBUG: Creating second audio part at playhead - name: \(secondPartName), startBeat: \(secondPartStartBeat), duration: \(secondPartDuration)")
-                            
-                            // Create the second clip
-                            let secondPart = AudioClip(
-                                name: secondPartName,
-                                startBeat: secondPartStartBeat,
-                                duration: secondPartDuration,
-                                color: originalColor,
-                                originalDuration: originalDuration,
-                                waveform: originalWaveform
-                            )
-                            
-                            clipsToAdd.append(secondPart)
-                            
-                            // Add all clips to the track
-                            for newClip in clipsToAdd {
-                                updatedTrack.addAudioClip(newClip)
-                                print("DEBUG: Added \(newClip.name) at \(newClip.startBeat) with duration \(newClip.duration)")
-                            }
-                            
-                            // Update the track in the project with a single operation
-                            projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
-                            print("DEBUG: Audio split at playhead operation complete - added \(clipsToAdd.count) new clips")
-                        }
-                    }
-                }
-            }
         }
     }
     
@@ -1434,5 +1252,13 @@ class MenuCoordinator: NSObject, ObservableObject {
         let newCount = count + 1
         copyCounts[baseName] = newCount
         return newCount
+    }
+    
+    // Helper method to get the next clip name
+    private func getNextClipName(_ baseName: String) -> String {
+        let count = copyCounts[baseName] ?? 0
+        let newCount = count + 1
+        copyCounts[baseName] = newCount
+        return "\(baseName) (copy \(newCount))"
     }
 } 
