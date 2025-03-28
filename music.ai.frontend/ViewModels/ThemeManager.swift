@@ -259,9 +259,9 @@ class ThemeManager: ObservableObject {
     var rulerBackgroundColor: Color {
         switch currentTheme {
         case .light:
-            return Color(white: 0.7)
+            return Color(white: 0.85)
         case .lightGrey:
-            return Color(white: 0.5)
+            return Color(white: 0.75)
         case .dark:
             return Color(white: 0.35)
         case .black:

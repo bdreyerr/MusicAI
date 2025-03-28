@@ -10,14 +10,16 @@ struct AudioClip: Identifiable, Equatable, Codable {
     var originalDuration: Double? // Original duration of the audio file in beats (if available)
     var color: Color? // Optional custom color for the clip
     var audioFileURL: URL? // URL to the audio file on disk
+    var waveform: Waveform? // Optional waveform visualization data
     
     // Coding keys for Codable
     enum CodingKeys: String, CodingKey {
-        case id, name, startBeat, duration, originalDuration, colorData, audioFileURL
+        case id, name, startBeat, duration, originalDuration, colorData, audioFileURL, waveform
     }
     
     init(id: UUID = UUID(), name: String, startBeat: Double, duration: Double, 
-         audioFileURL: URL? = nil, color: Color? = nil, originalDuration: Double? = nil) {
+         audioFileURL: URL? = nil, color: Color? = nil, originalDuration: Double? = nil,
+         waveform: Waveform? = nil) {
         self.id = id
         self.name = name
         self.startBeat = startBeat
@@ -25,6 +27,15 @@ struct AudioClip: Identifiable, Equatable, Codable {
         self.audioFileURL = audioFileURL
         self.color = color
         self.originalDuration = originalDuration
+        
+        // Generate a random waveform if none was provided
+        if waveform == nil {
+            self.waveform = AudioWaveformGenerator.generateRandomWaveform(
+                color: color
+            )
+        } else {
+            self.waveform = waveform
+        }
     }
     
     // Custom initializer from decoder
@@ -37,12 +48,20 @@ struct AudioClip: Identifiable, Equatable, Codable {
         duration = try container.decode(Double.self, forKey: .duration)
         originalDuration = try container.decodeIfPresent(Double.self, forKey: .originalDuration)
         audioFileURL = try container.decodeIfPresent(URL.self, forKey: .audioFileURL)
+        waveform = try container.decodeIfPresent(Waveform.self, forKey: .waveform)
         
         // Decode optional color
         if let colorData = try container.decodeIfPresent(CodableColor.self, forKey: .colorData) {
             color = colorData.color
         } else {
             color = nil
+        }
+        
+        // Generate a random waveform if none was decoded
+        if waveform == nil {
+            self.waveform = AudioWaveformGenerator.generateRandomWaveform(
+                color: color
+            )
         }
     }
     
@@ -56,6 +75,7 @@ struct AudioClip: Identifiable, Equatable, Codable {
         try container.encode(duration, forKey: .duration)
         try container.encodeIfPresent(originalDuration, forKey: .originalDuration)
         try container.encodeIfPresent(audioFileURL, forKey: .audioFileURL)
+        try container.encodeIfPresent(waveform, forKey: .waveform)
         
         // Encode optional color
         if let clipColor = color {
@@ -87,13 +107,13 @@ struct AudioClip: Identifiable, Equatable, Codable {
     }
     
     // Create a new audio clip with a file URL
-    static func create(name: String, startBeat: Double, duration: Double, audioFileURL: URL? = nil, color: Color? = nil, originalDuration: Double? = nil) -> AudioClip {
-        return AudioClip(name: name, startBeat: startBeat, duration: duration, audioFileURL: audioFileURL, color: color, originalDuration: originalDuration)
+    static func create(name: String, startBeat: Double, duration: Double, audioFileURL: URL? = nil, color: Color? = nil, originalDuration: Double? = nil, waveform: Waveform? = nil) -> AudioClip {
+        return AudioClip(name: name, startBeat: startBeat, duration: duration, audioFileURL: audioFileURL, color: color, originalDuration: originalDuration, waveform: waveform)
     }
     
     // Create an empty audio clip (for UI testing or placeholders)
-    static func createEmpty(name: String, startBeat: Double, duration: Double, color: Color? = nil) -> AudioClip {
-        return AudioClip(name: name, startBeat: startBeat, duration: duration, color: color)
+    static func createEmpty(name: String, startBeat: Double, duration: Double, color: Color? = nil, waveform: Waveform? = nil) -> AudioClip {
+        return AudioClip(name: name, startBeat: startBeat, duration: duration, color: color, waveform: waveform)
     }
     
     // Implement Equatable to help with updates
@@ -103,6 +123,7 @@ struct AudioClip: Identifiable, Equatable, Codable {
                lhs.startBeat == rhs.startBeat &&
                lhs.duration == rhs.duration &&
                lhs.originalDuration == rhs.originalDuration &&
-               lhs.audioFileURL == rhs.audioFileURL
+               lhs.audioFileURL == rhs.audioFileURL &&
+               lhs.waveform?.id == rhs.waveform?.id
     }
 } 

@@ -77,8 +77,8 @@ struct AudioClipView: View {
         // Calculate contrasting color for waveform bars
         let baseColor = clip.color ?? track.effectiveColor
         let isDark = baseColor.brightness < 0.6
-        // Choose a contrasting color - white for dark backgrounds, darker red for light backgrounds
-        self.waveformColor = isDark ? .white : .red.opacity(0.9)
+        // Choose a contrasting color - white for dark backgrounds, black for light backgrounds
+        self.waveformColor = isDark ? .white : .black
     }
     
     var body: some View {
@@ -123,7 +123,26 @@ struct AudioClipView: View {
                         .opacity(0.9)
                 }
                 
-                // TODO: add waveform
+                // Display the waveform in the bottom section of the clip
+                VStack {
+                    // Push waveform to bottom section
+                    Spacer().frame(height: trackViewModel.isCollapsed ? 20 : 24)
+                    
+                    // Add waveform if clip has one and track is not collapsed
+                    if let waveform = clip.waveform, !trackViewModel.isCollapsed {
+                        // Create a new waveform with high contrast color
+                        let waveformWithContrastColor = waveform.withColors(
+                            primaryColor: waveformColor
+                        )
+                        
+                        WaveformView(
+                            waveform: waveformWithContrastColor,
+                            width: width,
+                            height: track.height - 28
+                        )
+                    }
+                }
+                .padding(.bottom, 4)
             }
             .frame(width: width, height: clipHeight)
             .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
@@ -612,9 +631,6 @@ struct AudioClipView: View {
                             }
                         }
                 )
-                .onTapGesture {
-                    selectThisClip()
-                }
                 
                 Spacer()
             }

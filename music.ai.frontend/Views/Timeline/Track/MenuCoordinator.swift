@@ -357,13 +357,17 @@ class MenuCoordinator: NSObject, ObservableObject {
                             let firstPartDuration = selStart - originalStartBeat
                             print("DEBUG: Creating first audio part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
                             
+                            // Get the original clip data (before removing)
+                            let originalWaveform = clip.waveform
+                            
                             // Create the first clip
                             let firstPart = AudioClip(
                                 name: firstPartName,
                                 startBeat: firstPartStartBeat,
                                 duration: firstPartDuration,
                                 color: originalColor,
-                                originalDuration: originalDuration
+                                originalDuration: originalDuration,
+                                waveform: originalWaveform
                             )
                             
                             // STEP 3: CREATE THE SECOND (RIGHT) CLIP
@@ -379,7 +383,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 startBeat: secondPartStartBeat,
                                 duration: secondPartDuration,
                                 color: originalColor,
-                                originalDuration: originalDuration
+                                originalDuration: originalDuration,
+                                waveform: originalWaveform
                             )
                             
                             // STEP 4: ADD BOTH CLIPS TO THE TRACK
@@ -745,8 +750,10 @@ class MenuCoordinator: NSObject, ObservableObject {
                     name: newName,
                     startBeat: newStartBeat,
                     duration: newDuration,
+                    audioFileURL: originalClip.audioFileURL,
                     color: originalClip.color,
-                    originalDuration: originalClip.originalDuration
+                    originalDuration: originalClip.originalDuration,
+                    waveform: originalClip.waveform
                 )
                 
                 clipsToAdd.append(newClip)
@@ -1232,6 +1239,7 @@ class MenuCoordinator: NSObject, ObservableObject {
                         let originalDuration = clip.duration
                         let originalColor = clip.color
                         let originalClipName = clip.name
+                        let originalWaveform = clip.waveform
                         
                         // Variables to track which parts to create
                         let createFirstPart = selStart > originalStartBeat
@@ -1258,13 +1266,17 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 let firstPartDuration = selStart - originalStartBeat
                                 print("DEBUG: Creating first Audio part - name: \(firstPartName), startBeat: \(firstPartStartBeat), duration: \(firstPartDuration)")
                                 
+                                // Get the original clip data (before removing)
+                                let originalWaveform = clip.waveform
+                                
                                 // Create the first clip
                                 let firstPart = AudioClip(
                                     name: firstPartName,
                                     startBeat: firstPartStartBeat,
                                     duration: firstPartDuration,
                                     color: originalColor,
-                                    originalDuration: originalDuration
+                                    originalDuration: originalDuration,
+                                    waveform: originalWaveform
                                 )
                                 
                                 clipsToAdd.append(firstPart)
@@ -1278,13 +1290,14 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 let middlePartDuration = selEnd - selStart
                                 print("DEBUG: Creating middle Audio part - name: \(middlePartName), startBeat: \(middlePartStartBeat), duration: \(middlePartDuration)")
                                 
-                                // Create the middle clip
+                                // Create the middle clip (the selection itself)
                                 let middlePart = AudioClip(
                                     name: middlePartName,
-                                    startBeat: middlePartStartBeat,
+                                    startBeat: selStart,
                                     duration: middlePartDuration,
                                     color: originalColor,
-                                    originalDuration: originalDuration
+                                    originalDuration: originalDuration,
+                                    waveform: originalWaveform
                                 )
                                 
                                 clipsToAdd.append(middlePart)
@@ -1303,7 +1316,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                     startBeat: lastPartStartBeat,
                                     duration: lastPartDuration,
                                     color: originalColor,
-                                    originalDuration: originalDuration
+                                    originalDuration: originalDuration,
+                                    waveform: originalWaveform
                                 )
                                 
                                 clipsToAdd.append(lastPart)
@@ -1359,6 +1373,9 @@ class MenuCoordinator: NSObject, ObservableObject {
                             print("DEBUG: Current audio clip count after removing original: \(updatedTrack.audioClips.count)")
                             var clipsToAdd = [AudioClip]()
                             
+                            // Get the original clip data
+                            let originalWaveform = clip.waveform
+                            
                             // First part - from original start to playhead
                             let firstPartName = "\(originalName) (1)"
                             let firstPartStartBeat = originalStartBeat
@@ -1371,7 +1388,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 startBeat: firstPartStartBeat,
                                 duration: firstPartDuration,
                                 color: originalColor,
-                                originalDuration: originalDuration
+                                originalDuration: originalDuration,
+                                waveform: originalWaveform
                             )
                             
                             clipsToAdd.append(firstPart)
@@ -1388,7 +1406,8 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 startBeat: secondPartStartBeat,
                                 duration: secondPartDuration,
                                 color: originalColor,
-                                originalDuration: originalDuration
+                                originalDuration: originalDuration,
+                                waveform: originalWaveform
                             )
                             
                             clipsToAdd.append(secondPart)

@@ -55,8 +55,13 @@ class AudioViewModel: ObservableObject {
             return false
         }
         
-        // Start with empty waveform data - will be populated by the view when displayed
-        let waveformData = [Float]()
+        // Generate waveform for the audio file
+        let waveform = AudioWaveformGenerator.generateWaveformFromAudioUrl(
+            url: fileURL,
+            color: track.effectiveColor
+        ) ?? AudioWaveformGenerator.generateRandomWaveform(
+            color: track.effectiveColor
+        )
         
         // Create a new audio clip
         let newClip = AudioClip(
@@ -65,7 +70,8 @@ class AudioViewModel: ObservableObject {
             duration: durationInBeats,
             audioFileURL: fileURL,
             color: track.effectiveColor,
-            originalDuration: durationInBeats // Set the original duration to match the actual audio file length
+            originalDuration: durationInBeats, // Set the original duration to match the actual audio file length
+            waveform: waveform
         )
         
         // Add the clip to the track
