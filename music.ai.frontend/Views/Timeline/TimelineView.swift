@@ -574,7 +574,7 @@ struct TimelineView: View {
                 } else {
                     // Check if the selection overlaps with any clips
                     let overlappingClips = track.audioClips.filter { clip in
-                        selStart < clip.endBeat && selEnd > clip.startBeat
+                        selStart < clip.endBeat && selEnd > clip.startPositionInBeats
                     }
                     
                     if !overlappingClips.isEmpty {

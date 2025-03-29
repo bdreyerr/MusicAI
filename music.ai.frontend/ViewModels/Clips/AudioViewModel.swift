@@ -47,21 +47,27 @@ class AudioViewModel: ObservableObject {
         let bitDepth = Int(streamDescription.pointee.mBitsPerChannel)
         let fileExtension = fileURL.pathExtension.lowercased()
         
+        // Calculate the total number of samples
+        let lengthInSamples = Int64(duration * sampleRate)
+        
         // Generate waveform for the audio file
-        let waveform = AudioWaveformGenerator.generateWaveformFromAudioUrl(
-            url: fileURL,
-            color: nil
-        )
+        // TODO: Generate a real audio waveform from the url, for now it's random
+//        let waveform = AudioWaveformGenerator.generateWaveformFromAudioUrl(
+//            url: fileURL,
+//            color: nil
+//        )
+        let waveform = AudioWaveformGenerator.generateRandomWaveform()
         
         let newItem = AudioItem(
             name: fileURL.lastPathComponent,
             audioFileURL: fileURL,
-            duration: duration,
+            durationInSeconds: duration,
             sampleRate: sampleRate,
             numberOfChannels: channels,
             bitDepth: bitDepth,
             fileFormat: fileExtension,
-            waveform: waveform
+            waveform: waveform,
+            lengthInSamples: lengthInSamples
         )
         
         // Add the new item to the project
@@ -117,18 +123,18 @@ class AudioViewModel: ObservableObject {
                 return false
             }
             
-            // Create a new audio clip
+            // Create a new audio clip using sample-based properties
             let newClip = AudioClip(
                 audioItem: audioItem,
                 name: fileName,
-                startBeat: startBeat,
-                duration: durationInBeats,
+                startPositionInBeats: startBeat,
+                durationInBeats: durationInBeats,
                 audioFileURL: fileURL,
                 color: track.effectiveColor,
                 originalDuration: durationInBeats,
                 waveform: audioItem.waveform,
-                audioStartTime: 0, // Start at the beginning of the audio file
-                audioEndTime: audioItem.duration // End at the end of the audio file
+                startOffsetInSamples: 0, // Start at the beginning of the audio file
+                lengthInSamples: audioItem.lengthInSamples // Use the entire audio file
             )
             
             // Add the clip to the track
@@ -254,15 +260,15 @@ class AudioViewModel: ObservableObject {
         
         // Get the clip we're moving
         var clipToMove = track.audioClips[clipIndex]
-        let clipDuration = clipToMove.duration
+        let clipDuration = clipToMove.durationInBeats
         let newEndBeat = newStartBeat + clipDuration
         
-        // print("📝 AUDIO VM: Moving clip \(clipToMove.name) from \(clipToMove.startBeat) to \(newStartBeat)")
+        // print("📝 AUDIO VM: Moving clip \(clipToMove.name) from \(clipToMove.startPositionInBeats) to \(newStartBeat)")
         
         // Check for overlaps with other clips
         let overlappingClips = track.audioClips.filter { clip in
             clip.id != clipId && // Not the clip we're moving
-            (newStartBeat < clip.endBeat && newEndBeat > clip.startBeat) // Overlaps
+            (newStartBeat < clip.endBeat && newEndBeat > clip.startPositionInBeats) // Overlaps
         }
         
         // Remove any overlapping clips
@@ -272,7 +278,7 @@ class AudioViewModel: ObservableObject {
         }
         
         // Update the clip's position
-        clipToMove.startBeat = newStartBeat
+        clipToMove.startPositionInBeats = newStartBeat
         
         // Remove the old clip and add the updated one
         track.removeAudioClip(id: clipId)
@@ -304,7 +310,7 @@ class AudioViewModel: ObservableObject {
         return true
     }
     
-    /// Resize an audio clip by adjusting its audio window
+    /// Resize an audio clip by adjusting its sample window
     /// Returns: A tuple containing (success, actualDuration) where actualDuration is the final duration after applying bounds
     func resizeAudioClip(trackId: UUID, clipId: UUID, newDuration: Double, isResizingLeft: Bool) -> (Bool, Double) {
         guard newDuration > 0, // Ensure positive duration
@@ -327,27 +333,28 @@ class AudioViewModel: ObservableObject {
         
         // Get the clip we're resizing
         var clipToResize = track.audioClips[clipIndex]
-        let originalEndBeat = clipToResize.startBeat + clipToResize.duration
+        let originalEndBeat = clipToResize.startPositionInBeats + clipToResize.durationInBeats
         
-        // Calculate beat duration (seconds per beat)
-        let beatDuration = clipToResize.audioWindowDuration / clipToResize.duration
+        // Calculate the beat duration in samples
+        let samplesPerBeat = Int64(clipToResize.lengthInSamples) / Int64(clipToResize.durationInBeats)
         
-        // Calculate new window times based on which side we're resizing
+        // Calculate new sample values based on which side we're resizing
         if isResizingLeft {
-            // When resizing from left, adjust audioStartTime and startBeat
-            let beatDifference = clipToResize.duration - newDuration
-            let newAudioStartTime = clipToResize.audioStartTime + (beatDifference * beatDuration)
+            // When resizing from left, adjust startOffsetInSamples and startPositionInBeats
+            let beatDifference = clipToResize.durationInBeats - newDuration
+            let sampleDifference = Int64(beatDifference * Double(samplesPerBeat))
+            let newStartOffsetInSamples = clipToResize.startOffsetInSamples + sampleDifference
             
-            // Ensure we don't go negative with audioStartTime
-            if newAudioStartTime < 0 {
-                // Calculate the maximum allowed duration based on current audioStartTime
-                let maxAdditionalDuration = clipToResize.audioStartTime / beatDuration
-                let maxNewDuration = clipToResize.duration + maxAdditionalDuration
+            // Ensure we don't go negative with startOffsetInSamples
+            if newStartOffsetInSamples < 0 {
+                // Calculate the maximum allowed duration based on current startOffsetInSamples
+                let maxAdditionalDuration = Double(clipToResize.startOffsetInSamples) / Double(samplesPerBeat)
+                let maxNewDuration = clipToResize.durationInBeats + maxAdditionalDuration
                 
-                // Update duration and audioStartTime
-                clipToResize.duration = maxNewDuration
-                clipToResize.audioStartTime = 0
-                clipToResize.startBeat = originalEndBeat - maxNewDuration
+                // Update duration and startOffsetInSamples
+                clipToResize.durationInBeats = maxNewDuration
+                clipToResize.startOffsetInSamples = 0
+                clipToResize.startPositionInBeats = originalEndBeat - maxNewDuration
                 
                 // Update the track in the project view model
                 track.removeAudioClip(id: clipId)
@@ -357,23 +364,24 @@ class AudioViewModel: ObservableObject {
                 return (true, maxNewDuration)
             }
             
-            clipToResize.audioStartTime = newAudioStartTime
-            clipToResize.duration = newDuration
-            clipToResize.startBeat = originalEndBeat - newDuration
+            clipToResize.startOffsetInSamples = newStartOffsetInSamples
+            clipToResize.durationInBeats = newDuration
+            clipToResize.startPositionInBeats = originalEndBeat - newDuration
         } else {
-            // When resizing from right, adjust audioEndTime
-            let beatDifference = newDuration - clipToResize.duration
-            let newAudioEndTime = clipToResize.audioEndTime + (beatDifference * beatDuration)
+            // When resizing from right, adjust lengthInSamples
+            let beatDifference = newDuration - clipToResize.durationInBeats
+            let sampleDifference = Int64(beatDifference * Double(samplesPerBeat))
+            let newLengthInSamples = clipToResize.lengthInSamples + sampleDifference
             
-            // Ensure we don't exceed the audio file's duration
-            if newAudioEndTime > clipToResize.audioItem.duration {
-                // Calculate the maximum allowed duration based on remaining audio time
-                let remainingAudioTime = clipToResize.audioItem.duration - clipToResize.audioStartTime
-                let maxNewDuration = remainingAudioTime / beatDuration
+            // Ensure we don't exceed the audio file's total samples
+            if clipToResize.startOffsetInSamples + newLengthInSamples > clipToResize.audioItem.lengthInSamples {
+                // Calculate the maximum allowed samples based on remaining audio
+                let remainingAudioInSamples = clipToResize.audioItem.lengthInSamples - clipToResize.startOffsetInSamples
+                let maxNewDuration = Double(remainingAudioInSamples) / Double(samplesPerBeat)
                 
-                // Update duration and audioEndTime
-                clipToResize.duration = maxNewDuration
-                clipToResize.audioEndTime = clipToResize.audioItem.duration
+                // Update duration and lengthInSamples
+                clipToResize.durationInBeats = maxNewDuration
+                clipToResize.lengthInSamples = remainingAudioInSamples
                 
                 // Update the track in the project view model
                 track.removeAudioClip(id: clipId)
@@ -383,14 +391,15 @@ class AudioViewModel: ObservableObject {
                 return (true, maxNewDuration)
             }
             
-            clipToResize.audioEndTime = newAudioEndTime
-            clipToResize.duration = newDuration
+            clipToResize.lengthInSamples = newLengthInSamples
+            clipToResize.durationInBeats = newDuration
         }
         
         // Check for overlaps with other clips
         let overlappingClips = track.audioClips.filter { clip in
             clip.id != clipId && // Not the clip we're resizing
-            (clipToResize.startBeat < clip.endBeat && (clipToResize.startBeat + clipToResize.duration) > clip.startBeat) // Overlaps
+            (clipToResize.startPositionInBeats < clip.endBeat && 
+             (clipToResize.startPositionInBeats + clipToResize.durationInBeats) > clip.startPositionInBeats) // Overlaps
         }
         
         // Remove any overlapping clips
@@ -423,7 +432,7 @@ class AudioViewModel: ObservableObject {
         
         // Check if the selection matches any clip exactly
         return track.audioClips.contains { clip in
-            abs(clip.startBeat - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
+            abs(clip.startPositionInBeats - selStart) < 0.001 && abs(clip.endBeat - selEnd) < 0.001
         }
     }
     
@@ -437,7 +446,7 @@ class AudioViewModel: ObservableObject {
         
         // Check if the position is within any clip
         let isOnClip = track.audioClips.contains { clip in
-            beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
+            beatPosition >= clip.startPositionInBeats && beatPosition <= clip.endBeat
         }
         
         return isOnClip
@@ -453,7 +462,7 @@ class AudioViewModel: ObservableObject {
         
         // Find clip at position
         return track.audioClips.first { clip in
-            beatPosition >= clip.startBeat && beatPosition <= clip.endBeat
+            beatPosition >= clip.startPositionInBeats && beatPosition <= clip.endBeat
         }
     }
     

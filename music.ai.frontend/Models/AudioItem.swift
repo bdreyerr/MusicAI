@@ -8,7 +8,7 @@ struct AudioItem: Identifiable, Equatable, Codable {
     let id: UUID
     var name: String
     var audioFileURL: URL
-    var duration: Double // Duration in seconds
+    var durationInSeconds: Double // Duration in seconds
     var sampleRate: Double
     var numberOfChannels: Int
     var bitDepth: Int
@@ -16,28 +16,30 @@ struct AudioItem: Identifiable, Equatable, Codable {
     var dateAdded: Date
     var waveform: Waveform? // Full waveform data for the entire audio file
     var metadata: [String: String] // Store any additional metadata from the audio file
+    var lengthInSamples: Int64 // Total number of samples in the audio file
     
     // Coding keys for Codable
     enum CodingKeys: String, CodingKey {
-        case id, name, audioFileURL, duration, sampleRate, numberOfChannels
-        case bitDepth, fileFormat, dateAdded, waveform, metadata
+        case id, name, audioFileURL, durationInSeconds, sampleRate, numberOfChannels
+        case bitDepth, fileFormat, dateAdded, waveform, metadata, lengthInSamples
     }
     
     init(id: UUID = UUID(),
          name: String,
          audioFileURL: URL,
-         duration: Double,
+         durationInSeconds: Double,
          sampleRate: Double,
          numberOfChannels: Int,
          bitDepth: Int,
          fileFormat: String,
          waveform: Waveform? = nil,
          metadata: [String: String] = [:],
+         lengthInSamples: Int64 = 0,
          clips: [UUID] = []) {
         self.id = id
         self.name = name
         self.audioFileURL = audioFileURL
-        self.duration = duration
+        self.durationInSeconds = durationInSeconds
         self.sampleRate = sampleRate
         self.numberOfChannels = numberOfChannels
         self.bitDepth = bitDepth
@@ -45,6 +47,7 @@ struct AudioItem: Identifiable, Equatable, Codable {
         self.dateAdded = Date()
         self.waveform = waveform
         self.metadata = metadata
+        self.lengthInSamples = lengthInSamples
     }
     
     
@@ -55,8 +58,8 @@ struct AudioItem: Identifiable, Equatable, Codable {
     
     // Get formatted duration string
     var formattedDuration: String {
-        let minutes = Int(duration) / 60
-        let seconds = Int(duration) % 60
+        let minutes = Int(durationInSeconds) / 60
+        let seconds = Int(durationInSeconds) % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
 }
@@ -74,12 +77,13 @@ extension AudioItem {
         return lhs.id == rhs.id &&
                lhs.name == rhs.name &&
                lhs.audioFileURL == rhs.audioFileURL &&
-               lhs.duration == rhs.duration &&
+               lhs.durationInSeconds == rhs.durationInSeconds &&
                lhs.sampleRate == rhs.sampleRate &&
                lhs.numberOfChannels == rhs.numberOfChannels &&
                lhs.bitDepth == rhs.bitDepth &&
                lhs.fileFormat == rhs.fileFormat &&
                lhs.dateAdded == rhs.dateAdded &&
-               lhs.metadata == rhs.metadata
+               lhs.metadata == rhs.metadata &&
+               lhs.lengthInSamples == rhs.lengthInSamples
     }
 }

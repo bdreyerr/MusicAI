@@ -276,7 +276,7 @@ struct Track: Identifiable, Equatable, Codable {
     mutating func addAudioClip(_ clip: AudioClip) -> Bool {
         // Only add the clip if this is an audio track
         if type == .audio {
-            print("🔊 TRACK MODEL: Adding audio clip \(clip.name) (id: \(clip.id)) at position \(clip.startBeat)")
+            print("🔊 TRACK MODEL: Adding audio clip \(clip.name) (id: \(clip.id)) at position \(clip.startPositionInBeats)")
             audioClips.append(clip)
             print("🔊 TRACK MODEL: Audio clip added successfully. Total clips: \(audioClips.count)")
             return true
@@ -309,7 +309,7 @@ struct Track: Identifiable, Equatable, Codable {
         // Check for overlaps with existing clips
         for clip in audioClips {
             // If the new clip overlaps with an existing clip, return false
-            if (startBeat < clip.endBeat && endBeat > clip.startBeat) {
+            if (startBeat < clip.endBeat && endBeat > clip.startPositionInBeats) {
                 return false
             }
         }
@@ -325,21 +325,21 @@ struct Track: Identifiable, Equatable, Codable {
         // For each clip, check if its position would overlap with existing clips
         for clip in clips {
             // Get the start and end positions of this clip
-            let startBeat = clip.startBeat
-            let endBeat = startBeat + clip.duration
+            let startBeat = clip.startPositionInBeats
+            let endBeat = startBeat + clip.durationInBeats
             
             // Check for overlaps with existing clips
             for existingClip in audioClips {
                 // If the new clip overlaps with an existing clip, return false
-                if (startBeat < existingClip.endBeat && endBeat > existingClip.startBeat) {
+                if (startBeat < existingClip.endBeat && endBeat > existingClip.startPositionInBeats) {
                     return false
                 }
             }
             
             // Also check for overlaps with other clips being added
             for otherClip in clips where clip.id != otherClip.id {
-                let otherStartBeat = otherClip.startBeat
-                let otherEndBeat = otherStartBeat + otherClip.duration
+                let otherStartBeat = otherClip.startPositionInBeats
+                let otherEndBeat = otherStartBeat + otherClip.durationInBeats
                 
                 // If this clip overlaps with another new clip, return false
                 if (startBeat < otherEndBeat && endBeat > otherStartBeat) {
@@ -385,8 +385,8 @@ struct Track: Identifiable, Equatable, Codable {
         for (index, lhsClip) in lhs.audioClips.enumerated() {
             let rhsClip = rhs.audioClips[index]
             if lhsClip.id != rhsClip.id ||
-               lhsClip.startBeat != rhsClip.startBeat ||
-               lhsClip.duration != rhsClip.duration {
+               lhsClip.startPositionInBeats != rhsClip.startPositionInBeats ||
+               lhsClip.durationInBeats != rhsClip.durationInBeats {
                 return false
             }
         }

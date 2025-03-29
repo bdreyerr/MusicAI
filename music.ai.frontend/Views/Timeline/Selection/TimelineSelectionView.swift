@@ -49,7 +49,7 @@ struct TimelineSelectionView: View {
             // Check for overlapping audio clips
             for clip in track.audioClips {
                 if let overlap = calculateOverlap(selectionStart: selectionRange.start, selectionEnd: selectionRange.end,
-                                                clipStart: clip.startBeat, clipEnd: clip.endBeat) {
+                                                  clipStart: clip.startPositionInBeats, clipEnd: clip.endBeat) {
                     results.append(OverlappingClipInfo(
                         start: overlap.start,
                         end: overlap.end,

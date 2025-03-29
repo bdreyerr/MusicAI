@@ -59,7 +59,7 @@ struct AudioClipView: View {
         
         // Check if the selection range matches this clip's range
         let (selStart, selEnd) = state.normalizedSelectionRange
-        return abs(selStart - clip.startBeat) < 0.001 &&
+        return abs(selStart - clip.startPositionInBeats) < 0.001 &&
         abs(selEnd - clip.endBeat) < 0.001
     }
     
@@ -83,675 +83,45 @@ struct AudioClipView: View {
     
     var body: some View {
         // Calculate position and size based on timeline state
-        let startX = CGFloat(clip.startBeat * state.effectivePixelsPerBeat)
-        let width = CGFloat(clip.duration * state.effectivePixelsPerBeat)
+        let startX = CGFloat(clip.startPositionInBeats * state.effectivePixelsPerBeat)
+        let width = CGFloat(clip.durationInBeats * state.effectivePixelsPerBeat)
         let clipHeight = trackViewModel.isCollapsed ? 26 : track.height - 4 // Use fixed 26px for collapsed state
         
         // Use a ZStack to position the clip correctly
-        ZStack(alignment: .topLeading) {
-            // Empty view to take up the entire track width
-            Color.clear
-                .frame(width: width, height: clipHeight)
-                .allowsHitTesting(false) // Don't block clicks
-            
-            // Clip background with content
-            ZStack(alignment: .topLeading) {
-                // Background
-                RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
-                    .fill(currentClipColor ?? track.effectiveColor)
-                    .opacity(isSelected ? 0.9 : (isHovering ? 0.8 : 0.6))
-                    .opacity((!originalClipVisible && isDragging) ? 0 : 1) // Hide original clip during non-option drag
-                
-                // Selection border
-                RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
-                    .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
-                    .opacity(isSelected ? 0.8 : 0)
-                
-                // Dragging indicator
-                if isDragging {
-                    RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
-                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
-                        .foregroundColor(.white)
-                        .opacity(0.9)
-                }
-                
-                // Resizing indicator
-                if isResizing {
-                    RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
-                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
-                        .foregroundColor(.yellow)
-                        .opacity(0.9)
-                }
-                
-                // Display the waveform in the bottom section of the clip
-                VStack {
-                    // Push waveform to bottom section
-                    Spacer().frame(height: trackViewModel.isCollapsed ? 20 : 24)
-                    
-                    // Add waveform if clip has one and track is not collapsed
-                    if let waveform = clip.waveform, !trackViewModel.isCollapsed {
-                        // Create a new waveform with high contrast color
-                        let waveformWithContrastColor = waveform.withColors(
-                            primaryColor: waveformColor
-                        )
-                        
-                        WaveformView(
-                            waveform: waveformWithContrastColor,
-                            width: width,
-                            height: track.height - 28
-                        )
-                    }
-                }
-                .padding(.bottom, 4)
-            }
-            .frame(width: width, height: clipHeight)
-            .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
-            .allowsHitTesting(false)
-            
-            // Title Bar with drag and resize functionality
-            VStack(spacing: 0) {
-                // Title bar with clip name
-                ZStack(alignment: .leading) {
-                    HStack(spacing: 0) {
-                        // Left Resize
-                        Rectangle()
-                            .fill(Color.black.opacity(0.1))
-                            .frame(width: width < 60 ? min(8, width/4) : min(15, width/2), height: trackViewModel.isCollapsed ? 20 : 24)
-                            .onHover { hovering in
-                                isHoveringLeftResizeArea = hovering
-                                isHoveringRightResizeArea = false
-                                isHovering = false
-                                
-                                if hovering {
-                                    NSCursor.resizeLeftRight.set()
-                                } else if !isResizing && !isDragging {
-                                    NSCursor.arrow.set()
-                                }
-                            }
-                            .gesture(
-                                DragGesture(minimumDistance: 1)
-                                    .onChanged { value in
-                                        // If we're not already resizing, try to start
-                                        if !isResizing {
-                                            // Ensure clip is selected
-                                            if !isSelected {
-                                                selectThisClip()
-                                            }
-                                            
-                                            // Check if we can start a clip resize
-                                            if !projectViewModel.interactionManager.canStartClipResize() {
-                                                return
-                                            }
-                                            
-                                            // Inform the interaction manager we're starting a resize
-                                            if projectViewModel.interactionManager.startClipResize() {
-                                                resizeStartDuration = clip.duration
-                                                resizeStartPosition = clip.startBeat
-                                                isResizing = true
-                                                isResizingLeft = true
-                                                NSCursor.resizeLeftRight.set()
-                                            } else {
-                                                return
-                                            }
-                                        }
-                                        
-                                        // Calculate new position and duration for left resize
-                                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                                        var newStartBeat = resizeStartPosition + Double(dragDistanceInBeats)
-                                        
-                                        // Ensure we don't go past the end of the clip
-                                        let clipEnd = resizeStartPosition + resizeStartDuration
-                                        newStartBeat = min(newStartBeat, clipEnd - 0.25) // Ensure minimum duration
-                                        
-                                        // Ensure we don't go negative
-                                        newStartBeat = max(0, newStartBeat)
-                                        
-                                        // Calculate the maximum allowed extension based on audioStartTime
-                                        let beatDuration = clip.audioWindowDuration / clip.duration
-                                        let maxAdditionalBeats = clip.audioStartTime / beatDuration
-                                        let minAllowedStartBeat = resizeStartPosition - maxAdditionalBeats
-                                        
-                                        // Limit the start beat to not exceed the audio file bounds
-                                        newStartBeat = max(newStartBeat, minAllowedStartBeat)
-                                        
-                                        // Snap to grid
-                                        let snappedStartBeat = snapToNearestGridMarker(newStartBeat)
-                                        
-                                        // Calculate new duration based on the snapped start position
-                                        let newDuration = (resizeStartPosition + resizeStartDuration) - snappedStartBeat
-                                        
-                                        // Preview the new selection size
-                                        state.startSelection(at: snappedStartBeat, trackId: track.id)
-                                        state.updateSelection(to: snappedStartBeat + newDuration)
-                                    }
-                                    .onEnded { value in
-                                        guard isResizing && isResizingLeft else { return }
-                                        
-                                        // Calculate new position and duration
-                                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                                        var newStartBeat = resizeStartPosition + Double(dragDistanceInBeats)
-                                        
-                                        // Calculate the original end beat position
-                                        let originalEndBeat = clip.startBeat + clip.duration
-                                        
-                                        // Ensure we don't go past the end of the clip
-                                        let clipEnd = resizeStartPosition + resizeStartDuration
-                                        newStartBeat = min(newStartBeat, clipEnd - 0.25) // Ensure minimum duration
-                                        
-                                        // Ensure we don't go negative
-                                        newStartBeat = max(0, newStartBeat)
-                                        
-                                        // Calculate the maximum allowed extension based on audioStartTime
-                                        let beatDuration = clip.audioWindowDuration / clip.duration
-                                        let maxAdditionalBeats = clip.audioStartTime / beatDuration
-                                        let minAllowedStartBeat = resizeStartPosition - maxAdditionalBeats
-                                        
-                                        // Limit the start beat to not exceed the audio file bounds
-                                        newStartBeat = max(newStartBeat, minAllowedStartBeat)
-                                        
-                                        // Snap to grid
-                                        let snappedStartBeat = snapToNearestGridMarker(newStartBeat)
-                                        
-                                        // Calculate new duration
-                                        let newDuration = (resizeStartPosition + resizeStartDuration) - snappedStartBeat
-                                        
-                                        // Only apply if the position or duration actually changed
-                                        if abs(newStartBeat - clip.startBeat) > 0.001 || abs(newDuration - clip.duration) > 0.001 {
-                                            // Resize the clip with the new duration and position
-                                            let (success, actualDuration) = audioViewModel.resizeAudioClip(
-                                                trackId: track.id,
-                                                clipId: clip.id,
-                                                newDuration: newDuration,
-                                                isResizingLeft: true
-                                            )
-                                            
-                                            if success {
-                                                // Calculate actual start beat based on the actual duration
-                                                let actualStartBeat = originalEndBeat - actualDuration
-                                                
-                                                // Update selection to match actual clip size
-                                                state.startSelection(at: actualStartBeat, trackId: track.id)
-                                                state.updateSelection(to: actualStartBeat + actualDuration)
-                                            } else {
-                                                // Reset selection to original clip size
-                                                state.startSelection(at: clip.startBeat, trackId: track.id)
-                                                state.updateSelection(to: clip.endBeat)
-                                            }
-                                        } else {
-                                            // No change, just reset selection
-                                            state.startSelection(at: clip.startBeat, trackId: track.id)
-                                            state.updateSelection(to: clip.endBeat)
-                                        }
-                                        
-                                        // End the resize interaction
-                                        projectViewModel.interactionManager.endClipResize()
-                                        isResizing = false
-                                        isResizingLeft = false
-                                        
-                                        // Reset cursor if still hovering
-                                        if isHoveringLeftResizeArea {
-                                            NSCursor.resizeLeftRight.set()
-                                        } else {
-                                            NSCursor.arrow.set()
-                                        }
-                                    }
-                            )
-                        
-                        // Center drag area
-                        Rectangle()
-                            .fill(Color.black.opacity(0.1))
-                            .frame(height: trackViewModel.isCollapsed ? 20 : 24)
-                            .clipped()
-                        
-                        // Right resize
-                        Rectangle()
-                            .fill(Color.black.opacity(0.1))
-                            .frame(width: width < 60 ? min(8, width/4) : min(15, width/2), height: trackViewModel.isCollapsed ? 20 : 24)
-                            .onHover { hovering in
-                                isHoveringRightResizeArea = hovering
-                                isHoveringLeftResizeArea = false
-                                isHovering = false
-                                
-                                if hovering {
-                                    NSCursor.resizeLeftRight.set()
-                                } else if !isResizing && !isDragging {
-                                    NSCursor.arrow.set()
-                                }
-                            }
-                            .gesture(
-                                DragGesture(minimumDistance: 1)
-                                    .onChanged { value in
-                                        // If we're not already resizing, try to start
-                                        if !isResizing {
-                                            // Ensure clip is selected
-                                            if !isSelected {
-                                                selectThisClip()
-                                            }
-                                            
-                                            // Check if we can start a clip resize
-                                            if !projectViewModel.interactionManager.canStartClipResize() {
-                                                return
-                                            }
-                                            
-                                            // Inform the interaction manager we're starting a resize
-                                            if projectViewModel.interactionManager.startClipResize() {
-                                                resizeStartDuration = clip.duration
-                                                isResizing = true
-                                                isResizingLeft = false
-                                                NSCursor.resizeLeftRight.set()
-                                            } else {
-                                                return
-                                            }
-                                        }
-                                        
-                                        // Calculate new duration for right resize
-                                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                                        var newDuration = resizeStartDuration + Double(dragDistanceInBeats)
-                                        
-                                        // Ensure minimum duration (0.25 beats)
-                                        newDuration = max(0.25, newDuration)
-                                        
-                                        // Calculate beat duration (seconds per beat)
-                                        let beatDuration = clip.audioWindowDuration / clip.duration
-                                        
-                                        // Calculate the maximum allowed duration based on remaining audio time
-                                        let remainingAudioTime = clip.audioItem.duration - clip.audioStartTime
-                                        let maxNewDuration = remainingAudioTime / beatDuration
-                                        
-                                        // Limit the duration to not exceed the audio file bounds
-                                        newDuration = min(newDuration, maxNewDuration)
-                                        
-                                        // Snap to grid
-                                        let endBeat = clip.startBeat + newDuration
-                                        let snappedEndBeat = snapToNearestGridMarker(endBeat)
-                                        newDuration = snappedEndBeat - clip.startBeat
-                                        
-                                        // Reapply audio bounds limit after snapping
-                                        newDuration = min(newDuration, maxNewDuration)
-                                        
-                                        // Preview the new selection size
-                                        state.startSelection(at: clip.startBeat, trackId: track.id)
-                                        state.updateSelection(to: clip.startBeat + newDuration)
-                                    }
-                                    .onEnded { value in
-                                        guard isResizing && !isResizingLeft else { return }
-                                        
-                                        // Calculate new duration
-                                        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                                        var newDuration = resizeStartDuration + Double(dragDistanceInBeats)
-                                        
-                                        // Ensure minimum duration
-                                        newDuration = max(0.25, newDuration)
-                                        
-                                        // Check if we need to limit based on original audio file duration
-                                        if let originalDuration = clip.originalDuration {
-                                            // Limit to the original audio file duration
-                                            newDuration = min(newDuration, originalDuration)
-                                        }
-                                        
-                                        // Snap to grid
-                                        let endBeat = clip.startBeat + newDuration
-                                        let snappedEndBeat = snapToNearestGridMarker(endBeat)
-                                        newDuration = snappedEndBeat - clip.startBeat
-                                        
-                                        // Reapply original duration limit after snapping if needed
-                                        if let originalDuration = clip.originalDuration {
-                                            newDuration = min(newDuration, originalDuration)
-                                        }
-                                        
-                                        // Only apply if the duration actually changed
-                                        if abs(newDuration - clip.duration) > 0.001 {
-                                            // Resize the clip
-                                            let (success, actualDuration) = audioViewModel.resizeAudioClip(
-                                                trackId: track.id,
-                                                clipId: clip.id,
-                                                newDuration: newDuration,
-                                                isResizingLeft: false
-                                            )
-                                            
-                                            if success {
-                                                // Update selection to match actual clip size
-                                                state.startSelection(at: clip.startBeat, trackId: track.id)
-                                                state.updateSelection(to: clip.startBeat + actualDuration)
-                                            } else {
-                                                // Reset selection to original clip size
-                                                state.startSelection(at: clip.startBeat, trackId: track.id)
-                                                state.updateSelection(to: clip.endBeat)
-                                            }
-                                        } else {
-                                            // No change, just reset selection
-                                            state.startSelection(at: clip.startBeat, trackId: track.id)
-                                            state.updateSelection(to: clip.endBeat)
-                                        }
-                                        
-                                        // End the resize interaction
-                                        projectViewModel.interactionManager.endClipResize()
-                                        isResizing = false
-                                        
-                                        // Reset cursor if still hovering
-                                        if isHoveringRightResizeArea {
-                                            NSCursor.resizeLeftRight.set()
-                                        } else {
-                                            NSCursor.arrow.set()
-                                        }
-                                    }
-                            )
-                    }
-                    
-                    // Only show text if there's enough width
-                    if width >= 30 {
-                        Text(clip.name)
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .lineLimit(1)
-                            .clipped() // Ensure text is clipped inside its container
-                    }
-                }
-                .onHover { hovering in
-                    isHovering = hovering
-                    isHoveringLeftResizeArea = false
-                    isHoveringRightResizeArea = false
-                    
-                    if hovering && !isResizing && !isDragging {
-                        // Check if option key is held
-                        if NSEvent.modifierFlags.contains(.option) {
-                            NSCursor.dragCopy.set()
-                        } else if isSelected {
-                            NSCursor.openHand.set()
-                        } else {
-                            NSCursor.pointingHand.set()
-                        }
-                    } else if !isResizing && !isDragging {
-                        NSCursor.arrow.set()
-                    }
-                }
-                .gesture(
-                    DragGesture(minimumDistance: 3)
-                        .onChanged { value in
-                            // Don't start drag if we're already resizing
-                            if isResizing {
-                                return
-                            }
-                            
-                            // If we're not already dragging, set up the drag operation
-                            if !isDragging {
-                                // If the clip isn't selected yet, select it first
-                                if !isSelected {
-                                    selectThisClip()
-                                }
-                                
-                                // Check if we can start a clip drag
-                                if !projectViewModel.interactionManager.canStartClipDrag() {
-                                    return
-                                }
-                                
-                                // Check if option key is held at the start of drag
-                                isOptionDragging = NSEvent.modifierFlags.contains(.option)
-                                
-                                // Inform the interaction manager that we're starting a clip drag
-                                if projectViewModel.interactionManager.startClipDrag() {
-                                    dragStartBeat = clip.startBeat
-                                    dragStartLocation = value.startLocation
-                                    isDragging = true
-                                    
-                                    // Set appropriate cursor
-                                    if isOptionDragging {
-                                        NSCursor.dragCopy.set()
-                                        originalClipVisible = true
-                                    } else {
-                                        NSCursor.closedHand.set()
-                                        originalClipVisible = false
-                                    }
-                                } else {
-                                    return
-                                }
-                            }
-                            
-                            // Check if option key state has changed during drag
-                            let isOptionHeld = NSEvent.modifierFlags.contains(.option)
-                            if isOptionHeld != isOptionDragging {
-                                isOptionDragging = isOptionHeld
-                                originalClipVisible = isOptionHeld
-                                
-                                // Update cursor
-                                if isOptionHeld {
-                                    NSCursor.dragCopy.set()
-                                } else {
-                                    NSCursor.closedHand.set()
-                                }
-                            }
-                            
-                            // Only update if we're actively dragging
-                            if isDragging {
-                                // Calculate the drag distance in beats directly from the translation
-                                let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                                
-                                // Calculate the new beat position
-                                let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
-                                
-                                // Snap to grid
-                                let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
-                                
-                                // Ensure we don't go negative
-                                let finalPosition = max(0, snappedBeatPosition)
-                                
-                                // Update the selection to preview the new position
-                                state.startSelection(at: finalPosition, trackId: track.id)
-                                state.updateSelection(to: finalPosition + clip.duration)
-                            }
-                        }
-                        .onEnded { value in
-                            // Only process if we were actually dragging
-                            guard isDragging else {
-                                return
-                            }
-                            
-                            // Calculate the final drag distance directly from the translation
-                            let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
-                            
-                            // Calculate the new beat position
-                            let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
-                            
-                            // Snap to grid
-                            let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
-                            
-                            // Ensure we don't go negative
-                            let finalPosition = max(0, snappedBeatPosition)
-                            
-                            // Only move if the position actually changed
-                            if abs(finalPosition - clip.startBeat) > 0.001 {
-                                // Check for overlaps at the target position
-                                let wouldOverlap = track.audioClips.contains { otherClip in
-                                    // When option-dragging (duplicating), also check overlap with original clip
-                                    if isOptionDragging {
-                                        let newEndBeat = finalPosition + clip.duration
-                                        return finalPosition < otherClip.endBeat && newEndBeat > otherClip.startBeat
-                                    } else {
-                                        // For regular dragging, ignore the clip being dragged
-                                        guard otherClip.id != clip.id else { return false }
-                                        let newEndBeat = finalPosition + clip.duration
-                                        return finalPosition < otherClip.endBeat && newEndBeat > otherClip.startBeat
-                                    }
-                                }
-                                
-                                if !wouldOverlap {
-                                    if isOptionDragging {
-                                        // Create a duplicate clip at the new position
-                                        let duplicateClip = AudioClip(
-                                            audioItem: clip.audioItem,
-                                            name: clip.name,
-                                            startBeat: finalPosition,
-                                            duration: clip.duration,
-                                            audioFileURL: clip.audioFileURL,
-                                            color: clip.color,
-                                            originalDuration: clip.originalDuration
-                                        )
-                                        
-                                        // Add the duplicate clip to the track
-                                        var trackCopy = track
-                                        trackCopy.addAudioClip(duplicateClip)
-                                        
-                                        // Update the track in the project
-                                        if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
-                                            projectViewModel.updateTrack(at: trackIndex, with: trackCopy)
-                                        }
-                                        
-                                        // Update selection to the new clip
-                                        state.clearSelectedClips()
-                                        state.addClipToSelection(clipId: duplicateClip.id)
-                                        state.startSelection(at: finalPosition, trackId: track.id)
-                                        state.updateSelection(to: finalPosition + clip.duration)
-                                    } else {
-                                        // Move the original clip to the new position
-                                        let success = audioViewModel.moveAudioClip(
-                                            trackId: track.id,
-                                            clipId: clip.id,
-                                            newStartBeat: finalPosition
-                                        )
-                                        
-                                        if success {
-                                            // Update the selection to match the new clip position
-                                            state.startSelection(at: finalPosition, trackId: track.id)
-                                            state.updateSelection(to: finalPosition + clip.duration)
-                                        } else {
-                                            // Reset the selection to the original clip position
-                                            state.startSelection(at: clip.startBeat, trackId: track.id)
-                                            state.updateSelection(to: clip.endBeat)
-                                        }
-                                    }
-                                } else {
-                                    // Reset selection to original position if there would be an overlap
-                                    state.startSelection(at: clip.startBeat, trackId: track.id)
-                                    state.updateSelection(to: clip.endBeat)
-                                }
-                            } else {
-                                // If position didn't change, reset selection to current clip position
-                                state.startSelection(at: clip.startBeat, trackId: track.id)
-                                state.updateSelection(to: clip.endBeat)
-                            }
-                            
-                            // Inform the interaction manager that we're done with the drag
-                            projectViewModel.interactionManager.endClipDrag()
-                            
-                            // Reset drag state
-                            isDragging = false
-                            isOptionDragging = false
-                            originalClipVisible = true
-                            dragStartLocation = .zero
-                            
-                            // Reset cursor based on hover state
-                            if isHovering {
-                                if NSEvent.modifierFlags.contains(.option) {
-                                    NSCursor.dragCopy.set()
-                                } else {
-                                    NSCursor.openHand.set()
-                                }
-                            } else {
-                                NSCursor.arrow.set()
-                            }
-                        }
-                )
-                
-                Spacer()
-            }
-            .frame(height: clipHeight)
-            .clipped() // Ensure nothing extends outside clip boundaries
-            // Add right-click gesture as a simultaneous gesture to the overall clip
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .onEnded { value in
-                        // Check if this is a right-click (secondary click)
-                        if let event = NSApp.currentEvent, event.type == .rightMouseUp {
-                            // Let the interaction manager know we're processing a right-click
-                            if projectViewModel.interactionManager.startRightClick() {
-                                // First select the clip
-                                selectThisClip()
-                                
-                                // End the right-click interaction after a short delay
-                                // This gives time for the context menu to appear before allowing other interactions
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                    projectViewModel.interactionManager.endRightClick()
-                                }
-                            }
-                        }
-                    }
-            )
-            .contextMenu {
-                Button("Copy Clip") {
-                    menuCoordinator.copySelectedClip()
-                }
-                .keyboardShortcut("c", modifiers: .command)
-
-                Button("Paste Clip") {
-                    menuCoordinator.pasteClip()
-                }
-                .keyboardShortcut("v", modifiers: .command)
-
-                Button("Duplicate Clip") {
-                    menuCoordinator.duplicateSelectedClip()
-                }
-                .keyboardShortcut("d", modifiers: .command)
-
-                Button("Delete Clip") {
-                    menuCoordinator.deleteSelectedClip()
-                }
-                .keyboardShortcut(.delete)
-
-                Divider()
-
-                Button("Rename Clip") {
-                    newClipName = clip.name
-                    showRenameDialog = true
-                }
-                
-                Button("Change Color") {
-                    showingClipColorPicker = true
-                }
-            }
-        }
-        .frame(width: width, height: clipHeight)
-        .position(x: startX + width/2, y: clipHeight/2)
-        .zIndex(40) // Ensure clips are above other elements for better interaction
-        .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.7, blendDuration: 0.1), value: clip.startBeat) // Animate when the actual clip position changes
-        .animation(.easeInOut(duration: 0.2), value: currentClipColor) // Animate when color changes
-        .popover(isPresented: $showingClipColorPicker, arrowEdge: .top) {
-            VStack(spacing: 10) {
-                Text("Clip Color")
-                    .font(.headline)
-                    .padding(.top, 8)
-                
-                ColorPicker("Select Color", selection: Binding(
-                    get: { currentClipColor ?? track.effectiveColor },
-                    set: { newColor in
-                        updateClipColor(newColor)
-                    }
-                ))
-                .padding(.horizontal)
-                
-                Button("Reset to Track Color") {
-                    updateClipColor(nil)
-                    showingClipColorPicker = false
-                }
-                .padding(.bottom, 8)
-            }
-            .frame(width: 250)
-            .padding(8)
-        }
-        .alert("Rename Clip", isPresented: $showRenameDialog) {
-            TextField("Clip Name", text: $newClipName)
-            
-            Button("Cancel", role: .cancel) {
-                showRenameDialog = false
-            }
-            
-            Button("Rename") {
-                renameClip(to: newClipName)
-                showRenameDialog = false
-            }
-        } message: {
-            Text("Enter a new name for this clip")
-        }
+        ClipContainerView(
+            clip: clip,
+            track: track,
+            startX: startX,
+            width: width,
+            clipHeight: clipHeight,
+            state: state,
+            projectViewModel: projectViewModel,
+            trackViewModel: trackViewModel,
+            isHovering: $isHovering,
+            isDragging: $isDragging,
+            isResizing: $isResizing,
+            isHoveringLeftResizeArea: $isHoveringLeftResizeArea, 
+            isHoveringRightResizeArea: $isHoveringRightResizeArea,
+            showRenameDialog: $showRenameDialog,
+            newClipName: $newClipName,
+            dragStartBeat: $dragStartBeat,
+            dragStartLocation: $dragStartLocation,
+            resizeStartDuration: $resizeStartDuration,
+            resizeStartPosition: $resizeStartPosition,
+            isResizingLeft: $isResizingLeft,
+            showingClipColorPicker: $showingClipColorPicker,
+            currentClipColor: $currentClipColor,
+            isOptionDragging: $isOptionDragging,
+            originalClipVisible: $originalClipVisible,
+            waveformData: $waveformData,
+            isLoadingWaveform: $isLoadingWaveform,
+            waveformColor: waveformColor,
+            isSelected: isSelected,
+            selectThisClip: selectThisClip,
+            snapToNearestGridMarker: snapToNearestGridMarker,
+            renameClip: renameClip,
+            updateClipColor: updateClipColor
+        )
     }
     
     // Function to select this clip
@@ -771,11 +141,11 @@ struct AudioClipView: View {
             
             // If the clip was just added to selection, also update the timeline selection
             if state.isClipSelected(clipId: clip.id) {
-                state.startSelection(at: clip.startBeat, trackId: track.id)
+                state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
                 state.updateSelection(to: clip.endBeat)
                 
                 // Move playhead to the start of the clip
-                projectViewModel.seekToBeat(clip.startBeat)
+                projectViewModel.seekToBeat(clip.startPositionInBeats)
             }
         } else {
             // Clear any existing multi-selection
@@ -788,11 +158,11 @@ struct AudioClipView: View {
             projectViewModel.selectTrack(id: track.id)
             
             // Create a selection that matches the clip's duration
-            state.startSelection(at: clip.startBeat, trackId: track.id)
+            state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
             state.updateSelection(to: clip.endBeat)
             
             // Move playhead to the start of the clip
-            projectViewModel.seekToBeat(clip.startBeat)
+            projectViewModel.seekToBeat(clip.startPositionInBeats)
         }
     }
     
@@ -956,5 +326,795 @@ extension Color {
         
         // Simple luminance calculation (perceived brightness)
         return (r * 0.299 + g * 0.587 + b * 0.114)
+    }
+}
+
+// Helper struct to break up complex view
+struct ClipContainerView: View {
+    let clip: AudioClip
+    let track: Track
+    let startX: CGFloat
+    let width: CGFloat
+    let clipHeight: CGFloat
+    @ObservedObject var state: TimelineStateViewModel
+    @ObservedObject var projectViewModel: ProjectViewModel
+    @ObservedObject var trackViewModel: TrackViewModel
+    @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var menuCoordinator: MenuCoordinator
+    
+    // Binding state properties from parent
+    @Binding var isHovering: Bool
+    @Binding var isDragging: Bool
+    @Binding var isResizing: Bool
+    @Binding var isHoveringLeftResizeArea: Bool
+    @Binding var isHoveringRightResizeArea: Bool
+    @Binding var showRenameDialog: Bool
+    @Binding var newClipName: String
+    @Binding var dragStartBeat: Double
+    @Binding var dragStartLocation: CGPoint
+    @Binding var resizeStartDuration: Double
+    @Binding var resizeStartPosition: Double
+    @Binding var isResizingLeft: Bool
+    @Binding var showingClipColorPicker: Bool
+    @Binding var currentClipColor: Color?
+    @Binding var isOptionDragging: Bool
+    @Binding var originalClipVisible: Bool
+    @Binding var waveformData: [CGFloat]
+    @Binding var isLoadingWaveform: Bool
+    
+    // Regular properties
+    let waveformColor: Color
+    let isSelected: Bool
+    
+    // Callback functions
+    let selectThisClip: () -> Void
+    let snapToNearestGridMarker: (Double) -> Double
+    let renameClip: (String) -> Void
+    let updateClipColor: (Color?) -> Void
+    
+    // Computed property to access the Audio view model
+    private var audioViewModel: AudioViewModel {
+        return projectViewModel.audioViewModel
+    }
+    
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            // Empty view to take up the entire track width
+            Color.clear
+                .frame(width: width, height: clipHeight)
+                .allowsHitTesting(false) // Don't block clicks
+            
+            // Clip background with content
+            clipBackgroundView
+            
+            // Title Bar with drag and resize functionality
+            clipTitleBarView
+        }
+        .frame(width: width, height: clipHeight)
+        .position(x: startX + width/2, y: clipHeight/2)
+        .zIndex(40) // Ensure clips are above other elements for better interaction
+        .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.7, blendDuration: 0.1), value: clip.startPositionInBeats) // Animate when the actual clip position changes
+        .animation(.easeInOut(duration: 0.2), value: currentClipColor) // Animate when color changes
+        .popover(isPresented: $showingClipColorPicker, arrowEdge: .top) {
+            colorPickerView
+        }
+        .alert("Rename Clip", isPresented: $showRenameDialog) {
+            renameAlertView
+        } message: {
+            Text("Enter a new name for this clip")
+        }
+    }
+    
+    // MARK: - View Components
+    
+    private var clipBackgroundView: some View {
+        ZStack(alignment: .topLeading) {
+            // Background
+            RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
+                .fill(currentClipColor ?? track.effectiveColor)
+                .opacity(isSelected ? 0.9 : (isHovering ? 0.8 : 0.6))
+                .opacity((!originalClipVisible && isDragging) ? 0 : 1) // Hide original clip during non-option drag
+            
+            // Selection border
+            RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
+                .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
+                .opacity(isSelected ? 0.8 : 0)
+            
+            // Dragging indicator
+            if isDragging {
+                RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                    .foregroundColor(.white)
+                    .opacity(0.9)
+            }
+            
+            // Resizing indicator
+            if isResizing {
+                RoundedRectangle(cornerRadius: trackViewModel.isCollapsed ? 3 : 4)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
+                    .foregroundColor(.yellow)
+                    .opacity(0.9)
+            }
+            
+            // Display the waveform in the bottom section of the clip
+            VStack {
+                // Push waveform to bottom section
+                Spacer().frame(height: trackViewModel.isCollapsed ? 20 : 24)
+                
+                // Add waveform if clip has one and track is not collapsed
+                if let waveform = clip.waveform, !trackViewModel.isCollapsed {
+                    // Create a new waveform with high contrast color
+                    let waveformWithContrastColor = waveform.withColors(
+                        primaryColor: waveformColor
+                    )
+                    
+                    WaveformView(
+                        waveform: waveformWithContrastColor,
+                        width: width,
+                        height: track.height - 28
+                    )
+                }
+            }
+            .padding(.bottom, 4)
+        }
+        .frame(width: width, height: clipHeight)
+        .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 1)
+        .allowsHitTesting(false)
+    }
+    
+    private var clipTitleBarView: some View {
+        VStack(spacing: 0) {
+            // Title bar with clip name
+            ZStack(alignment: .leading) {
+                HStack(spacing: 0) {
+                    // Left Resize
+                    leftResizeHandle
+                    
+                    // Center drag area
+                    Rectangle()
+                        .fill(Color.black.opacity(0.1))
+                        .frame(height: trackViewModel.isCollapsed ? 20 : 24)
+                        .clipped()
+                    
+                    // Right resize
+                    rightResizeHandle
+                }
+                
+                // Only show text if there's enough width
+                if width >= 30 {
+                    Text(clip.name)
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .lineLimit(1)
+                        .clipped() // Ensure text is clipped inside its container
+                }
+            }
+            .onHover(perform: handleTitleBarHover)
+            .gesture(dragGesture)
+            
+            Spacer()
+        }
+        .frame(height: clipHeight)
+        .clipped() // Ensure nothing extends outside clip boundaries
+        // Add right-click gesture as a simultaneous gesture to the overall clip
+        .simultaneousGesture(rightClickGesture)
+        .contextMenu {
+            clipContextMenu
+        }
+    }
+    
+    private var leftResizeHandle: some View {
+        Rectangle()
+            .fill(Color.black.opacity(0.1))
+            .frame(width: width < 60 ? min(8, width/4) : min(15, width/2), height: trackViewModel.isCollapsed ? 20 : 24)
+            .onHover { hovering in
+                isHoveringLeftResizeArea = hovering
+                isHoveringRightResizeArea = false
+                isHovering = false
+                
+                if hovering {
+                    NSCursor.resizeLeftRight.set()
+                } else if !isResizing && !isDragging {
+                    NSCursor.arrow.set()
+                }
+            }
+            .gesture(leftResizeGesture)
+    }
+    
+    private var rightResizeHandle: some View {
+        Rectangle()
+            .fill(Color.black.opacity(0.1))
+            .frame(width: width < 60 ? min(8, width/4) : min(15, width/2), height: trackViewModel.isCollapsed ? 20 : 24)
+            .onHover { hovering in
+                isHoveringRightResizeArea = hovering
+                isHoveringLeftResizeArea = false
+                isHovering = false
+                
+                if hovering {
+                    NSCursor.resizeLeftRight.set()
+                } else if !isResizing && !isDragging {
+                    NSCursor.arrow.set()
+                }
+            }
+            .gesture(rightResizeGesture)
+    }
+    
+    private var colorPickerView: some View {
+        VStack(spacing: 10) {
+            Text("Clip Color")
+                .font(.headline)
+                .padding(.top, 8)
+            
+            ColorPicker("Select Color", selection: Binding(
+                get: { currentClipColor ?? track.effectiveColor },
+                set: { newColor in
+                    updateClipColor(newColor)
+                }
+            ))
+            .padding(.horizontal)
+            
+            Button("Reset to Track Color") {
+                updateClipColor(nil)
+                showingClipColorPicker = false
+            }
+            .padding(.bottom, 8)
+        }
+        .frame(width: 250)
+        .padding(8)
+    }
+    
+    private var renameAlertView: some View {
+        Group {
+            TextField("Clip Name", text: $newClipName)
+            
+            Button("Cancel", role: .cancel) {
+                showRenameDialog = false
+            }
+            
+            Button("Rename") {
+                renameClip(newClipName)
+                showRenameDialog = false
+            }
+        }
+    }
+    
+    private var clipContextMenu: some View {
+        Group {
+            Button("Copy Clip") {
+                menuCoordinator.copySelectedClip()
+            }
+            .keyboardShortcut("c", modifiers: .command)
+
+            Button("Paste Clip") {
+                menuCoordinator.pasteClip()
+            }
+            .keyboardShortcut("v", modifiers: .command)
+
+            Button("Duplicate Clip") {
+                menuCoordinator.duplicateSelectedClip()
+            }
+            .keyboardShortcut("d", modifiers: .command)
+
+            Button("Delete Clip") {
+                menuCoordinator.deleteSelectedClip()
+            }
+            .keyboardShortcut(.delete)
+
+            Divider()
+
+            Button("Rename Clip") {
+                newClipName = clip.name
+                showRenameDialog = true
+            }
+            
+            Button("Change Color") {
+                showingClipColorPicker = true
+            }
+        }
+    }
+    
+    // MARK: - Gestures
+    
+    private var leftResizeGesture: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                handleLeftResizeChange(value)
+            }
+            .onEnded { value in
+                handleLeftResizeEnd(value)
+            }
+    }
+    
+    private var rightResizeGesture: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                handleRightResizeChange(value)
+            }
+            .onEnded { value in
+                handleRightResizeEnd(value)
+            }
+    }
+    
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 3)
+            .onChanged { value in
+                handleDragChange(value)
+            }
+            .onEnded { value in
+                handleDragEnd(value)
+            }
+    }
+    
+    private var rightClickGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onEnded { value in
+                // Check if this is a right-click (secondary click)
+                if let event = NSApp.currentEvent, event.type == .rightMouseUp {
+                    // Let the interaction manager know we're processing a right-click
+                    if projectViewModel.interactionManager.startRightClick() {
+                        // First select the clip
+                        selectThisClip()
+                        
+                        // End the right-click interaction after a short delay
+                        // This gives time for the context menu to appear before allowing other interactions
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            projectViewModel.interactionManager.endRightClick()
+                        }
+                    }
+                }
+            }
+    }
+    
+    // MARK: - Event Handlers
+    
+    private func handleTitleBarHover(_ hovering: Bool) {
+        isHovering = hovering
+        isHoveringLeftResizeArea = false
+        isHoveringRightResizeArea = false
+        
+        if hovering && !isResizing && !isDragging {
+            // Check if option key is held
+            if NSEvent.modifierFlags.contains(.option) {
+                NSCursor.dragCopy.set()
+            } else if isSelected {
+                NSCursor.openHand.set()
+            } else {
+                NSCursor.pointingHand.set()
+            }
+        } else if !isResizing && !isDragging {
+            NSCursor.arrow.set()
+        }
+    }
+    
+    private func handleLeftResizeChange(_ value: DragGesture.Value) {
+        // If we're not already resizing, try to start
+        if !isResizing {
+            // Ensure clip is selected
+            if !isSelected {
+                selectThisClip()
+            }
+            
+            // Check if we can start a clip resize
+            if !projectViewModel.interactionManager.canStartClipResize() {
+                return
+            }
+            
+            // Inform the interaction manager we're starting a resize
+            if projectViewModel.interactionManager.startClipResize() {
+                resizeStartDuration = clip.durationInBeats
+                resizeStartPosition = clip.startPositionInBeats
+                isResizing = true
+                isResizingLeft = true
+                NSCursor.resizeLeftRight.set()
+            } else {
+                return
+            }
+        }
+        
+        // Calculate new position and duration for left resize
+        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+        var newStartBeat = resizeStartPosition + Double(dragDistanceInBeats)
+        
+        // Ensure we don't go past the end of the clip
+        let clipEnd = resizeStartPosition + resizeStartDuration
+        newStartBeat = min(newStartBeat, clipEnd - 0.25) // Ensure minimum duration
+        
+        // Ensure we don't go negative
+        newStartBeat = max(0, newStartBeat)
+        
+        // Calculate the maximum allowed extension based on audioStartTime
+        let beatDuration = clip.audioWindowDuration / clip.durationInBeats
+        let maxAdditionalBeats = clip.audioStartTime / beatDuration
+        let minAllowedStartBeat = resizeStartPosition - maxAdditionalBeats
+        
+        // Limit the start beat to not exceed the audio file bounds
+        newStartBeat = max(newStartBeat, minAllowedStartBeat)
+        
+        // Snap to grid
+        let snappedStartBeat = snapToNearestGridMarker(newStartBeat)
+        
+        // Calculate new duration based on the snapped start position
+        let newDuration = (resizeStartPosition + resizeStartDuration) - snappedStartBeat
+        
+        // Preview the new selection size
+        state.startSelection(at: snappedStartBeat, trackId: track.id)
+        state.updateSelection(to: snappedStartBeat + newDuration)
+    }
+    
+    private func handleLeftResizeEnd(_ value: DragGesture.Value) {
+        guard isResizing && isResizingLeft else { return }
+        
+        // Calculate new position and duration
+        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+        var newStartBeat = resizeStartPosition + Double(dragDistanceInBeats)
+        
+        // Calculate the original end beat position
+        let originalEndBeat = clip.startPositionInBeats + clip.durationInBeats
+        
+        // Ensure we don't go past the end of the clip
+        let clipEnd = resizeStartPosition + resizeStartDuration
+        newStartBeat = min(newStartBeat, clipEnd - 0.25) // Ensure minimum duration
+        
+        // Ensure we don't go negative
+        newStartBeat = max(0, newStartBeat)
+        
+        // Calculate the maximum allowed extension based on audioStartTime
+        let beatDuration = clip.audioWindowDuration / clip.durationInBeats
+        let maxAdditionalBeats = clip.audioStartTime / beatDuration
+        let minAllowedStartBeat = resizeStartPosition - maxAdditionalBeats
+        
+        // Limit the start beat to not exceed the audio file bounds
+        newStartBeat = max(newStartBeat, minAllowedStartBeat)
+        
+        // Snap to grid
+        let snappedStartBeat = snapToNearestGridMarker(newStartBeat)
+        
+        // Calculate new duration
+        let newDuration = (resizeStartPosition + resizeStartDuration) - snappedStartBeat
+        
+        // Only apply if the position or duration actually changed
+        if abs(newStartBeat - clip.startPositionInBeats) > 0.001 || abs(newDuration - clip.durationInBeats) > 0.001 {
+            // Resize the clip with the new duration and position
+            let (success, actualDuration) = audioViewModel.resizeAudioClip(
+                trackId: track.id,
+                clipId: clip.id,
+                newDuration: newDuration,
+                isResizingLeft: true
+            )
+            
+            if success {
+                // Calculate actual start beat based on the actual duration
+                let actualStartBeat = originalEndBeat - actualDuration
+                
+                // Update selection to match actual clip size
+                state.startSelection(at: actualStartBeat, trackId: track.id)
+                state.updateSelection(to: actualStartBeat + actualDuration)
+            } else {
+                // Reset selection to original clip size
+                state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+                state.updateSelection(to: clip.endBeat)
+            }
+        } else {
+            // No change, just reset selection
+            state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+            state.updateSelection(to: clip.endBeat)
+        }
+        
+        // End the resize interaction
+        projectViewModel.interactionManager.endClipResize()
+        isResizing = false
+        isResizingLeft = false
+        
+        // Reset cursor if still hovering
+        if isHoveringLeftResizeArea {
+            NSCursor.resizeLeftRight.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+    
+    private func handleRightResizeChange(_ value: DragGesture.Value) {
+        // If we're not already resizing, try to start
+        if !isResizing {
+            // Ensure clip is selected
+            if !isSelected {
+                selectThisClip()
+            }
+            
+            // Check if we can start a clip resize
+            if !projectViewModel.interactionManager.canStartClipResize() {
+                return
+            }
+            
+            // Inform the interaction manager we're starting a resize
+            if projectViewModel.interactionManager.startClipResize() {
+                resizeStartDuration = clip.durationInBeats
+                isResizing = true
+                isResizingLeft = false
+                NSCursor.resizeLeftRight.set()
+            } else {
+                return
+            }
+        }
+        
+        // Calculate new duration for right resize
+        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+        var newDuration = resizeStartDuration + Double(dragDistanceInBeats)
+        
+        // Ensure minimum duration (0.25 beats)
+        newDuration = max(0.25, newDuration)
+        
+        // Calculate beat duration (seconds per beat)
+        let beatDuration = clip.audioWindowDuration / clip.durationInBeats
+        
+        // Calculate the maximum allowed duration based on remaining audio time
+        let remainingAudioTime = clip.audioItem.durationInSeconds - clip.audioStartTime
+        let maxNewDuration = remainingAudioTime / beatDuration
+        
+        // Limit the duration to not exceed the audio file bounds
+        newDuration = min(newDuration, maxNewDuration)
+        
+        // Snap to grid
+        let endBeat = clip.startPositionInBeats + newDuration
+        let snappedEndBeat = snapToNearestGridMarker(endBeat)
+        newDuration = snappedEndBeat - clip.startPositionInBeats
+        
+        // Reapply audio bounds limit after snapping
+        newDuration = min(newDuration, maxNewDuration)
+        
+        // Preview the new selection size
+        state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+        state.updateSelection(to: clip.startPositionInBeats + newDuration)
+    }
+    
+    private func handleRightResizeEnd(_ value: DragGesture.Value) {
+        guard isResizing && !isResizingLeft else { return }
+        
+        // Calculate new duration
+        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+        var newDuration = resizeStartDuration + Double(dragDistanceInBeats)
+        
+        // Ensure minimum duration
+        newDuration = max(0.25, newDuration)
+        
+        // Check if we need to limit based on original audio file duration
+        if let originalDuration = clip.originalDuration {
+            // Limit to the original audio file duration
+            newDuration = min(newDuration, originalDuration)
+        }
+        
+        // Snap to grid
+        let endBeat = clip.startPositionInBeats + newDuration
+        let snappedEndBeat = snapToNearestGridMarker(endBeat)
+        newDuration = snappedEndBeat - clip.startPositionInBeats
+        
+        // Reapply original duration limit after snapping if needed
+        if let originalDuration = clip.originalDuration {
+            newDuration = min(newDuration, originalDuration)
+        }
+        
+        // Only apply if the duration actually changed
+        if abs(newDuration - clip.durationInBeats) > 0.001 {
+            // Resize the clip
+            let (success, actualDuration) = audioViewModel.resizeAudioClip(
+                trackId: track.id,
+                clipId: clip.id,
+                newDuration: newDuration,
+                isResizingLeft: false
+            )
+            
+            if success {
+                // Update selection to match actual clip size
+                state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+                state.updateSelection(to: clip.startPositionInBeats + actualDuration)
+            } else {
+                // Reset selection to original clip size
+                state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+                state.updateSelection(to: clip.endBeat)
+            }
+        } else {
+            // No change, just reset selection
+            state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+            state.updateSelection(to: clip.endBeat)
+        }
+        
+        // End the resize interaction
+        projectViewModel.interactionManager.endClipResize()
+        isResizing = false
+        
+        // Reset cursor if still hovering
+        if isHoveringRightResizeArea {
+            NSCursor.resizeLeftRight.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+    
+    private func handleDragChange(_ value: DragGesture.Value) {
+        // Don't start drag if we're already resizing
+        if isResizing {
+            return
+        }
+        
+        // If we're not already dragging, set up the drag operation
+        if !isDragging {
+            // If the clip isn't selected yet, select it first
+            if !isSelected {
+                selectThisClip()
+            }
+            
+            // Check if we can start a clip drag
+            if !projectViewModel.interactionManager.canStartClipDrag() {
+                return
+            }
+            
+            // Check if option key is held at the start of drag
+            isOptionDragging = NSEvent.modifierFlags.contains(.option)
+            
+            // Inform the interaction manager that we're starting a clip drag
+            if projectViewModel.interactionManager.startClipDrag() {
+                dragStartBeat = clip.startPositionInBeats
+                dragStartLocation = value.startLocation
+                isDragging = true
+                
+                // Set appropriate cursor
+                if isOptionDragging {
+                    NSCursor.dragCopy.set()
+                    originalClipVisible = true
+                } else {
+                    NSCursor.closedHand.set()
+                    originalClipVisible = false
+                }
+            } else {
+                return
+            }
+        }
+        
+        // Check if option key state has changed during drag
+        let isOptionHeld = NSEvent.modifierFlags.contains(.option)
+        if isOptionHeld != isOptionDragging {
+            isOptionDragging = isOptionHeld
+            originalClipVisible = isOptionHeld
+            
+            // Update cursor
+            if isOptionHeld {
+                NSCursor.dragCopy.set()
+            } else {
+                NSCursor.closedHand.set()
+            }
+        }
+        
+        // Only update if we're actively dragging
+        if isDragging {
+            // Calculate the drag distance in beats directly from the translation
+            let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+            
+            // Calculate the new beat position
+            let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
+            
+            // Snap to grid
+            let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
+            
+            // Ensure we don't go negative
+            let finalPosition = max(0, snappedBeatPosition)
+            
+            // Update the selection to preview the new position
+            state.startSelection(at: finalPosition, trackId: track.id)
+            state.updateSelection(to: finalPosition + clip.durationInBeats)
+        }
+    }
+    
+    private func handleDragEnd(_ value: DragGesture.Value) {
+        // Only process if we were actually dragging
+        guard isDragging else {
+            return
+        }
+        
+        // Calculate the final drag distance directly from the translation
+        let dragDistanceInBeats = value.translation.width / CGFloat(state.effectivePixelsPerBeat)
+        
+        // Calculate the new beat position
+        let rawNewBeatPosition = dragStartBeat + Double(dragDistanceInBeats)
+        
+        // Snap to grid
+        let snappedBeatPosition = snapToNearestGridMarker(rawNewBeatPosition)
+        
+        // Ensure we don't go negative
+        let finalPosition = max(0, snappedBeatPosition)
+        
+        // Only move if the position actually changed
+        if abs(finalPosition - clip.startPositionInBeats) > 0.001 {
+            // Check for overlaps at the target position
+            let wouldOverlap = track.audioClips.contains { otherClip in
+                // When option-dragging (duplicating), also check overlap with original clip
+                if isOptionDragging {
+                    let newEndBeat = finalPosition + clip.durationInBeats
+                    return finalPosition < otherClip.endBeat && newEndBeat > otherClip.startPositionInBeats
+                } else {
+                    // For regular dragging, ignore the clip being dragged
+                    guard otherClip.id != clip.id else { return false }
+                    let newEndBeat = finalPosition + clip.durationInBeats
+                    return finalPosition < otherClip.endBeat && newEndBeat > otherClip.startPositionInBeats
+                }
+            }
+            
+            if !wouldOverlap {
+                if isOptionDragging {
+                    // Create a duplicate clip at the new position
+                    let duplicateClip = AudioClip(
+                        audioItem: clip.audioItem,
+                        name: clip.name,
+                        startPositionInBeats: finalPosition,
+                        durationInBeats: clip.durationInBeats,
+                        audioFileURL: clip.audioFileURL,
+                        color: clip.color,
+                        originalDuration: clip.originalDuration,
+                        startOffsetInSamples: clip.startOffsetInSamples,
+                        lengthInSamples: clip.lengthInSamples
+                    )
+                    
+                    // Add the duplicate clip to the track
+                    var trackCopy = track
+                    trackCopy.addAudioClip(duplicateClip)
+                    
+                    // Update the track in the project
+                    if let trackIndex = projectViewModel.tracks.firstIndex(where: { $0.id == track.id }) {
+                        projectViewModel.updateTrack(at: trackIndex, with: trackCopy)
+                    }
+                    
+                    // Update selection to the new clip
+                    state.clearSelectedClips()
+                    state.addClipToSelection(clipId: duplicateClip.id)
+                    state.startSelection(at: finalPosition, trackId: track.id)
+                    state.updateSelection(to: finalPosition + clip.durationInBeats)
+                } else {
+                    // Move the original clip to the new position
+                    let success = audioViewModel.moveAudioClip(
+                        trackId: track.id,
+                        clipId: clip.id,
+                        newStartBeat: finalPosition
+                    )
+                    
+                    if success {
+                        // Update the selection to match the new clip position
+                        state.startSelection(at: finalPosition, trackId: track.id)
+                        state.updateSelection(to: finalPosition + clip.durationInBeats)
+                    } else {
+                        // Reset the selection to the original clip position
+                        state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+                        state.updateSelection(to: clip.endBeat)
+                    }
+                }
+            } else {
+                // Reset selection to original position if there would be an overlap
+                state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+                state.updateSelection(to: clip.endBeat)
+            }
+        } else {
+            // If position didn't change, reset selection to current clip position
+            state.startSelection(at: clip.startPositionInBeats, trackId: track.id)
+            state.updateSelection(to: clip.endBeat)
+        }
+        
+        // Inform the interaction manager that we're done with the drag
+        projectViewModel.interactionManager.endClipDrag()
+        
+        // Reset drag state
+        isDragging = false
+        isOptionDragging = false
+        originalClipVisible = true
+        dragStartLocation = .zero
+        
+        // Reset cursor based on hover state
+        if isHovering {
+            if NSEvent.modifierFlags.contains(.option) {
+                NSCursor.dragCopy.set()
+            } else {
+                NSCursor.openHand.set()
+            }
+        } else {
+            NSCursor.arrow.set()
+        }
     }
 }

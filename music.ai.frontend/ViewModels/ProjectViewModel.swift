@@ -502,11 +502,11 @@ class ProjectViewModel: ObservableObject {
             // Check for position changes in clips
             for (i, newClip) in updatedTrack.audioClips.enumerated() {
                 if let oldClip = oldTrack.audioClips.first(where: { $0.id == newClip.id }) {
-                    if oldClip.startBeat != newClip.startBeat {
-                        print("📝 PROJECT VM: Audio clip \(newClip.name) position changed from \(oldClip.startBeat) to \(newClip.startBeat)")
+                    if oldClip.startPositionInBeats != newClip.startPositionInBeats {
+                        print("📝 PROJECT VM: Audio clip \(newClip.name) position changed from \(oldClip.startPositionInBeats) to \(newClip.startPositionInBeats)")
                     }
                 } else {
-                    print("📝 PROJECT VM: New audio clip added: \(newClip.name) at position \(newClip.startBeat)")
+                    print("📝 PROJECT VM: New audio clip added: \(newClip.name) at position \(newClip.startPositionInBeats)")
                 }
             }
         }

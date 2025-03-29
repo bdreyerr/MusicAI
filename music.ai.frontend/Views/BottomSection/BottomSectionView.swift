@@ -206,7 +206,7 @@ struct BottomSectionView: View {
                                 // First tab: Waveform for audio tracks, Piano Roll for MIDI tracks
                                 Group {
                                     if selectedTrack.type == .audio {
-//                                        PlaceholderAudioWaveformView(track: selectedTrack, projectViewModel: projectViewModel)
+                                        AudioBottomSectionContainerView(track: selectedTrack, projectViewModel: projectViewModel)
                                     } else if selectedTrack.type == .midi {
                                         MIDIPianoRollView(track: selectedTrack, projectViewModel: projectViewModel)
                                     }
@@ -341,8 +341,8 @@ struct PlaceholderAudioWaveformView: View {
         
         // Find the clip that matches the selection range
         return track.audioClips.first { clip in
-            abs(clip.startBeat - selStart) < 0.001 &&
-            abs(clip.endBeat - selEnd) < 0.001
+            abs(clip.startPositionInBeats - selStart) < 0.001 &&
+            abs(clip.startPositionInBeats + clip.durationInBeats - selEnd) < 0.001
         }
     }
     
@@ -359,7 +359,7 @@ struct PlaceholderAudioWaveformView: View {
                         
                         Spacer()
                         
-                        Text("Duration: \(String(format: "%.2f", clip.duration)) beats")
+                        Text("Duration: \(String(format: "%.2f", clip.durationInBeats)) beats")
                             .font(.caption)
                             .foregroundColor(themeManager.secondaryTextColor)
                     }

@@ -83,7 +83,7 @@ class MenuCoordinator: NSObject, ObservableObject {
         } else if track.type == .audio {
             // Find the selected audio clip
             guard let selectedClip = track.audioClips.first(where: { 
-                abs($0.startBeat - selStart) < 0.001 && abs($0.endBeat - selEnd) < 0.001 
+                abs($0.startPositionInBeats - selStart) < 0.001 && abs($0.endBeat - selEnd) < 0.001 
             }) else {
                 return
             }
@@ -147,67 +147,70 @@ class MenuCoordinator: NSObject, ObservableObject {
                 
                 // Find any clips that overlap with the selection
                 let overlappingClips = track.audioClips.filter { clip in
-                    selStart < clip.endBeat && selEnd > clip.startBeat
+                    selStart < clip.endBeat && selEnd > clip.startPositionInBeats
                 }
                 
                 if !overlappingClips.isEmpty {
                     // Process each overlapping clip
                     for clip in overlappingClips {
-                        if selStart <= clip.startBeat && selEnd >= clip.endBeat {
+                        if selStart <= clip.startPositionInBeats && selEnd >= clip.endBeat {
                             // Full clip is within selection - delete it
                             _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: clip.id)
-                        } else if selStart > clip.startBeat && selEnd < clip.endBeat {
+                        } else if selStart > clip.startPositionInBeats && selEnd < clip.endBeat {
                             // Selection is in the middle - split into two clips
                             print("DEBUG: Processing selection within Audio clip - clipId: \(clip.id), clipName: \(clip.name)")
                             print("DEBUG: Selection range: \(selStart) to \(selEnd)")
-                            print("DEBUG: Original clip range: \(clip.startBeat) to \(clip.endBeat)")
+                            print("DEBUG: Original clip range: \(clip.startPositionInBeats) to \(clip.endBeat)")
                             
                             // Store the original clip data
                             let originalClipId = clip.id
-                            let originalClipAudioItem = clip.audioItem
-                            let originalStartBeat = clip.startBeat
+                            let originalStartBeat = clip.startPositionInBeats
                             let originalEndBeat = clip.endBeat
-                            let originalDuration = clip.duration
-                            let originalColor = clip.color
                             
-                            // Calculate audio window times for both parts
-                            let beatDuration = clip.audioWindowDuration / clip.duration
-                            let firstPartAudioEndTime = clip.audioStartTime + (selStart - clip.startBeat) * beatDuration
-                            let secondPartAudioStartTime = clip.audioStartTime + (selEnd - clip.startBeat) * beatDuration
+                            // Calculate audio window parameters
+                            let beatDuration = clip.audioWindowDuration / clip.durationInBeats
+                            
+                            // Calculate sample offsets and lengths
+                            let firstPartDuration = selStart - originalStartBeat
+                            let secondPartDuration = originalEndBeat - selEnd
+                            
+                            let firstPartSamples = Int64(firstPartDuration * beatDuration * clip.audioItem.sampleRate)
+                            let selectionLengthSamples = Int64((selEnd - selStart) * beatDuration * clip.audioItem.sampleRate)
+                            let secondPartSamples = Int64(secondPartDuration * beatDuration * clip.audioItem.sampleRate)
                             
                             // Remove the original clip
                             _ = audioViewModel?.removeAudioClip(trackId: trackId, clipId: originalClipId)
                             
                             // Create first part (before selection)
                             let firstPartName = clip.name + " (1)"
-                            let firstPartStartBeat = originalStartBeat
-                            let firstPartDuration = selStart - originalStartBeat
                             
                             let firstPart = AudioClip(
-                                audioItem: originalClipAudioItem,
+                                audioItem: clip.audioItem,
                                 name: firstPartName,
-                                startBeat: firstPartStartBeat,
-                                duration: firstPartDuration,
-                                color: originalColor,
+                                startPositionInBeats: originalStartBeat,
+                                durationInBeats: firstPartDuration,
+                                audioFileURL: clip.audioFileURL,
+                                color: clip.color,
+                                originalDuration: clip.originalDuration,
                                 waveform: clip.waveform,
-                                audioStartTime: clip.audioStartTime,
-                                audioEndTime: firstPartAudioEndTime
+                                startOffsetInSamples: clip.startOffsetInSamples,
+                                lengthInSamples: firstPartSamples
                             )
                             
                             // Create second part (after selection)
                             let secondPartName = clip.name + " (2)"
-                            let secondPartStartBeat = selEnd
-                            let secondPartDuration = originalEndBeat - selEnd
                             
                             let secondPart = AudioClip(
-                                audioItem: originalClipAudioItem,
+                                audioItem: clip.audioItem,
                                 name: secondPartName,
-                                startBeat: secondPartStartBeat,
-                                duration: secondPartDuration,
-                                color: originalColor,
+                                startPositionInBeats: selEnd,
+                                durationInBeats: secondPartDuration,
+                                audioFileURL: clip.audioFileURL,
+                                color: clip.color,
+                                originalDuration: clip.originalDuration,
                                 waveform: clip.waveform,
-                                audioStartTime: secondPartAudioStartTime,
-                                audioEndTime: clip.audioEndTime
+                                startOffsetInSamples: clip.startOffsetInSamples + firstPartSamples + selectionLengthSamples,
+                                lengthInSamples: secondPartSamples
                             )
                             
                             // Add both parts to the track
@@ -217,25 +220,29 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 updatedTrack.addAudioClip(secondPart)
                                 projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
                             }
-                        } else if selStart <= clip.startBeat && selEnd < clip.endBeat {
+                        } else if selStart <= clip.startPositionInBeats && selEnd < clip.endBeat {
                             // Selection cuts the beginning - resize and move clip
-                            let newStartBeat = selEnd
-                            let newDuration = clip.endBeat - selEnd
+                            // Calculate beat duration (seconds per beat)
+                            let beatDuration = clip.audioWindowDuration / clip.durationInBeats
                             
-                            // Calculate new audio window start time
-                            let beatDuration = clip.audioWindowDuration / clip.duration
-                            let newAudioStartTime = clip.audioStartTime + (selEnd - clip.startBeat) * beatDuration
+                            // Calculate new sample offset and length
+                            let cutLengthInBeats = selEnd - clip.startPositionInBeats
+                            let cutLengthInSamples = Int64(cutLengthInBeats * beatDuration * clip.audioItem.sampleRate)
+                            let newStartOffset = clip.startOffsetInSamples + cutLengthInSamples
+                            let newLength = clip.lengthInSamples - cutLengthInSamples
                             
                             // Create new clip with adjusted window
                             let newClip = AudioClip(
                                 audioItem: clip.audioItem,
                                 name: clip.name,
-                                startBeat: newStartBeat,
-                                duration: newDuration,
+                                startPositionInBeats: selEnd,
+                                durationInBeats: clip.endBeat - selEnd,
+                                audioFileURL: clip.audioFileURL,
                                 color: clip.color,
+                                originalDuration: clip.originalDuration,
                                 waveform: clip.waveform,
-                                audioStartTime: newAudioStartTime,
-                                audioEndTime: clip.audioEndTime
+                                startOffsetInSamples: newStartOffset,
+                                lengthInSamples: newLength
                             )
                             
                             // Remove old clip and add new one
@@ -245,24 +252,27 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 updatedTrack.addAudioClip(newClip)
                                 projectViewModel.updateTrack(at: trackIndex, with: updatedTrack)
                             }
-                        } else if selStart > clip.startBeat && selEnd >= clip.endBeat {
+                        } else if selStart > clip.startPositionInBeats && selEnd >= clip.endBeat {
                             // Selection cuts the end - just resize
-                            let newDuration = selStart - clip.startBeat
+                            // Calculate beat duration (seconds per beat)
+                            let beatDuration = clip.audioWindowDuration / clip.durationInBeats
                             
-                            // Calculate new audio window end time
-                            let beatDuration = clip.audioWindowDuration / clip.duration
-                            let newAudioEndTime = clip.audioStartTime + newDuration * beatDuration
+                            // Calculate new sample length
+                            let newDuration = selStart - clip.startPositionInBeats
+                            let newLengthInSamples = Int64(newDuration * beatDuration * clip.audioItem.sampleRate)
                             
                             // Create new clip with adjusted window
                             let newClip = AudioClip(
                                 audioItem: clip.audioItem,
                                 name: clip.name,
-                                startBeat: clip.startBeat,
-                                duration: newDuration,
+                                startPositionInBeats: clip.startPositionInBeats,
+                                durationInBeats: newDuration,
+                                audioFileURL: clip.audioFileURL,
                                 color: clip.color,
+                                originalDuration: clip.originalDuration,
                                 waveform: clip.waveform,
-                                audioStartTime: clip.audioStartTime,
-                                audioEndTime: newAudioEndTime
+                                startOffsetInSamples: clip.startOffsetInSamples,
+                                lengthInSamples: newLengthInSamples
                             )
                             
                             // Remove old clip and add new one
@@ -489,10 +499,12 @@ class MenuCoordinator: NSObject, ObservableObject {
                 }
                 
                 if !selectedClips.isEmpty {
-                    // Store all selected clips with their offsets
+                    // Store all selected clips with their sample window settings
                     clipboardAudioClips = selectedClips.map { clip in
-                        // For full clip copy, use the clip's window settings
-                        return (clip, clip.audioStartTime, clip.audioEndTime)
+                        // For full clip copy, calculate audio time from samples
+                        let audioStartTime = Double(clip.startOffsetInSamples) / clip.audioItem.sampleRate
+                        let audioEndTime = Double(clip.startOffsetInSamples + clip.lengthInSamples) / clip.audioItem.sampleRate
+                        return (clip, audioStartTime, audioEndTime)
                     }
                     return
                 }
@@ -504,21 +516,31 @@ class MenuCoordinator: NSObject, ObservableObject {
                 
                 // Find clips that overlap with the selection
                 let overlappingClips = track.audioClips.filter { clip in
-                    selStart < clip.endBeat && selEnd > clip.startBeat
+                    selStart < clip.endBeat && selEnd > clip.startPositionInBeats
                 }
                 
                 if !overlappingClips.isEmpty {
                     clipboardAudioClips = overlappingClips.map { clip in
-                        // Calculate the portion of the clip to copy
-                        let clipStartBeat = max(selStart, clip.startBeat)
+                        // Calculate the portion of the clip to copy in beats
+                        let clipStartBeat = max(selStart, clip.startPositionInBeats)
                         let clipEndBeat = min(selEnd, clip.endBeat)
                         
-                        // Convert beat positions to audio time positions
-                        let beatDuration = clip.audioWindowDuration / clip.duration
-                        let audioStartOffset = clip.audioStartTime + (clipStartBeat - clip.startBeat) * beatDuration
-                        let audioEndOffset = clip.audioStartTime + (clipEndBeat - clip.startBeat) * beatDuration
+                        // Calculate beat duration
+                        let beatDuration = clip.audioWindowDuration / clip.durationInBeats
                         
-                        return (clip, audioStartOffset, audioEndOffset)
+                        // Convert beat positions to sample offsets
+                        let startOffsetBeats = clipStartBeat - clip.startPositionInBeats
+                        let endOffsetBeats = clipEndBeat - clip.startPositionInBeats
+                        
+                        // Calculate sample offsets
+                        let sampleStartOffset = Double(clip.startOffsetInSamples) + (startOffsetBeats * beatDuration * clip.audioItem.sampleRate)
+                        let sampleEndOffset = Double(clip.startOffsetInSamples) + (endOffsetBeats * beatDuration * clip.audioItem.sampleRate)
+                        
+                        // Convert back to time for storage
+                        let audioStartTime = sampleStartOffset / clip.audioItem.sampleRate
+                        let audioEndTime = sampleEndOffset / clip.audioItem.sampleRate
+                        
+                        return (clip, audioStartTime, audioEndTime)
                     }
                 }
             }
@@ -618,7 +640,7 @@ class MenuCoordinator: NSObject, ObservableObject {
             }
             
             // Find the earliest start beat in the original clips
-            let originalStartPositions = clipsToPaste.map { $0.0.startBeat }
+            let originalStartPositions = clipsToPaste.map { $0.0.startPositionInBeats }
             let earliestOriginalPosition = originalStartPositions.min() ?? 0.0
             
             var clipsToAdd: [AudioClip] = []
@@ -626,19 +648,30 @@ class MenuCoordinator: NSObject, ObservableObject {
             
             for (originalClip, audioStartOffset, audioEndOffset) in clipsToPaste {
                 // Calculate new position relative to paste position
-                let relativeStart = originalClip.startBeat - earliestOriginalPosition
+                let relativeStart = originalClip.startPositionInBeats - earliestOriginalPosition
                 let newStartBeat = pastePosition + relativeStart
                 
-                // Create new clip with copied window settings
-                var newClip = AudioClip(
-                    audioItem: originalClip.audioItem,
+                // Calculate the duration in beats
+                let originalDurationInSeconds = audioEndOffset - audioStartOffset
+                let durationInBeats = originalClip.durationInBeats * (originalDurationInSeconds / originalClip.audioWindowDuration)
+                
+                // Calculate sample-based parameters for the new clip
+                let audioItem = originalClip.audioItem
+                let startOffsetInSamples = Int64(audioStartOffset * audioItem.sampleRate)
+                let lengthInSamples = Int64((audioEndOffset - audioStartOffset) * audioItem.sampleRate)
+                
+                // Create a new audio clip with sample-based properties
+                let newClip = AudioClip(
+                    audioItem: audioItem,
                     name: getNextClipName(originalClip.name),
-                    startBeat: newStartBeat,
-                    duration: originalClip.duration,
+                    startPositionInBeats: newStartBeat,
+                    durationInBeats: durationInBeats,
+                    audioFileURL: originalClip.audioFileURL,
                     color: originalClip.color,
+                    originalDuration: originalClip.originalDuration,
                     waveform: originalClip.waveform,
-                    audioStartTime: audioStartOffset,
-                    audioEndTime: audioEndOffset
+                    startOffsetInSamples: startOffsetInSamples,
+                    lengthInSamples: lengthInSamples
                 )
                 
                 clipsToAdd.append(newClip)
@@ -673,7 +706,7 @@ class MenuCoordinator: NSObject, ObservableObject {
             
             // Prepare all clips, preserving their relative positions
             for (originalClip, startOffset, endOffset) in clipsToPaste {
-                // Calculate the duration of the clip to paste
+                // Calculate the original duration
                 let originalDuration = originalClip.duration
                 let newDuration = originalDuration - startOffset - endOffset
                 
@@ -818,8 +851,31 @@ class MenuCoordinator: NSObject, ObservableObject {
             // Get the selection range to find the end of selected clip
             let (_, selEnd) = timelineState.normalizedSelectionRange
             
-            // Move the playhead to the end of the selection
-            projectViewModel.seekToBeat(selEnd)
+            // Determine if we have a selected clip
+            var clipEndBeat = selEnd
+            
+            if track.type == .audio {
+                // Try to find the exact audio clip that matches the selection
+                if let selectedClip = track.audioClips.first(where: { clip in
+                    abs(clip.startPositionInBeats - timelineState.selectionStartBeat) < 0.001 && 
+                    abs(clip.endBeat - selEnd) < 0.001
+                }) {
+                    // Use the clip's end beat for more precision
+                    clipEndBeat = selectedClip.endBeat
+                }
+            } else if track.type == .midi {
+                // Try to find the exact MIDI clip that matches the selection
+                if let selectedClip = track.midiClips.first(where: { clip in
+                    abs(clip.startBeat - timelineState.selectionStartBeat) < 0.001 && 
+                    abs(clip.endBeat - selEnd) < 0.001
+                }) {
+                    // Use the clip's end beat for more precision
+                    clipEndBeat = selectedClip.endBeat
+                }
+            }
+            
+            // Move the playhead to the end of the selection or clip
+            projectViewModel.seekToBeat(clipEndBeat)
             
             // Paste the clip at the new position
             pasteClip()
@@ -842,39 +898,46 @@ class MenuCoordinator: NSObject, ObservableObject {
             
             // Find clips that overlap with the playhead position
             let overlappingClips = track.audioClips.filter { clip in
-                splitPosition > clip.startBeat && splitPosition < clip.endBeat
+                splitPosition > clip.startPositionInBeats && splitPosition < clip.endBeat
             }
             
             for clip in overlappingClips {
-                // Calculate the duration of each new clip
-                let firstClipDuration = splitPosition - clip.startBeat
+                // Calculate the duration of each new clip in beats
+                let firstClipDuration = splitPosition - clip.startPositionInBeats
                 let secondClipDuration = clip.endBeat - splitPosition
                 
-                // Calculate audio window times for the split
-                let beatDuration = clip.audioWindowDuration / clip.duration
-                let splitAudioTime = clip.audioStartTime + (firstClipDuration * beatDuration)
+                // Calculate beat duration (seconds per beat)
+                let beatDuration = clip.audioWindowDuration / clip.durationInBeats
+                
+                // Calculate sample offsets for the split
+                let firstClipSamples = Int64(firstClipDuration * beatDuration * clip.audioItem.sampleRate)
+                let secondClipSamples = clip.lengthInSamples - firstClipSamples
                 
                 // Create two new clips
                 let firstClip = AudioClip(
                     audioItem: clip.audioItem,
                     name: clip.name + " (1)",
-                    startBeat: clip.startBeat,
-                    duration: firstClipDuration,
+                    startPositionInBeats: clip.startPositionInBeats,
+                    durationInBeats: firstClipDuration,
+                    audioFileURL: clip.audioFileURL,
                     color: clip.color,
+                    originalDuration: clip.originalDuration,
                     waveform: clip.waveform,
-                    audioStartTime: clip.audioStartTime,
-                    audioEndTime: splitAudioTime
+                    startOffsetInSamples: clip.startOffsetInSamples,
+                    lengthInSamples: firstClipSamples
                 )
                 
                 let secondClip = AudioClip(
                     audioItem: clip.audioItem,
                     name: clip.name + " (2)",
-                    startBeat: splitPosition,
-                    duration: secondClipDuration,
+                    startPositionInBeats: splitPosition,
+                    durationInBeats: secondClipDuration,
+                    audioFileURL: clip.audioFileURL,
                     color: clip.color,
+                    originalDuration: clip.originalDuration,
                     waveform: clip.waveform,
-                    audioStartTime: splitAudioTime,
-                    audioEndTime: clip.audioEndTime
+                    startOffsetInSamples: clip.startOffsetInSamples + firstClipSamples,
+                    lengthInSamples: secondClipSamples
                 )
                 
                 // First remove the original clip using the view model

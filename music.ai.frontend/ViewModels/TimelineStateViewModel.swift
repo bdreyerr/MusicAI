@@ -284,7 +284,7 @@ class TimelineStateViewModel: ObservableObject {
                 
                 // Check audio clips
                 for clip in track.audioClips {
-                    let clipEndBeat = clip.startBeat + clip.duration
+                    let clipEndBeat = clip.startPositionInBeats + clip.durationInBeats
                     furthestBeat = max(furthestBeat, clipEndBeat)
                 }
             }
