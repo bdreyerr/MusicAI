@@ -56,7 +56,23 @@ class AudioViewModel: ObservableObject {
 //            url: fileURL,
 //            color: nil
 //        )
-        let waveform = AudioWaveformGenerator.generateRandomWaveform()
+        
+        let monoWaveform: Waveform?
+        let leftWaveform: Waveform?
+        let rightWaveform: Waveform?
+        
+        if channels >= 2 {
+            // For stereo files, generate separate waveforms for each channel
+            let stereoWaveforms = AudioWaveformGenerator.generateRandomStereoWaveforms()
+            monoWaveform = stereoWaveforms.mono
+            leftWaveform = stereoWaveforms.left
+            rightWaveform = stereoWaveforms.right
+        } else {
+            // For mono files, just use the mono waveform
+            monoWaveform = AudioWaveformGenerator.generateRandomWaveform()
+            leftWaveform = nil
+            rightWaveform = nil
+        }
         
         let newItem = AudioItem(
             name: fileURL.lastPathComponent,
@@ -66,7 +82,9 @@ class AudioViewModel: ObservableObject {
             numberOfChannels: channels,
             bitDepth: bitDepth,
             fileFormat: fileExtension,
-            waveform: waveform,
+            monoWaveform: monoWaveform,
+            leftWaveform: leftWaveform,
+            rightWaveform: rightWaveform,
             lengthInSamples: lengthInSamples
         )
         

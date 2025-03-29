@@ -46,9 +46,15 @@ struct AudioClip: Identifiable, Equatable, Codable {
         
         // Generate a random waveform if none was provided
         if waveform == nil {
-            self.waveform = AudioWaveformGenerator.generateRandomWaveform(
-                color: color
-            )
+            // If the audio item is stereo, use the mono waveform for backwards compatibility
+            if let monoWaveform = audioItem.monoWaveform {
+                self.waveform = monoWaveform
+            } else {
+                // Generate a random waveform if no waveform data available
+                self.waveform = AudioWaveformGenerator.generateRandomWaveform(
+                    color: color
+                )
+            }
         } else {
             self.waveform = waveform
         }
@@ -83,9 +89,15 @@ struct AudioClip: Identifiable, Equatable, Codable {
         
         // Generate a random waveform if none was decoded
         if waveform == nil {
-            self.waveform = AudioWaveformGenerator.generateRandomWaveform(
-                color: color
-            )
+            // If the audio item is stereo, use the mono waveform for backwards compatibility
+            if let monoWaveform = audioItem.monoWaveform {
+                self.waveform = monoWaveform
+            } else {
+                // Generate a random waveform if no waveform data available
+                self.waveform = AudioWaveformGenerator.generateRandomWaveform(
+                    color: color
+                )
+            }
         }
     }
     

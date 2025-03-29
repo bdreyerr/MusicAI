@@ -16,7 +16,69 @@ struct AudioBottomSectionWaveformView: View {
         VStack(spacing: 0) {
             // Waveform view with scroll view wrapper
             GeometryReader { geometry in
-                if let audioItemWaveform = clip.audioItem.waveform {
+                // Check for stereo vs mono display
+                if clip.audioItem.isStereo && clip.audioItem.leftWaveform != nil && clip.audioItem.rightWaveform != nil {
+                    // Show stereo waveforms (left and right channels)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        ScrollViewReader { scrollProxy in
+                            ZStack(alignment: .leading) {
+                                // Position indicator for clip center
+                                Color.clear
+                                    .frame(width: 1, height: 1)
+                                    .id("clipCenter")
+                                    .frame(width: geometry.size.width * CGFloat(zoomLevel))
+                                    .offset(x: calculateClipCenterOffset(totalWidth: geometry.size.width * CGFloat(zoomLevel)))
+                                
+                                // Stereo waveform view with left and right channels
+                                VStack(spacing: 4) {
+                                    // Left channel
+                                    if let leftWaveform = clip.audioItem.leftWaveform {
+                                        FullAudioItemWaveformView(
+                                            waveform: leftWaveform,
+                                            clip: clip,
+                                            width: geometry.size.width * CGFloat(zoomLevel),
+                                            height: (geometry.size.height - 44) / 2, // Half height minus spacing
+                                            zoomLevel: zoomLevel,
+                                            channelLabel: "L"
+                                        )
+                                        .frame(
+                                            width: geometry.size.width * CGFloat(zoomLevel),
+                                            height: (geometry.size.height - 44) / 2
+                                        )
+                                    }
+                                    
+                                    // Right channel
+                                    if let rightWaveform = clip.audioItem.rightWaveform {
+                                        FullAudioItemWaveformView(
+                                            waveform: rightWaveform,
+                                            clip: clip,
+                                            width: geometry.size.width * CGFloat(zoomLevel),
+                                            height: (geometry.size.height - 44) / 2, // Half height minus spacing
+                                            zoomLevel: zoomLevel,
+                                            channelLabel: "R"
+                                        )
+                                        .frame(
+                                            width: geometry.size.width * CGFloat(zoomLevel),
+                                            height: (geometry.size.height - 44) / 2
+                                        )
+                                    }
+                                }
+                                .padding(.vertical, 20)
+                            }
+                            .onChange(of: zoomLevel) { _ in
+                                // When zoom changes, scroll to the clip center
+                                scrollToClipCenter(proxy: scrollProxy)
+                            }
+                            .onAppear {
+                                // Scroll to clip center when the view appears
+                                scrollToClipCenter(proxy: scrollProxy)
+                            }
+                        }
+                    }
+                    // Ensure the scroll view fills the available space
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                } else if let monoWaveform = clip.audioItem.monoWaveform {
+                    // Show mono waveform (legacy or mono files)
                     ScrollView(.horizontal, showsIndicators: false) {
                         ScrollViewReader { scrollProxy in
                             ZStack(alignment: .leading) {
@@ -29,14 +91,14 @@ struct AudioBottomSectionWaveformView: View {
                                 
                                 // Actual waveform view
                                 FullAudioItemWaveformView(
-                                    waveform: audioItemWaveform,
+                                    waveform: monoWaveform,
                                     clip: clip,
                                     width: geometry.size.width * CGFloat(zoomLevel),
                                     height: geometry.size.height - 40,
                                     zoomLevel: zoomLevel
                                 )
                                 .frame(
-                                    width: geometry.size.width * CGFloat(zoomLevel), 
+                                    width: geometry.size.width * CGFloat(zoomLevel),
                                     height: geometry.size.height - 40
                                 )
                                 .padding(.vertical, 20)
@@ -54,7 +116,7 @@ struct AudioBottomSectionWaveformView: View {
                     // Ensure the scroll view fills the available space
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 } else {
-                    // Placeholder if waveform is not available
+                    // No waveform available
                     HStack {
                         Spacer()
                         VStack {
@@ -143,6 +205,7 @@ struct FullAudioItemWaveformView: View {
     let width: CGFloat
     let height: CGFloat
     let zoomLevel: Double
+    var channelLabel: String? = nil // Optional channel label (L or R)
     
     @EnvironmentObject var themeManager: ThemeManager
     
@@ -178,6 +241,17 @@ struct FullAudioItemWaveformView: View {
                             height: geometry.size.height
                         )
                         .offset(x: geometry.size.width * CGFloat(clipStartRatio))
+                    
+                    // Show channel label if provided
+                    if let label = channelLabel {
+                        Text(label)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(themeManager.secondaryTextColor)
+                            .padding(4)
+                            .background(themeManager.secondaryBackgroundColor.opacity(0.7))
+                            .cornerRadius(4)
+                            .position(x: 14, y: 14)
+                    }
                 }
             }
             .clipped()
@@ -274,37 +348,4 @@ struct ColoredWaveformView: View {
             }
         }
     }
-}
-
-// Preview
-#Preview {
-    // Create a sample audio item with a waveform
-    let sampleWaveform = AudioWaveformGenerator.generateRandomWaveform(color: .blue)
-    
-    let audioItem = AudioItem(
-        name: "Sample Audio",
-        audioFileURL: URL(string: "file:///sample.wav")!,
-        durationInSeconds: 120.5,
-        sampleRate: 44100,
-        numberOfChannels: 2,
-        bitDepth: 16,
-        fileFormat: "wav",
-        waveform: sampleWaveform,
-        lengthInSamples: 5313000
-    )
-    
-    // Create a sample audio clip that represents only part of the audio item
-    let clip = AudioClip(
-        audioItem: audioItem,
-        name: "Test Clip",
-        startPositionInBeats: 16.0,
-        durationInBeats: 8.0,
-        color: .orange,
-        startOffsetInSamples: 1000000, // Start at around 1/5 of the way in
-        lengthInSamples: 2000000       // Use about 2/5 of the full audio
-    )
-    
-    return AudioBottomSectionWaveformView(clip: clip)
-        .environmentObject(ThemeManager())
-        .frame(height: 300)
 }

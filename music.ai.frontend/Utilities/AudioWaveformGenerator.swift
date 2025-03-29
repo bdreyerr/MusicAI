@@ -6,7 +6,25 @@ import GameKit
 /// Utility class for generating waveform data from audio files
 class AudioWaveformGenerator {
     
-    /// Generate a waveform model from an audio file URL
+    /// Generate waveforms for an audio file, with separate waveforms for stereo channels if applicable
+    /// - Parameters:
+    ///   - url: The URL of the audio file
+    ///   - color: Color for the waveform
+    ///   - sampleCount: Number of samples to generate (default: 1000)
+    /// - Returns: A tuple containing (monoWaveform, leftWaveform, rightWaveform)
+    static func generateWaveformsFromAudioUrl(url: URL, 
+                                             color: Color? = nil, 
+                                             sampleCount: Int = 1000) -> (mono: Waveform?, left: Waveform?, right: Waveform?) {
+        // In a real implementation, this would extract channel data and create separate waveforms
+        // For now, return random waveforms
+        let monoWaveform = generateRandomWaveform(color: color)
+        let leftWaveform = generateRandomWaveform(color: color)
+        let rightWaveform = generateRandomWaveform(color: color)
+        
+        return (monoWaveform, leftWaveform, rightWaveform)
+    }
+    
+    /// Generate a mono waveform model from an audio file URL (legacy support)
     /// - Parameters:
     ///   - url: The URL of the audio file
     ///   - color: Color for the waveform
@@ -76,6 +94,30 @@ class AudioWaveformGenerator {
         )
     }
     
+    /// Generate stereo waveforms with different characteristics for testing
+    /// - Parameters:
+    ///   - sampleCount: Number of random samples to generate (default: 1000)
+    ///   - amplitude: Maximum amplitude of the random waveform (0.0-1.0, default: 0.8)
+    ///   - color: Color for the waveforms
+    /// - Returns: A tuple containing (monoWaveform, leftWaveform, rightWaveform)
+    static func generateRandomStereoWaveforms(sampleCount: Int = 1000,
+                                             amplitude: Float = 0.8,
+                                             color: Color? = nil) -> (mono: Waveform, left: Waveform, right: Waveform) {
+        let monoWaveform = generateRandomWaveform(sampleCount: sampleCount, amplitude: amplitude, color: color)
+        
+        // Generate left channel with slightly different characteristics
+        let leftWaveform = generateRandomWaveform(
+            sampleCount: sampleCount,
+            amplitude: amplitude * 0.9, // Slightly lower amplitude
+            color: color
+        )
+        
+        // Generate right channel with slightly different characteristics
+        let rightWaveform = leftWaveform
+        
+        return (monoWaveform, leftWaveform, rightWaveform)
+    }
+    
     // MARK: - Helper Methods (Function signatures only)
     
     /// Extract sample data from an audio file
@@ -84,6 +126,16 @@ class AudioWaveformGenerator {
     ///   - sampleCount: Number of samples to extract
     /// - Returns: An array of normalized sample values (-1.0 to 1.0)
     private static func extractSamples(from audioFile: AVAudioFile, sampleCount: Int) -> [Float]? {
+        // Implementation will be added later
+        return nil
+    }
+    
+    /// Extract stereo sample data from an audio file
+    /// - Parameters:
+    ///   - audioFile: The audio file to extract samples from
+    ///   - sampleCount: Number of samples to extract
+    /// - Returns: A tuple containing arrays of normalized sample values for (mono, left, right) channels
+    private static func extractStereoSamples(from audioFile: AVAudioFile, sampleCount: Int) -> (mono: [Float]?, left: [Float]?, right: [Float]?)? {
         // Implementation will be added later
         return nil
     }

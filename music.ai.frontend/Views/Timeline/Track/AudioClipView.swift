@@ -444,17 +444,52 @@ struct ClipContainerView: View {
                 
                 // Add waveform if clip has one and track is not collapsed
                 if !trackViewModel.isCollapsed {
-                    if let audioItemWaveform = clip.audioItem.waveform {
-                        // Create a clip section waveform that shows only the portion covered by this clip
+                    if clip.audioItem.isStereo && clip.audioItem.leftWaveform != nil && clip.audioItem.rightWaveform != nil {
+                        // Show stereo waveforms with left and right channels
+                        VStack(spacing: 2) {
+                            // Left channel
+                            if let leftWaveform = clip.audioItem.leftWaveform {
+                                ClipSectionWaveformView(
+                                    samples: leftWaveform.samples ?? [],
+                                    totalSamples: Int(clip.audioItem.lengthInSamples),
+                                    clipStartSample: Int(clip.startOffsetInSamples),
+                                    clipLengthSamples: Int(clip.lengthInSamples),
+                                    width: width,
+                                    height: (track.height - 30) / 2, // Half height for each channel
+                                    stripeWidth: leftWaveform.stripeWidth,
+                                    stripeSpacing: leftWaveform.stripeSpacing,
+                                    color: waveformColor,
+                                    channelLabel: "L"
+                                )
+                            }
+                            
+                            // Right channel
+                            if let rightWaveform = clip.audioItem.rightWaveform {
+                                ClipSectionWaveformView(
+                                    samples: rightWaveform.samples ?? [],
+                                    totalSamples: Int(clip.audioItem.lengthInSamples),
+                                    clipStartSample: Int(clip.startOffsetInSamples),
+                                    clipLengthSamples: Int(clip.lengthInSamples),
+                                    width: width,
+                                    height: (track.height - 30) / 2, // Half height for each channel
+                                    stripeWidth: rightWaveform.stripeWidth,
+                                    stripeSpacing: rightWaveform.stripeSpacing,
+                                    color: waveformColor,
+                                    channelLabel: "R"
+                                )
+                            }
+                        }
+                    } else if let monoWaveform = clip.audioItem.monoWaveform {
+                        // Show mono waveform (legacy or mono files)
                         ClipSectionWaveformView(
-                            samples: audioItemWaveform.samples ?? [],
+                            samples: monoWaveform.samples ?? [],
                             totalSamples: Int(clip.audioItem.lengthInSamples),
                             clipStartSample: Int(clip.startOffsetInSamples),
                             clipLengthSamples: Int(clip.lengthInSamples),
                             width: width,
                             height: track.height - 28,
-                            stripeWidth: audioItemWaveform.stripeWidth,
-                            stripeSpacing: audioItemWaveform.stripeSpacing,
+                            stripeWidth: monoWaveform.stripeWidth,
+                            stripeSpacing: monoWaveform.stripeSpacing,
                             color: waveformColor
                         )
                     }
@@ -1150,12 +1185,27 @@ struct ClipSectionWaveformView: View {
     let stripeWidth: CGFloat
     let stripeSpacing: CGFloat
     let color: Color
+    var channelLabel: String? = nil // Optional channel label (L or R)
     
     var body: some View {
         Canvas { context, size in
             drawClipSectionWaveform(in: context, size: size)
         }
         .frame(width: width, height: height)
+        .overlay(
+            // Show channel label if provided
+            Group {
+                if let label = channelLabel {
+                    Text(label)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(2)
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(2)
+                        .position(x: 8, y: 8)
+                }
+            }
+        )
     }
     
     private func drawClipSectionWaveform(in context: GraphicsContext, size: CGSize) {
