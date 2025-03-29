@@ -442,17 +442,21 @@ struct ClipContainerView: View {
                 Spacer().frame(height: trackViewModel.isCollapsed ? 20 : 24)
                 
                 // Add waveform if clip has one and track is not collapsed
-                if let waveform = clip.waveform, !trackViewModel.isCollapsed {
-                    // Create a new waveform with high contrast color
-                    let waveformWithContrastColor = waveform.withColors(
-                        primaryColor: waveformColor
-                    )
-                    
-                    WaveformView(
-                        waveform: waveformWithContrastColor,
-                        width: width,
-                        height: track.height - 28
-                    )
+                if !trackViewModel.isCollapsed {
+                    if let audioItemWaveform = clip.audioItem.waveform {
+                        // Create a clip section waveform that shows only the portion covered by this clip
+                        ClipSectionWaveformView(
+                            samples: audioItemWaveform.samples ?? [],
+                            totalSamples: Int(clip.audioItem.lengthInSamples),
+                            clipStartSample: Int(clip.startOffsetInSamples),
+                            clipLengthSamples: Int(clip.lengthInSamples),
+                            width: width,
+                            height: track.height - 28,
+                            stripeWidth: audioItemWaveform.stripeWidth,
+                            stripeSpacing: audioItemWaveform.stripeSpacing,
+                            color: waveformColor
+                        )
+                    }
                 }
             }
             .padding(.bottom, 4)
@@ -1115,6 +1119,95 @@ struct ClipContainerView: View {
             }
         } else {
             NSCursor.arrow.set()
+        }
+    }
+}
+
+/// A specialized view for rendering just the clip section of a waveform
+struct ClipSectionWaveformView: View {
+    let samples: [Float]
+    let totalSamples: Int
+    let clipStartSample: Int
+    let clipLengthSamples: Int
+    let width: CGFloat
+    let height: CGFloat
+    let stripeWidth: CGFloat
+    let stripeSpacing: CGFloat
+    let color: Color
+    
+    var body: some View {
+        Canvas { context, size in
+            drawClipSectionWaveform(in: context, size: size)
+        }
+        .frame(width: width, height: height)
+    }
+    
+    private func drawClipSectionWaveform(in context: GraphicsContext, size: CGSize) {
+        guard !samples.isEmpty, clipStartSample >= 0, clipLengthSamples > 0 else { return }
+        
+        let centerY = size.height / 2.0
+        
+        // Use smaller stripeWidth and spacing for more detailed visualization
+        let effectiveStripeWidth = min(stripeWidth, 1.5)
+        let effectiveSpacing = max(0.5, stripeSpacing / 4)
+        let barWidth = effectiveStripeWidth + effectiveSpacing
+        
+        // Calculate how many bars we can fit
+        let totalBars = Int(size.width / barWidth) + 1
+        
+        // Calculate which portion of the original samples to use
+        let clipStartRatio = Double(clipStartSample) / Double(totalSamples)
+        let clipEndRatio = Double(clipStartSample + clipLengthSamples) / Double(totalSamples)
+        
+        // Draw the waveform bars
+        for i in 0..<totalBars {
+            let x = CGFloat(i) * barWidth
+            
+            // Skip if we're out of bounds
+            if x >= size.width {
+                continue
+            }
+            
+            // Calculate the position within the clip as a ratio (0.0 to 1.0)
+            let positionInClip = Double(i) / Double(totalBars)
+            
+            // Map this position to the actual sample in the full audio file
+            let sampleRatio = clipStartRatio + positionInClip * (clipEndRatio - clipStartRatio)
+            let sampleIndex = min(Int(sampleRatio * Double(samples.count)), samples.count - 1)
+            
+            // Get sample value (normalized to 0.0-1.0 range)
+            var sampleValue = abs(samples[sampleIndex])
+            sampleValue = min(sampleValue, 1.0) // Cap at 1.0
+            
+            // Calculate bar height based on sample value
+            let barHeight = sampleValue * Float(centerY) * 1.8 // Slightly increase height for visual impact
+            
+            // Only draw if bar has height
+            if barHeight > 0.01 {
+                // Draw top part of bar (above center line)
+                let topRect = CGRect(
+                    x: x,
+                    y: centerY - CGFloat(barHeight),
+                    width: effectiveStripeWidth,
+                    height: CGFloat(barHeight)
+                )
+                
+                // Draw bottom part of bar (below center line)
+                let bottomRect = CGRect(
+                    x: x,
+                    y: centerY,
+                    width: effectiveStripeWidth,
+                    height: CGFloat(barHeight)
+                )
+                
+                // Create paths for the bars
+                let topPath = Path(roundedRect: topRect, cornerSize: CGSize(width: 0.5, height: 0.5))
+                let bottomPath = Path(roundedRect: bottomRect, cornerSize: CGSize(width: 0.5, height: 0.5))
+                
+                // Draw the bars with the appropriate color
+                context.fill(topPath, with: .color(color))
+                context.fill(bottomPath, with: .color(color))
+            }
         }
     }
 }

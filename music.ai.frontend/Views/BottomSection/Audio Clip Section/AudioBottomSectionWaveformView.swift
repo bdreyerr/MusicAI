@@ -14,17 +14,45 @@ struct AudioBottomSectionWaveformView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Waveform view
+            // Waveform view with scroll view wrapper
             GeometryReader { geometry in
                 if let audioItemWaveform = clip.audioItem.waveform {
-                    FullAudioItemWaveformView(
-                        waveform: audioItemWaveform,
-                        clip: clip,
-                        width: geometry.size.width,
-                        height: geometry.size.height - 40,
-                        zoomLevel: zoomLevel
-                    )
-                    .padding(.vertical, 20)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        ScrollViewReader { scrollProxy in
+                            ZStack(alignment: .leading) {
+                                // Position indicator for clip center
+                                Color.clear
+                                    .frame(width: 1, height: 1)
+                                    .id("clipCenter")
+                                    .frame(width: geometry.size.width * CGFloat(zoomLevel))
+                                    .offset(x: calculateClipCenterOffset(totalWidth: geometry.size.width * CGFloat(zoomLevel)))
+                                
+                                // Actual waveform view
+                                FullAudioItemWaveformView(
+                                    waveform: audioItemWaveform,
+                                    clip: clip,
+                                    width: geometry.size.width * CGFloat(zoomLevel),
+                                    height: geometry.size.height - 40,
+                                    zoomLevel: zoomLevel
+                                )
+                                .frame(
+                                    width: geometry.size.width * CGFloat(zoomLevel), 
+                                    height: geometry.size.height - 40
+                                )
+                                .padding(.vertical, 20)
+                            }
+                            .onChange(of: zoomLevel) { _ in
+                                // When zoom changes, scroll to the clip center
+                                scrollToClipCenter(proxy: scrollProxy)
+                            }
+                            .onAppear {
+                                // Scroll to clip center when the view appears
+                                scrollToClipCenter(proxy: scrollProxy)
+                            }
+                        }
+                    }
+                    // Ensure the scroll view fills the available space
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                 } else {
                     // Placeholder if waveform is not available
                     HStack {
@@ -89,9 +117,22 @@ struct AudioBottomSectionWaveformView: View {
             .background(themeManager.tertiaryBackgroundColor)
         }
         .background(themeManager.secondaryBackgroundColor)
-        .onAppear {
-            print(clip.audioItem)
+    }
+    
+    // Helper function to scroll to the clip center
+    private func scrollToClipCenter(proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.3)) {
+            proxy.scrollTo("clipCenter", anchor: .center)
         }
+    }
+    
+    // Calculate the offset for the clip center marker
+    private func calculateClipCenterOffset(totalWidth: CGFloat) -> CGFloat {
+        let clipStartRatio = Double(clip.startOffsetInSamples) / Double(clip.audioItem.lengthInSamples)
+        let clipEndRatio = Double(clip.startOffsetInSamples + clip.lengthInSamples) / Double(clip.audioItem.lengthInSamples)
+        let clipCenterRatio = (clipStartRatio + clipEndRatio) / 2.0
+        
+        return totalWidth * CGFloat(clipCenterRatio)
     }
 }
 
@@ -118,7 +159,7 @@ struct FullAudioItemWaveformView: View {
                         totalSamples: Int(clip.audioItem.lengthInSamples),
                         clipStartSample: Int(clip.startOffsetInSamples),
                         clipLengthSamples: Int(clip.lengthInSamples),
-                        width: geometry.size.width * CGFloat(zoomLevel),
+                        width: geometry.size.width,
                         height: geometry.size.height,
                         stripeWidth: waveform.stripeWidth,
                         stripeSpacing: waveform.stripeSpacing,
@@ -133,37 +174,14 @@ struct FullAudioItemWaveformView: View {
                     Rectangle()
                         .fill(themeManager.accentColor.opacity(0.1))
                         .frame(
-                            width: geometry.size.width * CGFloat(zoomLevel) * CGFloat(clipWidthRatio),
+                            width: geometry.size.width * CGFloat(clipWidthRatio),
                             height: geometry.size.height
                         )
-                        .offset(x: geometry.size.width * CGFloat(zoomLevel) * CGFloat(clipStartRatio))
+                        .offset(x: geometry.size.width * CGFloat(clipStartRatio))
                 }
             }
             .clipped()
-            .offset(x: calculatePanOffset(contentWidth: width * CGFloat(zoomLevel), containerWidth: width))
         }
-    }
-    
-    // Calculate pan offset to keep the clip visible when zoomed
-    private func calculatePanOffset(contentWidth: CGFloat, containerWidth: CGFloat) -> CGFloat {
-        // If content fits within container, no need to pan
-        if contentWidth <= containerWidth {
-            return 0
-        }
-        
-        // Calculate clip start and center positions
-        let clipStartRatio = Double(clip.startOffsetInSamples) / Double(clip.audioItem.lengthInSamples)
-        let clipEndRatio = Double(clip.startOffsetInSamples + clip.lengthInSamples) / Double(clip.audioItem.lengthInSamples)
-        let clipCenterRatio = (clipStartRatio + clipEndRatio) / 2
-        
-        // Calculate ideal offset to center the clip
-        let idealOffset = -contentWidth * CGFloat(clipCenterRatio) + containerWidth / 2
-        
-        // Constrain offset so content doesn't show empty space
-        let minOffset = -(contentWidth - containerWidth)
-        let maxOffset: CGFloat = 0
-        
-        return max(minOffset, min(maxOffset, idealOffset))
     }
 }
 
