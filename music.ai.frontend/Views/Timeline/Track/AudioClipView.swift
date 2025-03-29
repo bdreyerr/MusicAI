@@ -454,11 +454,11 @@ struct ClipContainerView: View {
                 
                 // Add waveform if clip has one and track is not collapsed
                 if !trackViewModel.isCollapsed {
-                    if clip.audioItem.isStereo && clip.leftWaveform != nil && clip.rightWaveform != nil {
+                    if clip.audioItem.isStereo && clip.audioItem.leftWaveform != nil && clip.audioItem.rightWaveform != nil {
                         // Show stereo waveforms with left and right channels
                         VStack(spacing: 2) {
                             // Left channel
-                            if let leftWaveform = clip.leftWaveform {
+                            if let leftWaveform = clip.audioItem.leftWaveform {
                                 ClipSectionWaveformView(
                                     samples: leftWaveform.samples ?? [],
                                     totalSamples: Int(clip.audioItem.lengthInSamples),
@@ -474,7 +474,7 @@ struct ClipContainerView: View {
                             }
                             
                             // Right channel
-                            if let rightWaveform = clip.rightWaveform {
+                            if let rightWaveform = clip.audioItem.rightWaveform {
                                 ClipSectionWaveformView(
                                     samples: rightWaveform.samples ?? [],
                                     totalSamples: Int(clip.audioItem.lengthInSamples),
@@ -499,9 +499,10 @@ struct ClipContainerView: View {
                                         .foregroundColor(.white.opacity(0.7))
                                 }
                                 .frame(height: track.height - 28)
+                                .padding(.horizontal, 10)
                             }
                         }
-                    } else if let monoWaveform = clip.monoWaveform {
+                    } else if let monoWaveform = clip.audioItem.monoWaveform {
                         // Show mono waveform (legacy or mono files)
                         ClipSectionWaveformView(
                             samples: monoWaveform.samples ?? [],
@@ -526,6 +527,7 @@ struct ClipContainerView: View {
                                 .foregroundColor(.white.opacity(0.7))
                         }
                         .frame(height: track.height - 28)
+                        .padding(.horizontal, 10)
                     }
                 }
             }

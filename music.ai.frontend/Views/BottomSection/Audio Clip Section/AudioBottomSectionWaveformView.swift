@@ -19,7 +19,7 @@ struct AudioBottomSectionWaveformView: View {
             // Waveform view with scroll view wrapper
             GeometryReader { geometry in
                 // Check for stereo vs mono display
-                if clip.audioItem.isStereo && clip.leftWaveform != nil && clip.rightWaveform != nil {
+                if clip.audioItem.isStereo && clip.audioItem.leftWaveform != nil && clip.audioItem.rightWaveform != nil {
                     // Show stereo waveforms (left and right channels)
                     ScrollView(.horizontal, showsIndicators: false) {
                         ScrollViewReader { scrollProxy in
@@ -34,7 +34,7 @@ struct AudioBottomSectionWaveformView: View {
                                 // Stereo waveform view with left and right channels
                                 VStack(spacing: 4) {
                                     // Left channel
-                                    if let leftWaveform = clip.leftWaveform {
+                                    if let leftWaveform = clip.audioItem.leftWaveform {
                                         FullAudioItemWaveformView(
                                             waveform: leftWaveform,
                                             clip: clip,
@@ -50,7 +50,7 @@ struct AudioBottomSectionWaveformView: View {
                                     }
                                     
                                     // Right channel
-                                    if let rightWaveform = clip.rightWaveform {
+                                    if let rightWaveform = clip.audioItem.rightWaveform {
                                         FullAudioItemWaveformView(
                                             waveform: rightWaveform,
                                             clip: clip,
@@ -79,7 +79,7 @@ struct AudioBottomSectionWaveformView: View {
                     }
                     // Ensure the scroll view fills the available space
                     .frame(width: geometry.size.width, height: geometry.size.height)
-                } else if let monoWaveform = clip.monoWaveform {
+                } else if let monoWaveform = clip.audioItem.monoWaveform {
                     // Show mono waveform (legacy or mono files)
                     ScrollView(.horizontal, showsIndicators: false) {
                         ScrollViewReader { scrollProxy in
@@ -230,9 +230,7 @@ struct FullAudioItemWaveformView: View {
                         width: geometry.size.width,
                         height: geometry.size.height,
                         stripeWidth: waveform.stripeWidth,
-                        stripeSpacing: waveform.stripeSpacing,
-                        baseColor: themeManager.secondaryTextColor.opacity(0.5),
-                        highlightColor: clip.color ?? themeManager.accentColor
+                        stripeSpacing: waveform.stripeSpacing
                     )
                     
                     // Add a subtle highlight behind the clip section
@@ -285,8 +283,8 @@ struct ColoredWaveformView: View {
     let height: CGFloat
     let stripeWidth: CGFloat
     let stripeSpacing: CGFloat
-    let baseColor: Color
-    let highlightColor: Color
+    
+    @EnvironmentObject var themeManager: ThemeManager
     
     var body: some View {
         Canvas { context, size in
@@ -311,6 +309,14 @@ struct ColoredWaveformView: View {
         // Calculate clip start and end positions as ratios
         let clipStartRatio = Double(clipStartSample) / Double(totalSamples)
         let clipEndRatio = Double(clipStartSample + clipLengthSamples) / Double(totalSamples)
+        
+        // Get theme colors for waveform
+        let baseColor = themeManager.secondaryTextColor.opacity(0.5)
+        let highlightColor = themeManager.accentColor.opacity(0.65)
+        
+        // Draw thin center line
+        let centerLine = Path(CGRect(x: 0, y: centerY - 0.5, width: size.width, height: 1))
+        context.fill(centerLine, with: .color(themeManager.secondaryTextColor.opacity(0.2)))
         
         // Draw the waveform bars
         for i in 0..<totalBars {
@@ -360,6 +366,27 @@ struct ColoredWaveformView: View {
                 context.fill(topPath, with: .color(barColor))
                 context.fill(bottomPath, with: .color(barColor))
             }
+        }
+        
+        // Draw vertical lines at clip boundaries
+        if clipStartRatio > 0 && clipStartRatio < 1 {
+            let startLine = Path(CGRect(
+                x: size.width * CGFloat(clipStartRatio) - 0.5,
+                y: 0,
+                width: 1,
+                height: size.height
+            ))
+            context.fill(startLine, with: .color(themeManager.accentColor.opacity(0.7)))
+        }
+        
+        if clipEndRatio > 0 && clipEndRatio < 1 {
+            let endLine = Path(CGRect(
+                x: size.width * CGFloat(clipEndRatio) - 0.5,
+                y: 0,
+                width: 1,
+                height: size.height
+            ))
+            context.fill(endLine, with: .color(themeManager.accentColor.opacity(0.7)))
         }
     }
 }

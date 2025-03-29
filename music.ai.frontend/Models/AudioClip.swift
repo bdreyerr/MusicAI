@@ -11,7 +11,6 @@ struct AudioClip: Identifiable, Equatable, Codable {
     var originalDuration: Double? // Original duration of the audio file in beats (if available)
     var color: Color? // Optional custom color for the clip
     var audioFileURL: URL? // URL to the audio file on disk
-//    var waveform: Waveform? // Optional waveform visualization data
     
     // Sample-based window into the original audio file
     var startOffsetInSamples: Int64 // Start position in samples within the original audio file
@@ -24,35 +23,6 @@ struct AudioClip: Identifiable, Equatable, Codable {
     var audioStartTime: Double { Double(startOffsetInSamples) / audioItem.sampleRate }
     var audioEndTime: Double { Double(startOffsetInSamples + lengthInSamples) / audioItem.sampleRate }
     var audioWindowDuration: Double { Double(lengthInSamples) / audioItem.sampleRate }
-    
-    // Computed properties to access the AudioItem's waveforms directly
-    var monoWaveform: Waveform? { audioItem.monoWaveform }
-    var leftWaveform: Waveform? { audioItem.leftWaveform }
-    var rightWaveform: Waveform? { audioItem.rightWaveform }
-    
-    // Deprecated - use monoWaveform, leftWaveform, or rightWaveform directly
-    @available(*, deprecated, message: "Use monoWaveform, leftWaveform, or rightWaveform properties instead")
-    var waveform: Waveform? {
-        get {
-            // If we have a stored waveform, return it
-            if let storedWaveform = _legacyWaveform {
-                return storedWaveform
-            }
-            
-            // Otherwise, return the appropriate waveform from the audio item
-            if audioItem.isStereo {
-                return audioItem.monoWaveform // Return mono waveform for stereo files
-            } else {
-                return audioItem.monoWaveform // For mono files, also return the mono waveform
-            }
-        }
-        set {
-            _legacyWaveform = newValue
-        }
-    }
-    
-    // Internal property to store the legacy waveform for backward compatibility
-    private var _legacyWaveform: Waveform?
     
     // Coding keys for Codable
     enum CodingKeys: String, CodingKey {
@@ -73,9 +43,6 @@ struct AudioClip: Identifiable, Equatable, Codable {
         self.color = color
         self.originalDuration = originalDuration
         
-        // Store legacy waveform if provided for backward compatibility
-        self._legacyWaveform = waveform
-        
         // Initialize the sample window to the full audio if not specified
         self.startOffsetInSamples = startOffsetInSamples ?? 0
         self.lengthInSamples = lengthInSamples ?? audioItem.lengthInSamples
@@ -92,7 +59,9 @@ struct AudioClip: Identifiable, Equatable, Codable {
         durationInBeats = try container.decode(Double.self, forKey: .durationInBeats)
         originalDuration = try container.decodeIfPresent(Double.self, forKey: .originalDuration)
         audioFileURL = try container.decodeIfPresent(URL.self, forKey: .audioFileURL)
-        _legacyWaveform = try container.decodeIfPresent(Waveform.self, forKey: .waveform)
+        
+        // Skip legacy waveform - it's no longer needed
+        _ = try container.decodeIfPresent(Waveform.self, forKey: .waveform)
         
         // Decode optional color
         if let colorData = try container.decodeIfPresent(CodableColor.self, forKey: .colorData) {
@@ -116,7 +85,7 @@ struct AudioClip: Identifiable, Equatable, Codable {
         try container.encode(durationInBeats, forKey: .durationInBeats)
         try container.encodeIfPresent(originalDuration, forKey: .originalDuration)
         try container.encodeIfPresent(audioFileURL, forKey: .audioFileURL)
-        try container.encodeIfPresent(_legacyWaveform, forKey: .waveform)
+        // Skip encoding legacy waveform
         try container.encode(startOffsetInSamples, forKey: .startOffsetInSamples)
         try container.encode(lengthInSamples, forKey: .lengthInSamples)
         
@@ -148,7 +117,7 @@ struct AudioClip: Identifiable, Equatable, Codable {
     static func create(audioItem: AudioItem, name: String, 
                        startPositionInBeats: Double, durationInBeats: Double, 
                        audioFileURL: URL? = nil, color: Color? = nil, 
-                       originalDuration: Double? = nil, waveform: Waveform? = nil, 
+                       originalDuration: Double? = nil, 
                        startOffsetInSamples: Int64? = nil, lengthInSamples: Int64? = nil) -> AudioClip {
         return AudioClip(
             audioItem: audioItem,
@@ -158,21 +127,19 @@ struct AudioClip: Identifiable, Equatable, Codable {
             audioFileURL: audioFileURL,
             color: color,
             originalDuration: originalDuration,
-            waveform: waveform,
             startOffsetInSamples: startOffsetInSamples,
             lengthInSamples: lengthInSamples
         )
     }
     
     // Create an empty audio clip (for UI testing or placeholders)
-    static func createEmpty(audioItem: AudioItem, name: String, startPositionInBeats: Double, durationInBeats: Double, color: Color? = nil, waveform: Waveform? = nil) -> AudioClip {
+    static func createEmpty(audioItem: AudioItem, name: String, startPositionInBeats: Double, durationInBeats: Double, color: Color? = nil) -> AudioClip {
         return AudioClip(
             audioItem: audioItem,
             name: name,
             startPositionInBeats: startPositionInBeats,
             durationInBeats: durationInBeats,
             color: color,
-            waveform: waveform,
             startOffsetInSamples: 0,
             lengthInSamples: audioItem.lengthInSamples
         )
@@ -187,7 +154,6 @@ struct AudioClip: Identifiable, Equatable, Codable {
                lhs.durationInBeats == rhs.durationInBeats &&
                lhs.originalDuration == rhs.originalDuration &&
                lhs.audioFileURL == rhs.audioFileURL &&
-               lhs.waveform?.id == rhs.waveform?.id &&
                lhs.startOffsetInSamples == rhs.startOffsetInSamples &&
                lhs.lengthInSamples == rhs.lengthInSamples
     }

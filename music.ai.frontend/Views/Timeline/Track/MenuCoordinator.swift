@@ -192,7 +192,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 audioFileURL: clip.audioFileURL,
                                 color: clip.color,
                                 originalDuration: clip.originalDuration,
-                                waveform: clip.waveform,
                                 startOffsetInSamples: clip.startOffsetInSamples,
                                 lengthInSamples: firstPartSamples
                             )
@@ -208,7 +207,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 audioFileURL: clip.audioFileURL,
                                 color: clip.color,
                                 originalDuration: clip.originalDuration,
-                                waveform: clip.waveform,
                                 startOffsetInSamples: clip.startOffsetInSamples + firstPartSamples + selectionLengthSamples,
                                 lengthInSamples: secondPartSamples
                             )
@@ -240,7 +238,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 audioFileURL: clip.audioFileURL,
                                 color: clip.color,
                                 originalDuration: clip.originalDuration,
-                                waveform: clip.waveform,
                                 startOffsetInSamples: newStartOffset,
                                 lengthInSamples: newLength
                             )
@@ -270,7 +267,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                                 audioFileURL: clip.audioFileURL,
                                 color: clip.color,
                                 originalDuration: clip.originalDuration,
-                                waveform: clip.waveform,
                                 startOffsetInSamples: clip.startOffsetInSamples,
                                 lengthInSamples: newLengthInSamples
                             )
@@ -669,7 +665,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                     audioFileURL: originalClip.audioFileURL,
                     color: originalClip.color,
                     originalDuration: originalClip.originalDuration,
-                    waveform: originalClip.waveform,
                     startOffsetInSamples: startOffsetInSamples,
                     lengthInSamples: lengthInSamples
                 )
@@ -922,7 +917,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                     audioFileURL: clip.audioFileURL,
                     color: clip.color,
                     originalDuration: clip.originalDuration,
-                    waveform: clip.waveform,
                     startOffsetInSamples: clip.startOffsetInSamples,
                     lengthInSamples: firstClipSamples
                 )
@@ -935,7 +929,6 @@ class MenuCoordinator: NSObject, ObservableObject {
                     audioFileURL: clip.audioFileURL,
                     color: clip.color,
                     originalDuration: clip.originalDuration,
-                    waveform: clip.waveform,
                     startOffsetInSamples: clip.startOffsetInSamples + firstClipSamples,
                     lengthInSamples: secondClipSamples
                 )
