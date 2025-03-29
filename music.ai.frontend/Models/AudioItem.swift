@@ -4,7 +4,7 @@ import AVFoundation
 
 /// Represents a full audio file that has been imported into the application.
 /// AudioClips can reference this item and represent windows/segments of the original audio.
-struct AudioItem: Identifiable, Equatable, Codable {
+class AudioItem: Identifiable, Equatable, Codable {
     let id: UUID
     var name: String
     var audioFileURL: URL
@@ -60,7 +60,7 @@ struct AudioItem: Identifiable, Equatable, Codable {
     }
     
     // Custom decoder for backward compatibility
-    init(from decoder: Decoder) throws {
+    required init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
         id = try container.decode(UUID.self, forKey: .id)

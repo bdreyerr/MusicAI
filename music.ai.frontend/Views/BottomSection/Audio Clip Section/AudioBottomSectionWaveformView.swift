@@ -11,13 +11,15 @@ struct AudioBottomSectionWaveformView: View {
     let clip: AudioClip
     @EnvironmentObject var themeManager: ThemeManager
     @State private var zoomLevel: Double = 1.0
+    @State private var lastWaveformUpdateTimestamp: Date = Date()
+    @ObservedObject var projectViewModel: ProjectViewModel
     
     var body: some View {
         VStack(spacing: 0) {
             // Waveform view with scroll view wrapper
             GeometryReader { geometry in
                 // Check for stereo vs mono display
-                if clip.audioItem.isStereo && clip.audioItem.leftWaveform != nil && clip.audioItem.rightWaveform != nil {
+                if clip.audioItem.isStereo && clip.leftWaveform != nil && clip.rightWaveform != nil {
                     // Show stereo waveforms (left and right channels)
                     ScrollView(.horizontal, showsIndicators: false) {
                         ScrollViewReader { scrollProxy in
@@ -32,7 +34,7 @@ struct AudioBottomSectionWaveformView: View {
                                 // Stereo waveform view with left and right channels
                                 VStack(spacing: 4) {
                                     // Left channel
-                                    if let leftWaveform = clip.audioItem.leftWaveform {
+                                    if let leftWaveform = clip.leftWaveform {
                                         FullAudioItemWaveformView(
                                             waveform: leftWaveform,
                                             clip: clip,
@@ -48,7 +50,7 @@ struct AudioBottomSectionWaveformView: View {
                                     }
                                     
                                     // Right channel
-                                    if let rightWaveform = clip.audioItem.rightWaveform {
+                                    if let rightWaveform = clip.rightWaveform {
                                         FullAudioItemWaveformView(
                                             waveform: rightWaveform,
                                             clip: clip,
@@ -77,7 +79,7 @@ struct AudioBottomSectionWaveformView: View {
                     }
                     // Ensure the scroll view fills the available space
                     .frame(width: geometry.size.width, height: geometry.size.height)
-                } else if let monoWaveform = clip.audioItem.monoWaveform {
+                } else if let monoWaveform = clip.monoWaveform {
                     // Show mono waveform (legacy or mono files)
                     ScrollView(.horizontal, showsIndicators: false) {
                         ScrollViewReader { scrollProxy in
@@ -179,6 +181,9 @@ struct AudioBottomSectionWaveformView: View {
             .background(themeManager.tertiaryBackgroundColor)
         }
         .background(themeManager.secondaryBackgroundColor)
+        .onReceive(projectViewModel.objectWillChange) { _ in
+            lastWaveformUpdateTimestamp = Date()
+        }
     }
     
     // Helper function to scroll to the clip center
@@ -252,6 +257,17 @@ struct FullAudioItemWaveformView: View {
                             .cornerRadius(4)
                             .position(x: 14, y: 14)
                     }
+                } else {
+                    // Show loading indicator when waveform is not available
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .padding(.bottom, 4)
+                        Text("Generating waveform...")
+                            .font(.caption)
+                            .foregroundColor(themeManager.secondaryTextColor)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .clipped()
@@ -322,25 +338,23 @@ struct ColoredWaveformView: View {
                 let isInClipRange = sampleRatio >= clipStartRatio && sampleRatio <= clipEndRatio
                 let barColor = isInClipRange ? highlightColor : baseColor
                 
-                // Draw top part of bar (above center line)
+                // Calculate bar positions - use full width with no spacing to prevent gaps
                 let topRect = CGRect(
                     x: x,
                     y: centerY - CGFloat(barHeight),
-                    width: effectiveStripeWidth,
+                    width: effectiveStripeWidth + 0.5, // Add a small overlap to prevent gaps
                     height: CGFloat(barHeight)
                 )
-                
-                // Draw bottom part of bar (below center line)
                 let bottomRect = CGRect(
                     x: x,
                     y: centerY,
-                    width: effectiveStripeWidth,
+                    width: effectiveStripeWidth + 0.5, // Add a small overlap to prevent gaps
                     height: CGFloat(barHeight)
                 )
                 
                 // Create paths for the bars
-                let topPath = Path(roundedRect: topRect, cornerSize: CGSize(width: 0.5, height: 0.5))
-                let bottomPath = Path(roundedRect: bottomRect, cornerSize: CGSize(width: 0.5, height: 0.5))
+                let topPath = Path(topRect)
+                let bottomPath = Path(bottomRect)
                 
                 // Draw the bars with the appropriate color
                 context.fill(topPath, with: .color(barColor))

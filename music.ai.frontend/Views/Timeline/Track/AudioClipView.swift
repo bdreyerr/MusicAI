@@ -122,6 +122,11 @@ struct AudioClipView: View {
             renameClip: renameClip,
             updateClipColor: updateClipColor
         )
+        // Force redraw when project model changes (e.g. waveforms are loaded)
+        .onReceive(projectViewModel.objectWillChange) { _ in
+            // This forces the view to redraw when the AudioItem's waveforms change
+            // We don't need to update any state, just receiving the change is enough
+        }
     }
     
     // Function to select this clip
@@ -404,6 +409,11 @@ struct ClipContainerView: View {
         } message: {
             Text("Enter a new name for this clip")
         }
+        // Force redraw when project model changes (e.g. waveforms are loaded)
+        .onReceive(projectViewModel.objectWillChange) { _ in
+            // This forces the view to redraw when the AudioItem's waveforms change
+            // We don't need to update any state, just receiving the change is enough
+        }
     }
     
     // MARK: - View Components
@@ -444,11 +454,11 @@ struct ClipContainerView: View {
                 
                 // Add waveform if clip has one and track is not collapsed
                 if !trackViewModel.isCollapsed {
-                    if clip.audioItem.isStereo && clip.audioItem.leftWaveform != nil && clip.audioItem.rightWaveform != nil {
+                    if clip.audioItem.isStereo && clip.leftWaveform != nil && clip.rightWaveform != nil {
                         // Show stereo waveforms with left and right channels
                         VStack(spacing: 2) {
                             // Left channel
-                            if let leftWaveform = clip.audioItem.leftWaveform {
+                            if let leftWaveform = clip.leftWaveform {
                                 ClipSectionWaveformView(
                                     samples: leftWaveform.samples ?? [],
                                     totalSamples: Int(clip.audioItem.lengthInSamples),
@@ -464,7 +474,7 @@ struct ClipContainerView: View {
                             }
                             
                             // Right channel
-                            if let rightWaveform = clip.audioItem.rightWaveform {
+                            if let rightWaveform = clip.rightWaveform {
                                 ClipSectionWaveformView(
                                     samples: rightWaveform.samples ?? [],
                                     totalSamples: Int(clip.audioItem.lengthInSamples),
@@ -477,9 +487,21 @@ struct ClipContainerView: View {
                                     color: waveformColor,
                                     channelLabel: "R"
                                 )
+                            } else {
+                                // Show loading indicator while waveform is being generated
+                                VStack {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                        .padding(.bottom, 2)
+                                    
+                                    Text("Loading...")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                                .frame(height: track.height - 28)
                             }
                         }
-                    } else if let monoWaveform = clip.audioItem.monoWaveform {
+                    } else if let monoWaveform = clip.monoWaveform {
                         // Show mono waveform (legacy or mono files)
                         ClipSectionWaveformView(
                             samples: monoWaveform.samples ?? [],
@@ -492,6 +514,18 @@ struct ClipContainerView: View {
                             stripeSpacing: monoWaveform.stripeSpacing,
                             color: waveformColor
                         )
+                    } else {
+                        // Show loading indicator while waveform is being generated
+                        VStack {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .padding(.bottom, 2)
+                            
+                            Text("Loading...")
+                                .font(.system(size: 9))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        .frame(height: track.height - 28)
                     }
                 }
             }
@@ -1254,7 +1288,7 @@ struct ClipSectionWaveformView: View {
                 let topRect = CGRect(
                     x: x,
                     y: centerY - CGFloat(barHeight),
-                    width: effectiveStripeWidth,
+                    width: effectiveStripeWidth + 0.5, // Add a small overlap to prevent gaps
                     height: CGFloat(barHeight)
                 )
                 
@@ -1262,13 +1296,13 @@ struct ClipSectionWaveformView: View {
                 let bottomRect = CGRect(
                     x: x,
                     y: centerY,
-                    width: effectiveStripeWidth,
+                    width: effectiveStripeWidth + 0.5, // Add a small overlap to prevent gaps
                     height: CGFloat(barHeight)
                 )
                 
                 // Create paths for the bars
-                let topPath = Path(roundedRect: topRect, cornerSize: CGSize(width: 0.5, height: 0.5))
-                let bottomPath = Path(roundedRect: bottomRect, cornerSize: CGSize(width: 0.5, height: 0.5))
+                let topPath = Path(topRect)
+                let bottomPath = Path(bottomRect)
                 
                 // Draw the bars with the appropriate color
                 context.fill(topPath, with: .color(color))

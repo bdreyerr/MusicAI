@@ -260,20 +260,3 @@ struct PlaceholderWaveformView: View {
         }
     }
 }
-
-// MARK: - Previews
-struct WaveformView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Create a sample waveform with random data
-        let waveform = AudioWaveformGenerator.generateRandomWaveform(
-            color: .blue
-        )
-        
-        // Return the preview
-        WaveformView(waveform: waveform, width: 400, height: 100)
-            .environmentObject(ThemeManager())
-            .previewLayout(.fixed(width: 400, height: 100))
-            .padding()
-            .background(Color.gray.opacity(0.2))
-    }
-} 

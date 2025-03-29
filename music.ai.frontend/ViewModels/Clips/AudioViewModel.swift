@@ -50,31 +50,13 @@ class AudioViewModel: ObservableObject {
         // Calculate the total number of samples
         let lengthInSamples = Int64(duration * sampleRate)
         
-        // Generate waveform for the audio file
-        // TODO: Generate a real audio waveform from the url, for now it's random
-//        let waveform = AudioWaveformGenerator.generateWaveformFromAudioUrl(
-//            url: fileURL,
-//            color: nil
-//        )
-        
+        // Generate waveform for the audio file using our new generator
         let monoWaveform: Waveform?
         let leftWaveform: Waveform?
         let rightWaveform: Waveform?
         
-        if channels >= 2 {
-            // For stereo files, generate separate waveforms for each channel
-            let stereoWaveforms = AudioWaveformGenerator.generateRandomStereoWaveforms()
-            monoWaveform = stereoWaveforms.mono
-            leftWaveform = stereoWaveforms.left
-            rightWaveform = stereoWaveforms.right
-        } else {
-            // For mono files, just use the mono waveform
-            monoWaveform = AudioWaveformGenerator.generateRandomWaveform()
-            leftWaveform = nil
-            rightWaveform = nil
-        }
-        
-        let newItem = AudioItem(
+        // First create a basic AudioItem without waveforms so we can return it quickly
+        var newItem = AudioItem(
             name: fileURL.lastPathComponent,
             audioFileURL: fileURL,
             durationInSeconds: duration,
@@ -82,17 +64,69 @@ class AudioViewModel: ObservableObject {
             numberOfChannels: channels,
             bitDepth: bitDepth,
             fileFormat: fileExtension,
-            monoWaveform: monoWaveform,
-            leftWaveform: leftWaveform,
-            rightWaveform: rightWaveform,
+            monoWaveform: nil, // Start with nil waveforms
+            leftWaveform: nil,
+            rightWaveform: nil,
             lengthInSamples: lengthInSamples
         )
         
-        // Add the new item to the project
+        // Add the item to the project immediately
         DispatchQueue.main.async {
             self.projectViewModel?.audioItems.append(newItem)
         }
         
+        // Generate waveforms asynchronously
+        Task {
+            do {
+                // Generate waveforms in background
+                if channels >= 2 {
+                    // For stereo files, generate separate waveforms for left and right channels
+                    let waveforms = AudioWaveformGenerator.generateWaveformsFromAudioUrl(
+                        url: fileURL,
+                        isStereo: true,
+                        color: nil,
+                        sampleRate: 200 // Higher sample rate for better detail
+                    )
+                    
+                    // Update item with generated waveforms on the main thread
+                    await MainActor.run {
+                        if waveforms.left != nil && waveforms.right != nil {
+                            newItem.leftWaveform = waveforms.left
+                            newItem.rightWaveform = waveforms.right
+                            
+                            // Force UI update
+                            self.projectViewModel?.objectWillChange.send()
+                            print("✅ Stereo waveform generation complete for \(fileURL.lastPathComponent)")
+                        } else {
+                            print("⚠️ Failed to generate stereo waveforms for \(fileURL.lastPathComponent)")
+                        }
+                    }
+                } else {
+                    // For mono files, just generate the mono waveform
+                    let waveforms = AudioWaveformGenerator.generateWaveformsFromAudioUrl(
+                        url: fileURL,
+                        isStereo: false,
+                        color: nil,
+                        sampleRate: 200 // Higher sample rate for better detail
+                    )
+                    
+                    // Update item with generated waveform on the main thread
+                    await MainActor.run {
+                        if let monoWaveform = waveforms.mono {
+                            newItem.monoWaveform = monoWaveform
+                            
+                            // Force UI update 
+                            self.projectViewModel?.objectWillChange.send()
+                            print("✅ Mono waveform generation complete for \(fileURL.lastPathComponent)")
+                        } else {
+                            print("⚠️ Failed to generate mono waveform for \(fileURL.lastPathComponent)")
+                        }
+                    }
+                }
+            } catch {
+                print("❌ Error generating waveform: \(error.localizedDescription)")
+            }
+        }
         
         return newItem
     }
@@ -150,7 +184,6 @@ class AudioViewModel: ObservableObject {
                 audioFileURL: fileURL,
                 color: track.effectiveColor,
                 originalDuration: durationInBeats,
-                waveform: audioItem.waveform,
                 startOffsetInSamples: 0, // Start at the beginning of the audio file
                 lengthInSamples: audioItem.lengthInSamples // Use the entire audio file
             )

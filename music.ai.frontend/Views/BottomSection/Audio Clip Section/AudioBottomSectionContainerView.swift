@@ -43,7 +43,7 @@ struct AudioBottomSectionContainerView: View {
                     .frame(width: 1)
                 
                 // Right side: Waveform visualization
-                AudioBottomSectionWaveformView(clip: clip)
+                AudioBottomSectionWaveformView(clip: clip, projectViewModel: projectViewModel)
                     .frame(maxWidth: .infinity)
             }
             .background(themeManager.secondaryBackgroundColor)
