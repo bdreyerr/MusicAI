@@ -467,6 +467,10 @@ struct TopControlBarView: View {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 8))
                         .foregroundColor(.orange)
+                } else {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 8))
+                        .foregroundColor(.green)
                 }
                 
                 Text("Glitch v0.1")

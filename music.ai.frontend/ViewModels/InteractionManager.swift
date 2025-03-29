@@ -224,6 +224,42 @@ class InteractionManager: ObservableObject {
         return result
     }
     
+    /// Check if we can start a new clip selection
+    func canStartClipSelection() -> Bool {
+        let result = !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock
+        log("🔍 canStartClipSelection check: \(result)")
+        if !result {
+            log("🔍 Blocked by locks - clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+        }
+        return result
+    }
+    
+    /// Start a clip selection interaction
+    func startClipSelection() -> Bool {
+        log("⚪️ REQUEST: Start clip selection")
+        let currentState = "Current state - selection: \(isSelecting), clipDrag: \(isDraggingClip), clipResize: \(isResizingClip), rightClick: \(isHandlingRightClick), drop: \(isHandlingDrop)"
+        log("⚪️ \(currentState)")
+        
+        guard !clipDragLock && !clipResizeLock && !rightClickLock && !dropLock else {
+            log("❌ DENIED: Cannot start clip selection - another interaction is active")
+            log("❌ Locks - selection: \(selectionLock), clipDrag: \(clipDragLock), clipResize: \(clipResizeLock), rightClick: \(rightClickLock), drop: \(dropLock)")
+            return false
+        }
+        
+        // We allow selection to happen alongside other selection
+        lastInteractionTime = Date()
+        lastInteractionDescription = "Clip selection started"
+        log("✅ GRANTED: Clip selection started")
+        return true
+    }
+    
+    /// End a clip selection interaction
+    func endClipSelection() {
+        lastInteractionTime = Date()
+        lastInteractionDescription = "Clip selection ended"
+        log("🏁 Clip selection ended")
+    }
+    
     /// Check if we can process a right-click
     func canProcessRightClick() -> Bool {
         // Right click has highest priority and can interrupt other interactions

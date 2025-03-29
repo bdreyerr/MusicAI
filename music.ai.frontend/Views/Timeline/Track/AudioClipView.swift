@@ -395,6 +395,7 @@ struct ClipContainerView: View {
         .zIndex(40) // Ensure clips are above other elements for better interaction
         .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.7, blendDuration: 0.1), value: clip.startPositionInBeats) // Animate when the actual clip position changes
         .animation(.easeInOut(duration: 0.2), value: currentClipColor) // Animate when color changes
+        .simultaneousGesture(tapGesture) // Add tap gesture for click selection
         .popover(isPresented: $showingClipColorPicker, arrowEdge: .top) {
             colorPickerView
         }
@@ -494,6 +495,7 @@ struct ClipContainerView: View {
                         .clipped() // Ensure text is clipped inside its container
                 }
             }
+            .simultaneousGesture(tapGesture)
             .onHover(perform: handleTitleBarHover)
             .gesture(dragGesture)
             
@@ -619,6 +621,20 @@ struct ClipContainerView: View {
     }
     
     // MARK: - Gestures
+    
+    private var tapGesture: some Gesture {
+        TapGesture()
+            .onEnded {
+                // Try to start a clip selection interaction
+                if projectViewModel.interactionManager.startClipSelection() {
+                    // Select the clip on tap
+                    selectThisClip()
+                    
+                    // End the selection interaction immediately
+                    projectViewModel.interactionManager.endClipSelection()
+                }
+            }
+    }
     
     private var leftResizeGesture: some Gesture {
         DragGesture(minimumDistance: 1)
