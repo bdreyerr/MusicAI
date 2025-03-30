@@ -19,7 +19,7 @@ struct BottomSectionView: View {
     
     // Minimum heights
     private let collapsedHeight: CGFloat = 40
-    private let minExpandedHeight: CGFloat = 325
+    private let minExpandedHeight: CGFloat = 360
     private let maxExpandedHeight: CGFloat = 1000
     private let resizeAreaHeight: CGFloat = 8
     

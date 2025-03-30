@@ -286,11 +286,22 @@ struct ColoredWaveformView: View {
     
     @EnvironmentObject var themeManager: ThemeManager
     
+    // Compute a unique ID for this waveform state to prevent unnecessary redraws
+    private var waveformId: String {
+        // Hash the samples array to detect changes
+        let samplesHash = samples.count > 0 ? "\(samples.count)-\(samples.first!)-\(samples.last!)" : "empty"
+        // Only include parameters that should trigger a redraw when changed
+        return "\(samplesHash)-\(clipStartSample)-\(clipLengthSamples)-\(width)-\(height)"
+    }
+    
     var body: some View {
+        // Use direct Canvas with caching via the id modifier
         Canvas { context, size in
             drawColoredWaveform(in: context, size: size)
         }
         .frame(width: width, height: height)
+        .drawingGroup() // Enable Metal acceleration
+        .id(waveformId) // Only redraw when relevant parameters change
     }
     
     private func drawColoredWaveform(in context: GraphicsContext, size: CGSize) {
