@@ -387,7 +387,7 @@ class ProjectViewModel: ObservableObject {
     }
     
     // Add a new track
-    func addTrack(name: String? = nil, type: TrackType, height: CGFloat = 100, afterIndex: Int? = nil) {
+    func addTrack(name: String? = nil, type: TrackType, height: CGFloat = 70, afterIndex: Int? = nil) {
         // Generate a sequential track name if one wasn't provided
         let trackName = name ?? "\(tracks.count + 1) \(type == .audio ? "Audio" : "Midi")"
         

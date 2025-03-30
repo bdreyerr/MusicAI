@@ -200,7 +200,7 @@ struct TimelineButtons: View {
     
     // Add a new track (audio or MIDI)
     private func addTrack(type: TrackType) {
-        let height: CGFloat = 100 // Default height for new tracks
+        let height: CGFloat = 70 // Default height for new tracks
         
         // print("🔍 TimelineButtons: Adding new \(type) track")
         // print("🔍 TimelineButtons: Current track count: \(projectViewModel.tracks.count)")

@@ -106,11 +106,11 @@ struct TrackView: View {
             if isTargeted {
                 Rectangle()
                     .fill(Color.blue.opacity(0.3))
-                    .frame(width: 4, height: trackViewModel.isCollapsed ? 30 : track.height)
+                    .frame(width: 4, height: trackViewModel.isCollapsed ? 30 : 70) // Updated to match track controls height
                     .offset(x: dropLocation.x)
             }
         }
-        .frame(width: width, height: trackViewModel.isCollapsed ? 30 : track.height)
+        .frame(width: width, height: trackViewModel.isCollapsed ? 30 : 70) // Updated to match track controls height
         .background(Color.clear) // Make background transparent to let grid show through
         .contextMenu { trackContextMenu }
         .popover(isPresented: $showingTrackColorPicker) {
@@ -499,7 +499,7 @@ struct TrackView: View {
         // Check if there's already an audio track
         if projectViewModel.tracks.first(where: { $0.type == .audio }) == nil {
             // Create a new audio track if none exists
-            projectViewModel.addTrack(type: .audio)
+            projectViewModel.addTrack(type: .audio, height: 70) // Update default track height to 70
         }
     }
     

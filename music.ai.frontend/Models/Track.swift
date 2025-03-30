@@ -61,7 +61,7 @@ struct Track: Identifiable, Equatable, Codable {
     var isEnabled: Bool = true // Whether the track is enabled for playback
     var volume: Double = 0.5 // 0.0 to 1.0 (50% by default)
     var pan: Double = 0.5 // 0.0 (left) to 1.0 (right), 0.5 is center
-    var height: CGFloat = 100 // Default track height
+    var height: CGFloat = 70 // Default track height
     var isCollapsed: Bool = false // Whether the track is collapsed (minimized)
     var customColor: Color? = nil // Custom color for the track, overrides the default type color
     var effects: [Effect] = [] // List of effects applied to this track
@@ -76,7 +76,7 @@ struct Track: Identifiable, Equatable, Codable {
     }
     
     init(id: UUID = UUID(), name: String, type: TrackType, isMuted: Bool = false, isSolo: Bool = false, isArmed: Bool = false, 
-         isEnabled: Bool = true, volume: Double = 0.5, pan: Double = 0.5, height: CGFloat = 100, isCollapsed: Bool = false,
+         isEnabled: Bool = true, volume: Double = 0.5, pan: Double = 0.5, height: CGFloat = 70, isCollapsed: Bool = false,
          customColor: Color? = nil, effects: [Effect] = [], instrument: Effect? = nil, midiClips: [MidiClip] = [], audioClips: [AudioClip] = []) {
         self.id = id
         self.name = name

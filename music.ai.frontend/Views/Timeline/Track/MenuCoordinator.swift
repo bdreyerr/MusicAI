@@ -4,7 +4,7 @@ import AppKit
 /// Coordinator class to handle menu actions for the timeline
 class MenuCoordinator: NSObject, ObservableObject {
     weak var projectViewModel: ProjectViewModel?
-    var defaultTrackHeight: CGFloat = 100 // Default track height
+    var defaultTrackHeight: CGFloat = 70 // Default track height
     
     // Clipboard storage for copy/paste operations
     // Changed to support multiple clips with copy counts
