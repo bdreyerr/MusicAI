@@ -12,18 +12,36 @@ struct SharedTracksGridContainer: View {
     @State private var cachedTrackHeight: CGFloat = 0
     @State private var lastTrackCountForCache: Int = 0
     
+    // Toggle to switch between SwiftUI and AppKit grid implementation
+    // Set to true to use the AppKit implementation
+    private let useAppKitGrid: Bool = true
+    
     var body: some View {
         ZStack(alignment: .topLeading) {
             // Shared grid rendered once for all tracks
-            TimelineGridView(
-                state: state,
-                projectViewModel: projectViewModel,
-                width: width,
-                height: calculateTotalTracksHeight()
-            )
-            .environmentObject(themeManager)
-            .id("grid-\(state.zoomLevel)-\(state.totalBars)") // Make ID stable during scroll
-            .padding(.top, 0) // Ensure no top padding
+            if useAppKitGrid {
+                // Use our optimized AppKit implementation
+                AppKitTimelineGridView(
+                    state: state,
+                    projectViewModel: projectViewModel,
+                    width: width,
+                    height: calculateTotalTracksHeight()
+                )
+                .environmentObject(themeManager)
+                .id("appkit-grid-\(state.zoomLevel)-\(state.totalBars)") // Make ID stable during scroll
+                .padding(.top, 0) // Ensure no top padding
+            } else {
+                // Use the original SwiftUI Canvas implementation
+                TimelineGridView(
+                    state: state,
+                    projectViewModel: projectViewModel,
+                    width: width,
+                    height: calculateTotalTracksHeight()
+                )
+                .environmentObject(themeManager)
+                .id("grid-\(state.zoomLevel)-\(state.totalBars)") // Make ID stable during scroll
+                .padding(.top, 0) // Ensure no top padding
+            }
             
             // Stack of track views without their individual grids
             VStack(spacing: 0) {

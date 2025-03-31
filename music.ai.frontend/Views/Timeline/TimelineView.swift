@@ -151,6 +151,14 @@ struct TimelineView: View {
                                                 .environmentObject(themeManager)
                                                 .frame(height: rulerHeight)
                                                 .background(themeManager.rulerBackgroundColor)
+                                                .overlay(
+                                                    TimelineRulerSelectionIndicator(
+                                                        state: timelineState,
+                                                        projectViewModel: projectViewModel,
+                                                        height: rulerHeight
+                                                    )
+                                                    .environmentObject(themeManager)
+                                                )
                                                 
                                                 
                                                 // Ruler at the top
