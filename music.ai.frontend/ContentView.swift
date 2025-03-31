@@ -32,11 +32,11 @@ struct ContentView: View {
                     .environmentObject(audioDragDropViewModel)
                 
                 // Timeline view - using the new ClaudeTimeline
-//                TimelineView(projectViewModel: projectViewModel)
-//                    .environmentObject(themeManager)
-//                    .environmentObject(audioDragDropViewModel)
+                TimelineView(projectViewModel: projectViewModel)
+                    .environmentObject(themeManager)
+                    .environmentObject(audioDragDropViewModel)
                 
-                NewTimelineView(projectViewModel: projectViewModel)
+//                NewTimelineView(projectViewModel: projectViewModel)
                 
                 // Right sidebar for AI chat
                 RightSidebarView(projectViewModel: projectViewModel)

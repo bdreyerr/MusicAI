@@ -1,51 +1,39 @@
 import SwiftUI
 
-/// Playhead indicator that shows the current playback position in the timeline
-/// Now used only for the ruler playhead
+/// Playhead indicator for the ruler
 struct PlayheadIndicator: View {
     let currentBeat: Double
     @ObservedObject var state: TimelineStateViewModel
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
-    
-    // Computed property for the x-offset based on current beat and zoom level
+    let viewportWidth: CGFloat
+
+    // X-offset based on beat and zoom
     private var xOffset: CGFloat {
-        CGFloat(currentBeat) * CGFloat(state.effectivePixelsPerBeat)
+        CGFloat(currentBeat) * CGFloat(state.effectivePixelsPerBeat) - state.scrollOffset.x
     }
-    
-    // Check if the playhead is visible in the current viewport
-    private var isVisibleInViewport: Bool {
-        let scrollX = state.scrollOffset.x
-        let viewportWidth = 2000 // Use a large default
-        
-        // The playhead is visible if it's within the viewport
-        return xOffset >= scrollX - 1 && xOffset <= scrollX + CGFloat(viewportWidth) + 1
+
+    // Visibility check
+    private var isVisible: Bool {
+        let viewMinX = CGFloat(currentBeat) * CGFloat(state.effectivePixelsPerBeat)
+        let viewMaxX = viewMinX + 1 // Playhead width is 1
+        let visibleRect = CGRect(x: state.scrollOffset.x, y: 0, width: viewportWidth, height: 1) // Height doesn't matter here
+        let viewRect = CGRect(x: viewMinX, y: 0, width: 1, height: 1)
+        return visibleRect.intersects(viewRect)
     }
-    
+
     var body: some View {
-        // Simple conditional rendering
-        if isVisibleInViewport {
+        if isVisible {
             Rectangle()
                 .fill(themeManager.playheadColor)
                 .frame(width: 1.0)
                 .frame(maxHeight: .infinity)
                 .offset(x: xOffset)
-                .zIndex(100) // Ensure it's above everything else
-                // Only animate position changes when NOT playing to improve performance
-                .animation(projectViewModel.isPlaying ? nil : .interactiveSpring(response: 0.3, dampingFraction: 0.7), value: state.zoomLevel)
+                .zIndex(100)
+                // No animation during playback
+                .animation(projectViewModel.isPlaying ? nil : .default, value: xOffset)
         } else {
-            // Return an empty view when the playhead shouldn't be shown
             EmptyView()
         }
     }
 }
-
-#Preview {
-    PlayheadIndicator(
-        currentBeat: 4.0, 
-        state: TimelineStateViewModel(),
-        projectViewModel: ProjectViewModel()
-    )
-    .environmentObject(ThemeManager())
-    .frame(height: 200)
-} 

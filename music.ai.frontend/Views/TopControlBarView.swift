@@ -116,7 +116,7 @@ struct NotchDisplayView: View {
             .frame(width: 120, alignment: .center) // Fix width to ensure consistent sizing
             
             // Right side - Waveform visualization
-            SimpleWaveformView(projectViewModel: projectViewModel)
+//            SimpleWaveformView(projectViewModel: projectViewModel)
         }
         .padding(.horizontal, 16) // Slightly reduced padding
         .padding(.vertical, 4) // Reduced vertical padding

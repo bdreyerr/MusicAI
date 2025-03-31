@@ -22,7 +22,7 @@ struct SharedTracksGridContainer: View {
                 height: calculateTotalTracksHeight()
             )
             .environmentObject(themeManager)
-            .id("grid-\(state.zoomLevel)-\(state.isScrolling ? "scrolling" : "static")-\(Int(state.scrollOffset.x/100))")
+            .id("grid-\(state.zoomLevel)-\(state.totalBars)") // Make ID stable during scroll
             .padding(.top, 0) // Ensure no top padding
             
             // Stack of track views without their individual grids
@@ -80,11 +80,12 @@ struct SharedTracksGridContainer: View {
                 Spacer()
             }
             .frame(height: calculateTotalTracksHeight())
-            
+
             // Shared playhead on top (higher z-index)
             SharedPlayheadView(
                 projectViewModel: projectViewModel,
-                state: state
+                state: state,
+                viewportWidth: width
             )
             .environmentObject(themeManager)
             .zIndex(1000) // Higher zIndex to ensure playhead is on top

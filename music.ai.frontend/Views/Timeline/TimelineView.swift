@@ -158,17 +158,18 @@ struct TimelineView: View {
                                                     )
                                                     .environmentObject(themeManager)
                                                 )
-                                                .overlay(
-                                                    PlayheadIndicator(
-                                                        currentBeat: projectViewModel.currentBeat,
-                                                        state: timelineState,
-                                                        projectViewModel: projectViewModel
-                                                    )
-                                                    .environmentObject(themeManager)
-                                                    .frame(height: rulerHeight)
-                                                )
-                                                .frame(height: rulerHeight)
-                                                .background(themeManager.rulerBackgroundColor)
+//                                                .overlay(
+//                                                    PlayheadIndicator(
+//                                                        currentBeat: projectViewModel.currentBeat,
+//                                                        state: timelineState,
+//                                                        projectViewModel: projectViewModel,
+//                                                        viewportWidth: calculateContentWidth(geometry: geometry)
+//                                                    )
+//                                                    .environmentObject(themeManager)
+//                                                    .frame(height: rulerHeight)
+//                                                )
+//                                                .frame(height: rulerHeight)
+//                                                .background(themeManager.rulerBackgroundColor)
                                                 
                                                 // Regular tracks grid container
                                                 SharedTracksGridContainer(

@@ -107,6 +107,9 @@ struct TimelineGridView: View {
                 drawFourBarLines(context: context, size: size, startX: startX, endX: endX,
                               pixelsPerBar: pixelsPerBar, scrollX: scrollX)
             }
+            
+            // Playhead is handled by a separate view now
+//            drawPlayhead(context: context, size: size, scrollX: scrollX, pixelsPerBeat: pixelsPerBeat)
         }
         .frame(width: width, height: height)
         // Use drawingGroup for Metal acceleration, significantly improves performance
