@@ -142,22 +142,33 @@ struct TimelineView: View {
                                         // Right side: Horizontal scroll view containing both ruler and tracks
                                         ScrollView(.horizontal, showsIndicators: false) {
                                             VStack(spacing: 0) {
-                                                // Ruler at the top
-                                                TimelineRuler(
+                                                // New App kit Ruler
+                                                AppKitRuler(
                                                     state: timelineState,
                                                     projectViewModel: projectViewModel,
                                                     width: calculateContentWidth(geometry: geometry),
-                                                    height: rulerHeight
-                                                )
+                                                    height: rulerHeight)
                                                 .environmentObject(themeManager)
-                                                .overlay(
-                                                    TimelineRulerSelectionIndicator(
-                                                        state: timelineState,
-                                                        projectViewModel: projectViewModel,
-                                                        height: rulerHeight
-                                                    )
-                                                    .environmentObject(themeManager)
-                                                )
+                                                .frame(height: rulerHeight)
+                                                .background(themeManager.rulerBackgroundColor)
+                                                
+                                                
+                                                // Ruler at the top
+//                                                TimelineRuler(
+//                                                    state: timelineState,
+//                                                    projectViewModel: projectViewModel,
+//                                                    width: calculateContentWidth(geometry: geometry),
+//                                                    height: rulerHeight
+//                                                )
+//                                                .environmentObject(themeManager)
+//                                                .overlay(
+//                                                    TimelineRulerSelectionIndicator(
+//                                                        state: timelineState,
+//                                                        projectViewModel: projectViewModel,
+//                                                        height: rulerHeight
+//                                                    )
+//                                                    .environmentObject(themeManager)
+//                                                )
 //                                                .overlay(
 //                                                    PlayheadIndicator(
 //                                                        currentBeat: projectViewModel.currentBeat,

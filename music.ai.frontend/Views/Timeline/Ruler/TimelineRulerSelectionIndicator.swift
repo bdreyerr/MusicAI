@@ -47,18 +47,3 @@ struct TimelineRulerSelectionIndicator: View {
         }
     }
 }
-
-#Preview {
-    TimelineRulerSelectionIndicator(
-        state: {
-            let state = TimelineStateViewModel()
-            state.startSelection(at: 4.0, trackId: UUID())
-            state.updateSelection(to: 8.0)
-            return state
-        }(),
-        projectViewModel: ProjectViewModel(),
-        height: 25
-    )
-    .environmentObject(ThemeManager())
-    .frame(width: 400)
-} 
