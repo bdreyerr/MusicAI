@@ -33,13 +33,13 @@ struct TrackControlsView: View {
         .frame(minHeight: trackViewModel.isCollapsed ? 30 : 40)
         .background(Color.clear) // Removed background color
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            trackViewModel.toggleCollapsed()
-        }
-        .onTapGesture {
-            // Make track controls selectable with a single tap - with higher priority than the double tap
+        .onTapGesture(count: 1, perform: {
+            // Make track controls selectable with a single tap
             projectViewModel.selectTrack(id: track.id)
-        }
+        }) 
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
+            trackViewModel.toggleCollapsed()
+        })
         .contextMenu {
             trackControlsContextMenu
         }
