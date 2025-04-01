@@ -2,67 +2,12 @@ import SwiftUI
 import Combine
 import AppKit
 
-// Preference key to track scroll position
-struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGPoint = .zero
-    
-    static func reduce(value: inout CGPoint, nextValue: () -> CGPoint) {
-        value = nextValue()
-    }
-}
-
-// View modifier to track scroll position
-struct ScrollViewOffsetTracker: ViewModifier {
-    let coordinatorID: String
-    @Binding var offset: CGPoint
-    
-    func body(content: Content) -> some View {
-        content
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .preference(
-                            key: ScrollOffsetPreferenceKey.self,
-                            value: CGPoint(
-                                x: geo.frame(in: .named(coordinatorID)).minX * -1,
-                                y: geo.frame(in: .named(coordinatorID)).minY * -1
-                            )
-                        )
-                }
-            )
-            .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                offset = value
-            }
-    }
-}
-
-// Coordinator to synchronize horizontal scrolling
-class ScrollSyncCoordinator: ObservableObject {
-    @Published var tracksOffset: CGPoint = .zero {
-        didSet {
-            // Only update if the change is significant (more than 1 point)
-            if abs(tracksOffset.x - oldValue.x) > 1 {
-                // Use DispatchQueue to avoid potential animation conflicts
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("ScrollOffsetChanged"),
-                        object: nil,
-                        userInfo: ["offset": self.tracksOffset]
-                    )
-                }
-            }
-        }
-    }
-    let id = "scroll-sync-coordinator"
-}
-
 /// Main timeline view for the DAW application
 struct TimelineView: View {
     @StateObject private var timelineState: TimelineStateViewModel
     @State private var startDragY: CGFloat = 0
     @State private var isDragging: Bool = false
     @StateObject private var menuCoordinator = MenuCoordinator()
-    @StateObject private var scrollSyncCoordinator = ScrollSyncCoordinator()
     @ObservedObject var projectViewModel: ProjectViewModel
     @EnvironmentObject var themeManager: ThemeManager
     
@@ -86,220 +31,183 @@ struct TimelineView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .topTrailing) {
-
+                
                 // Invisible buttons for keyboard shortcuts
                 TimelineButtons(
                     projectViewModel: projectViewModel,
                     timelineState: timelineState
                 )
                 
-
+                
                 VStack(spacing: 0) {
-                    ScrollViewReader { scrollProxy in
-                        VStack(spacing: 0) {
-                            // Single ScrollView for vertical scrolling
-                            ScrollView(.vertical, showsIndicators: false) {
-                                // Use a LazyVStack to ensure views are only created when needed
-                                LazyVStack(spacing: 0) {
-                                    // Main content area with tracks and ruler
-                                    HStack(spacing: 0) {
-                                        // Left side: Track controls column
-                                        VStack(spacing: 0) {
-                                            // Ruler label area (empty space above track controls)
-                                            Rectangle()
-                                                .fill(themeManager.rulerBackgroundColor)
-                                                .frame(width: controlsWidth, height: rulerHeight)
-                                            
-                                            // Track controls
-                                            ForEach(projectViewModel.tracks) { track in
-                                                TrackControlsView(
-                                                    track: track,
-                                                    projectViewModel: projectViewModel
-                                                )
-                                                .environmentObject(themeManager)
-                                                .frame(width: controlsWidth)
-                                            }
-                                            
-                                            // Add track button
-                                            Button(action: showAddTrackMenu) {
-                                                HStack {
-                                                    Image(systemName: "plus.circle.fill")
-                                                        .foregroundColor(themeManager.primaryTextColor)
-                                                    Text("Add Track")
-                                                        .foregroundColor(themeManager.primaryTextColor)
-                                                }
-                                                .padding(8)
-                                                .frame(width: controlsWidth, alignment: .leading)
-                                            }
-                                            .buttonStyle(BorderlessButtonStyle())
-                                            .background(themeManager.secondaryBackgroundColor.opacity(0.3))
-                                            .padding(.top, 4)
-                                            
-                                            Spacer()
-                                        }
-                                        .frame(width: controlsWidth)
+                    VStack(spacing: 0) {
+                        // Single ScrollView for vertical scrolling
+                        ScrollView(.vertical, showsIndicators: false) {
+                            // Use a LazyVStack to ensure views are only created when needed
+                            LazyVStack(spacing: 0) {
+                                // Main content area with tracks and ruler
+                                HStack(spacing: 0) {
+                                    // Left side: Track controls column
+                                    VStack(spacing: 0) {
+                                        // Ruler label area (empty space above track controls)
+                                        Rectangle()
+                                            .fill(themeManager.rulerBackgroundColor)
+                                            .frame(width: controlsWidth, height: rulerHeight)
                                         
-                                        // Right side: Horizontal scroll view containing both ruler and tracks
-                                        ScrollView(.horizontal, showsIndicators: false) {
-                                            VStack(spacing: 0) {
-                                                // New App kit Ruler
-                                                AppKitRuler(
+                                        // Track controls
+                                        ForEach(projectViewModel.tracks) { track in
+                                            TrackControlsView(
+                                                track: track,
+                                                projectViewModel: projectViewModel
+                                            )
+                                            .environmentObject(themeManager)
+                                            .frame(width: controlsWidth)
+                                        }
+                                        
+                                        // Add track button
+                                        Button(action: showAddTrackMenu) {
+                                            HStack {
+                                                Image(systemName: "plus.circle.fill")
+                                                    .foregroundColor(themeManager.primaryTextColor)
+                                                Text("Add Track")
+                                                    .foregroundColor(themeManager.primaryTextColor)
+                                            }
+                                            .padding(8)
+                                            .frame(width: controlsWidth, alignment: .leading)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                        .background(themeManager.secondaryBackgroundColor.opacity(0.3))
+                                        .padding(.top, 4)
+                                        
+                                        Spacer()
+                                    }
+                                    .frame(width: controlsWidth)
+                                    
+                                    // Right side: Horizontal scroll view containing both ruler and tracks
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        VStack(spacing: 0) {
+                                            // New App kit Ruler
+                                            AppKitRuler(
+                                                state: timelineState,
+                                                projectViewModel: projectViewModel,
+                                                width: calculateContentWidth(geometry: geometry),
+                                                height: rulerHeight)
+                                            .environmentObject(themeManager)
+                                            .frame(height: rulerHeight)
+                                            .background(themeManager.rulerBackgroundColor)
+                                            .overlay(
+                                                TimelineRulerSelectionIndicator(
                                                     state: timelineState,
                                                     projectViewModel: projectViewModel,
-                                                    width: calculateContentWidth(geometry: geometry),
-                                                    height: rulerHeight)
-                                                .environmentObject(themeManager)
-                                                .frame(height: rulerHeight)
-                                                .background(themeManager.rulerBackgroundColor)
-                                                .overlay(
-                                                    TimelineRulerSelectionIndicator(
-                                                        state: timelineState,
-                                                        projectViewModel: projectViewModel,
-                                                        height: rulerHeight
-                                                    )
-                                                    .environmentObject(themeManager)
-                                                )
-                                                
-                                                
-                                                // Ruler at the top
-//                                                TimelineRuler(
-//                                                    state: timelineState,
-//                                                    projectViewModel: projectViewModel,
-//                                                    width: calculateContentWidth(geometry: geometry),
-//                                                    height: rulerHeight
-//                                                )
-//                                                .environmentObject(themeManager)
-//                                                .overlay(
-//                                                    TimelineRulerSelectionIndicator(
-//                                                        state: timelineState,
-//                                                        projectViewModel: projectViewModel,
-//                                                        height: rulerHeight
-//                                                    )
-//                                                    .environmentObject(themeManager)
-//                                                )
-//                                                .overlay(
-//                                                    PlayheadIndicator(
-//                                                        currentBeat: projectViewModel.currentBeat,
-//                                                        state: timelineState,
-//                                                        projectViewModel: projectViewModel,
-//                                                        viewportWidth: calculateContentWidth(geometry: geometry)
-//                                                    )
-//                                                    .environmentObject(themeManager)
-//                                                    .frame(height: rulerHeight)
-//                                                )
-//                                                .frame(height: rulerHeight)
-//                                                .background(themeManager.rulerBackgroundColor)
-                                                
-                                                // Regular tracks grid container
-                                                SharedTracksGridContainer(
-                                                    projectViewModel: projectViewModel,
-                                                    state: timelineState,
-                                                    width: calculateContentWidth(geometry: geometry)
+                                                    height: rulerHeight
                                                 )
                                                 .environmentObject(themeManager)
-                                                .id("shared-tracks-container-\(themeManager.themeChangeIdentifier)-\(timelineState.contentSizeChangeId)")
-                                            }
-                                            .frame(width: calculateContentWidth(geometry: geometry))
-                                            .id("timeline-content-\(timelineState.contentSizeChangeId)")
-                                        }
-                                        .coordinateSpace(name: scrollSyncCoordinator.id)
-                                        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                                            let offsetX = value.x
-                                            let scrollSync = scrollSyncCoordinator
+                                            )
                                             
-                                            scrollSync.tracksOffset = value
                                             
-                                            DispatchQueue.main.async {
-                                                timelineState.scrollOffset = value
-                                                timelineState.updateScrollState(offset: offsetX)
-                                            }
+                                            // Ruler at the top
+                                            //                                                TimelineRuler(
+                                            //                                                    state: timelineState,
+                                            //                                                    projectViewModel: projectViewModel,
+                                            //                                                    width: calculateContentWidth(geometry: geometry),
+                                            //                                                    height: rulerHeight
+                                            //                                                )
+                                            //                                                .environmentObject(themeManager)
+                                            //                                                .overlay(
+                                            //                                                    TimelineRulerSelectionIndicator(
+                                            //                                                        state: timelineState,
+                                            //                                                        projectViewModel: projectViewModel,
+                                            //                                                        height: rulerHeight
+                                            //                                                    )
+                                            //                                                    .environmentObject(themeManager)
+                                            //                                                )
+                                            //                                                .overlay(
+                                            //                                                    PlayheadIndicator(
+                                            //                                                        currentBeat: projectViewModel.currentBeat,
+                                            //                                                        state: timelineState,
+                                            //                                                        projectViewModel: projectViewModel,
+                                            //                                                        viewportWidth: calculateContentWidth(geometry: geometry)
+                                            //                                                    )
+                                            //                                                    .environmentObject(themeManager)
+                                            //                                                    .frame(height: rulerHeight)
+                                            //                                                )
+                                            //                                                .frame(height: rulerHeight)
+                                            //                                                .background(themeManager.rulerBackgroundColor)
+                                            
+                                            // Regular tracks grid container
+                                            SharedTracksGridContainer(
+                                                projectViewModel: projectViewModel,
+                                                state: timelineState,
+                                                width: calculateContentWidth(geometry: geometry)
+                                            )
+                                            .environmentObject(themeManager)
+                                            //                                                .id("shared-tracks-container-\(themeManager.themeChangeIdentifier)-\(timelineState.contentSizeChangeId)")
                                         }
-                                        .frame(width: geometry.size.width - controlsWidth)
+                                        .frame(width: calculateContentWidth(geometry: geometry))
+                                        //                                            .id("timeline-content-\(timelineState.contentSizeChangeId)")
                                     }
+                                    .frame(width: geometry.size.width - controlsWidth)
                                 }
                             }
-                            
-                            // Master track section (outside vertical scroll)
-                            HStack(spacing: 0) {
-                                // Master track controls
-                                MasterTrackControlsView(
-                                    track: projectViewModel.masterTrack,
-                                    projectViewModel: projectViewModel
-                                )
-                                .environmentObject(themeManager)
-                                .frame(width: controlsWidth)
-                                
-                                // Master track content area
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    Rectangle()
-                                        .fill(themeManager.backgroundColor.opacity(0.6))
-                                        .frame(width: calculateContentWidth(geometry: geometry), height: 50)
-                                        .overlay(
-                                            Rectangle()
-                                                .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
-                                        )
-                                }
-                                .coordinateSpace(name: scrollSyncCoordinator.id)
-                                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                                    let offsetX = value.x
-                                    let scrollSync = scrollSyncCoordinator
-                                    
-                                    scrollSync.tracksOffset = value
-                                    
-                                    DispatchQueue.main.async {
-                                        timelineState.scrollOffset = value
-                                        timelineState.updateScrollState(offset: offsetX)
-                                    }
-                                }
-                                .frame(width: geometry.size.width - controlsWidth)
-                            }
-                            .frame(height: 50)
                         }
-                        // Add magnification gesture at the highest level
-                        .gesture(
-                            MagnificationGesture()
-                                .onChanged { scale in
-                                    DispatchQueue.main.async {
-                                        timelineState.handlePinchGesture(scale: scale)
-                                    }
-                                }
-                                .onEnded { _ in
-                                    DispatchQueue.main.async {
-                                        timelineState.handlePinchGesture(scale: 1.0)
-                                    }
-                                }
-                        )
-                        // Add gesture recognizer for right-click
-                        .background(
-                            EmptyView()
-                                .contentShape(Rectangle())
-                                .onTapGesture(count: 1, perform: { _ in })
-                                .gesture(
-                                    DragGesture(minimumDistance: 0)
-                                        .onEnded { value in
-                                            if let event = NSApp.currentEvent, event.type == .rightMouseUp {
-                                                showTimelineContextMenu(at: value.location)
-                                            }
-                                        }
-                                )
-                        )
+                        
+                        // Master track section (outside vertical scroll)
+                        HStack(spacing: 0) {
+                            // Master track controls
+                            MasterTrackControlsView(
+                                track: projectViewModel.masterTrack,
+                                projectViewModel: projectViewModel
+                            )
+                            .environmentObject(themeManager)
+                            .frame(width: controlsWidth)
+                            
+                            // Master track content area
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                Rectangle()
+                                    .fill(themeManager.backgroundColor.opacity(0.6))
+                                    .frame(width: calculateContentWidth(geometry: geometry), height: 50)
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(themeManager.secondaryBorderColor, lineWidth: 0.5)
+                                    )
+                            }
+                            .frame(width: geometry.size.width - controlsWidth)
+                        }
+                        .frame(height: 50)
                     }
+                    // Add magnification gesture at the highest level
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { scale in
+                                DispatchQueue.main.async {
+                                    timelineState.handlePinchGesture(scale: scale)
+                                }
+                            }
+                            .onEnded { _ in
+                                DispatchQueue.main.async {
+                                    timelineState.handlePinchGesture(scale: 1.0)
+                                }
+                            }
+                    )
+                    // Add gesture recognizer for right-click
+                    .background(
+                        EmptyView()
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 1, perform: { _ in })
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onEnded { value in
+                                        if let event = NSApp.currentEvent, event.type == .rightMouseUp {
+                                            showTimelineContextMenu(at: value.location)
+                                        }
+                                    }
+                            )
+                    )
                 }
                 .background(themeManager.backgroundColor)
                 
                 // Zoom controls in the top right corner
                 VStack(spacing: 8) {
-//                    HStack(spacing: 4) {
-//                        Text("Zoom")
-//                            .font(.caption)
-//                            .foregroundColor(themeManager.primaryTextColor)
-//                        
-//                        Text("\(timelineState.zoomLevel)")
-//                            .font(.caption)
-//                            .foregroundColor(themeManager.primaryTextColor)
-//                            .frame(width: 16, alignment: .center)
-//                    }
-                    
                     // Zoom In button
                     Button(action: {
                         zoomIn()
